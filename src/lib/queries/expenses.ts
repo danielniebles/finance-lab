@@ -124,9 +124,28 @@ export async function getMonthlyAnalysis(month: number, year: number) {
   // Savings
   const idealSavings = totalIncome - totalBudget;
   const realSavings = totalIncome - totalExpenses;
+  const savingsRate = totalIncome > 0 ? (realSavings / totalIncome) * 100 : null;
+  const savingsGap = realSavings - idealSavings;
+
+  // Top offenders — worst severity first, then by overspend amount
+  const severityOrder: Record<CategorySeverity, number> = {
+    Critical: 0,
+    Unplanned: 1,
+    Issue: 2,
+    OK: 99,
+  };
+  const topOffenders = [...categoryBreakdown]
+    .filter((c) => c.severity !== "OK")
+    .sort((a, b) => {
+      const diff = severityOrder[a.severity] - severityOrder[b.severity];
+      if (diff !== 0) return diff;
+      return Math.abs(b.control) - Math.abs(a.control);
+    })
+    .slice(0, 3);
 
   return {
     categoryBreakdown,
+    topOffenders,
     uncategorizedCount,
     totalIncome,
     totalExpenses,
@@ -140,6 +159,8 @@ export async function getMonthlyAnalysis(month: number, year: number) {
     unplannedSpendTotal,
     idealSavings,
     realSavings,
+    savingsRate,
+    savingsGap,
   };
 }
 
