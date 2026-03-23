@@ -378,17 +378,17 @@ function ProgressBar({ percent, className }: { percent: number; className?: stri
 }
 
 function TypePill({ type }: { type: string }) {
-  const isFixed = type === "FIXED";
+  const styles: Record<string, string> = {
+    FIXED:    "border-blue-500/25 bg-blue-500/8 text-blue-400",
+    VARIABLE: "border-violet-500/25 bg-violet-500/8 text-violet-400",
+    MIXED:    "border-amber-500/25 bg-amber-500/8 text-amber-400",
+  };
+  const labels: Record<string, string> = {
+    FIXED: "Fixed", VARIABLE: "Variable", MIXED: "Mixed",
+  };
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-        isFixed
-          ? "border-blue-500/25 bg-blue-500/8 text-blue-400"
-          : "border-violet-500/25 bg-violet-500/8 text-violet-400"
-      )}
-    >
-      {isFixed ? "Fixed" : "Variable"}
+    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", styles[type] ?? styles.VARIABLE)}>
+      {labels[type] ?? type}
     </span>
   );
 }

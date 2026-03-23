@@ -6,7 +6,10 @@ import { CategoryList } from "@/components/settings/category-list";
 export default async function CategoriesPage() {
   const categories = await db.appCategory.findMany({
     orderBy: { name: "asc" },
-    include: { _count: { select: { mappings: true } } },
+    include: {
+      budgetItems: { orderBy: { amount: "desc" } },
+      _count: { select: { mappings: true } },
+    },
   });
 
   return (

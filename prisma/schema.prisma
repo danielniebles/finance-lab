@@ -31,11 +31,19 @@ model MoneyLoverCategory {
 }
 
 model AppCategory {
-  id            String            @id @default(cuid())
-  name          String            @unique
+  id          String            @id @default(cuid())
+  name        String            @unique
+  mappings    CategoryMapping[]
+  budgetItems BudgetItem[]
+}
+
+model BudgetItem {
+  id            String      @id @default(cuid())
+  appCategoryId String
+  appCategory   AppCategory @relation(fields: [appCategoryId], references: [id], onDelete: Cascade)
+  name          String
+  amount        Float
   budgetType    BudgetType
-  monthlyBudget Float
-  mappings      CategoryMapping[]
 }
 
 model CategoryMapping {

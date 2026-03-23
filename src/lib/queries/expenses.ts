@@ -7,6 +7,8 @@ export async function getImportBatches() {
   });
 }
 
+export type CategoryBudgetType = "FIXED" | "VARIABLE" | "MIXED";
+
 export type CategoryStatus =
   | "Fixed OK"
   | "Fixed changed"
@@ -17,13 +19,14 @@ export type CategoryStatus =
 export type CategorySeverity = "OK" | "Issue" | "Critical" | "Unplanned";
 
 function getStatus(
-  budgetType: string,
+  budgetType: CategoryBudgetType,
   spent: number,
   budget: number
 ): CategoryStatus {
   if (budgetType === "FIXED") {
     return spent === budget ? "Fixed OK" : "Fixed changed";
   }
+  // VARIABLE or MIXED
   if (budget === 0) return spent > 0 ? "Unplanned" : "Under budget";
   return spent > budget ? "Over budget" : "Under budget";
 }
@@ -52,7 +55,7 @@ export async function getMonthlyAnalysis(month: number, year: number) {
         },
       },
     }),
-    db.appCategory.findMany(),
+    db.appCategory.findMany({ include: { budgetItems: true } }),
   ]);
 
   // Split income (positive) vs expenses (negative)
@@ -69,7 +72,7 @@ export async function getMonthlyAnalysis(month: number, year: number) {
   let uncategorizedCount = 0;
 
   for (const t of transactions) {
-    if (t.amount >= 0) continue; // skip income
+    if (t.amount >= 0) continue;
     const appCategory = t.moneyLoverCategory.mapping?.appCategory;
     if (!appCategory) {
       uncategorizedCount++;
@@ -82,16 +85,33 @@ export async function getMonthlyAnalysis(month: number, year: number) {
   // Build category breakdown
   const categoryBreakdown = appCategories.map((cat) => {
     const spent = spendByCategory[cat.id] ?? 0;
-    const budget = cat.monthlyBudget;
-    const control = budget - spent; // positive = under budget
+    const items = cat.budgetItems;
+
+    // Derive budget and type from line items
+    const budget = items.reduce((s, i) => s + i.amount, 0);
+    const fixedBudgetPortion = items
+      .filter((i) => i.budgetType === "FIXED")
+      .reduce((s, i) => s + i.amount, 0);
+    const variableBudgetPortion = items
+      .filter((i) => i.budgetType === "VARIABLE")
+      .reduce((s, i) => s + i.amount, 0);
+
+    const hasFixed = fixedBudgetPortion > 0;
+    const hasVariable = variableBudgetPortion > 0;
+    const budgetType: CategoryBudgetType =
+      hasFixed && hasVariable ? "MIXED" : hasFixed ? "FIXED" : "VARIABLE";
+
+    const control = budget - spent;
     const percentUsed = budget > 0 ? (spent / budget) * 100 : null;
-    const status = getStatus(cat.budgetType, spent, budget);
+    const status = getStatus(budgetType, spent, budget);
     const severity = getSeverity(status);
 
     return {
       id: cat.id,
       name: cat.name,
-      budgetType: cat.budgetType,
+      budgetType,
+      fixedBudgetPortion,
+      variableBudgetPortion,
       spent,
       budget,
       control,
@@ -101,15 +121,23 @@ export async function getMonthlyAnalysis(month: number, year: number) {
     };
   });
 
-  // Fixed / Variable subtotals
-  const fixed = categoryBreakdown.filter((c) => c.budgetType === "FIXED");
-  const variable = categoryBreakdown.filter((c) => c.budgetType === "VARIABLE");
+  // Fixed / Variable subtotals (budget from item-level aggregation, actual from category grouping)
+  const fixedOnlyCats = categoryBreakdown.filter((c) => c.budgetType === "FIXED");
+  const variableOrMixedCats = categoryBreakdown.filter((c) => c.budgetType !== "FIXED");
 
-  const fixedActual = fixed.reduce((s, c) => s + c.spent, 0);
-  const fixedBudget = fixed.reduce((s, c) => s + c.budget, 0);
+  // Budget totals: sum all FIXED / VARIABLE item amounts across all categories
+  const fixedBudget = categoryBreakdown.reduce(
+    (s, c) => s + c.fixedBudgetPortion,
+    0
+  );
+  const variableBudget = categoryBreakdown.reduce(
+    (s, c) => s + c.variableBudgetPortion,
+    0
+  );
 
-  const variableActual = variable.reduce((s, c) => s + c.spent, 0);
-  const variableBudget = variable.reduce((s, c) => s + c.budget, 0);
+  // Actual totals: Fixed-only categories vs Variable+Mixed categories
+  const fixedActual = fixedOnlyCats.reduce((s, c) => s + c.spent, 0);
+  const variableActual = variableOrMixedCats.reduce((s, c) => s + c.spent, 0);
 
   const variableBurnRate =
     variableBudget > 0 ? (variableActual / variableBudget) * 100 : null;
@@ -127,17 +155,17 @@ export async function getMonthlyAnalysis(month: number, year: number) {
       surplusTotal,
       deficitCount: deficit.length,
       deficitTotal,
-      offsetCoverage, // > 100% means surpluses cover deficits
+      offsetCoverage,
     };
   }
 
-  const fixedVariance = getVariance(fixed);
-  const variableVariance = getVariance(variable);
+  const fixedVariance = getVariance(fixedOnlyCats);
+  const variableVariance = getVariance(variableOrMixedCats);
 
   const totalBudget = fixedBudget + variableBudget;
 
-  // Unplanned = variable categories with $0 budget but actual spend > 0
-  const unplannedSpendTotal = variable
+  // Unplanned = variable/mixed categories with $0 budget but actual spend > 0
+  const unplannedSpendTotal = variableOrMixedCats
     .filter((c) => c.budget === 0 && c.spent > 0)
     .reduce((s, c) => s + c.spent, 0);
 
