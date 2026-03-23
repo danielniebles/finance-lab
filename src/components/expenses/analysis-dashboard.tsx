@@ -1,6 +1,5 @@
 import { getMonthlyAnalysis, type CategorySeverity } from "@/lib/queries/expenses";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -11,121 +10,175 @@ import {
 } from "@/components/ui/table";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 type Props = { month: number; year: number };
 
 export async function AnalysisDashboard({ month, year }: Props) {
   const data = await getMonthlyAnalysis(month, year);
 
+  const fixedControl = data.fixedBudget - data.fixedActual;
+  const variableControl = data.variableBudget - data.variableActual;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Unmapped warning */}
       {data.uncategorizedCount > 0 && (
-        <div className="rounded-md border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-          {data.uncategorizedCount} transaction(s) have unmapped categories and are excluded from the analysis.{" "}
-          <a href="/settings/mappings" className="underline">
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-400">
+          {data.uncategorizedCount} transaction(s) have unmapped categories and are excluded.{" "}
+          <a href="/settings/mappings" className="underline underline-offset-2 hover:text-amber-300">
             Configure mappings →
           </a>
         </div>
       )}
 
-      {/* KPI panels */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* Overall */}
-        <KpiCard title="Overall">
-          <KpiRow label="Salary" value={data.totalIncome} />
-          <KpiRow label="Total Actual Expenses" value={data.totalExpenses} />
-          <KpiRow label="Total Budget" value={data.totalBudget} />
-          <KpiRow
-            label="Overexpense (Actual − Budget)"
-            value={data.overexpense}
-            highlight={data.overexpense > 0 ? "bad" : "good"}
-          />
-        </KpiCard>
-
-        {/* Fixed vs Variable */}
-        <KpiCard title="Fixed vs Variable">
-          <KpiRow label="Fixed Actual" value={data.fixedActual} />
-          <KpiRow label="Fixed Budget" value={data.fixedBudget} />
-          <KpiRow
-            label="Fixed Control (Budget − Actual)"
-            value={data.fixedBudget - data.fixedActual}
-            highlight={data.fixedBudget - data.fixedActual >= 0 ? "good" : "bad"}
-          />
-          <div className="my-1 border-t" />
-          <KpiRow label="Variable Actual" value={data.variableActual} />
-          <KpiRow label="Variable Budget" value={data.variableBudget} />
-          <KpiRow
-            label="Variable Control (Budget − Actual)"
-            value={data.variableBudget - data.variableActual}
-            highlight={data.variableBudget - data.variableActual >= 0 ? "good" : "bad"}
-          />
-          {data.variableBurnRate !== null && (
-            <KpiRow
-              label="Variable Burn Rate"
-              rawValue={`${data.variableBurnRate.toFixed(1)}%`}
-              highlight={data.variableBurnRate > 100 ? "bad" : "good"}
-            />
-          )}
-        </KpiCard>
-
-        {/* Savings */}
-        <KpiCard title="Savings">
-          <KpiRow
-            label="Ideal Savings (Salary − Budget)"
-            value={data.idealSavings}
-            highlight={data.idealSavings >= 0 ? "good" : "bad"}
-          />
-          <KpiRow
-            label="Real Savings (Salary − Actual)"
-            value={data.realSavings}
-            highlight={data.realSavings >= 0 ? "good" : "bad"}
-          />
-          <div className="my-1 border-t" />
-          <KpiRow
-            label="Unplanned Spend Total"
-            value={data.unplannedSpendTotal}
-            highlight={data.unplannedSpendTotal > 0 ? "bad" : "good"}
-          />
-        </KpiCard>
+      {/* ── Top stat strip ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Monthly Income"
+          value={data.totalIncome}
+          tone="neutral"
+        />
+        <StatCard
+          label="Total Expenses"
+          value={data.totalExpenses}
+          tone="neutral"
+        />
+        <StatCard
+          label="Total Budget"
+          value={data.totalBudget}
+          tone="neutral"
+        />
+        <StatCard
+          label="Over / Under Budget"
+          value={-data.overexpense}
+          tone={data.overexpense > 0 ? "bad" : "good"}
+          showTrend
+        />
       </div>
 
-      {/* Category breakdown */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Spend by Category</CardTitle>
+      {/* ── Fixed · Variable pills + Savings ──────────────────────────── */}
+      <div className="grid gap-3 lg:grid-cols-3">
+
+        {/* Fixed pill */}
+        <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-blue-400">
+              FIXED
+            </span>
+          </div>
+          <div className="space-y-2">
+            <PillRow label="Actual" value={data.fixedActual} />
+            <PillRow label="Budget" value={data.fixedBudget} />
+            <div className="mt-1 border-t border-border/40 pt-2">
+              <PillRow
+                label="Control (Budget − Actual)"
+                value={fixedControl}
+                highlight={fixedControl >= 0 ? "good" : "bad"}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Variable pill */}
+        <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-violet-400">
+              VARIABLE
+            </span>
+          </div>
+          <div className="space-y-2">
+            <PillRow label="Actual" value={data.variableActual} />
+            <PillRow label="Budget" value={data.variableBudget} />
+            <div className="mt-1 border-t border-border/40 pt-2">
+              <PillRow
+                label="Control (Budget − Actual)"
+                value={variableControl}
+                highlight={variableControl >= 0 ? "good" : "bad"}
+              />
+              {data.variableBurnRate !== null && (
+                <PillRow
+                  label="Burn Rate"
+                  rawValue={`${data.variableBurnRate.toFixed(1)}%`}
+                  highlight={data.variableBurnRate > 100 ? "bad" : "good"}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Savings */}
+        <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-emerald-400">
+              SAVINGS
+            </span>
+          </div>
+          <div className="space-y-2">
+            <PillRow
+              label="Ideal (Salary − Budget)"
+              value={data.idealSavings}
+              highlight={data.idealSavings >= 0 ? "good" : "bad"}
+            />
+            <PillRow
+              label="Real (Salary − Actual)"
+              value={data.realSavings}
+              highlight={data.realSavings >= 0 ? "good" : "bad"}
+            />
+            <div className="mt-1 border-t border-border/40 pt-2">
+              <PillRow
+                label="Unplanned Spend"
+                value={data.unplannedSpendTotal}
+                highlight={data.unplannedSpendTotal > 0 ? "bad" : "good"}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Category breakdown table ───────────────────────────────────── */}
+      <Card className="overflow-hidden border-border/60">
+        <CardHeader className="px-5 py-4 border-b border-border/60">
+          <CardTitle className="text-sm font-semibold">Spend by Category</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Category</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead className="text-right">Actual</TableHead>
-                <TableHead className="text-right">Budget</TableHead>
-                <TableHead className="text-right">Control</TableHead>
-                <TableHead className="text-right">% Used</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Severity</TableHead>
+              <TableRow className="border-border/60 hover:bg-transparent">
+                <TableHead className="pl-5 text-xs uppercase tracking-wide text-muted-foreground">Category</TableHead>
+                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">Type</TableHead>
+                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Actual</TableHead>
+                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Budget</TableHead>
+                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Control</TableHead>
+                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">% Used</TableHead>
+                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">Status</TableHead>
+                <TableHead className="pr-5 text-xs uppercase tracking-wide text-muted-foreground">Severity</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.categoryBreakdown.map((row) => (
-                <TableRow key={row.id} className={rowBg(row.severity)}>
-                  <TableCell className="font-medium">{row.name}</TableCell>
-                  <TableCell className="text-muted-foreground text-xs">{row.budgetType}</TableCell>
-                  <TableCell className="text-right">{formatCOP(row.spent)}</TableCell>
-                  <TableCell className="text-right">{formatCOP(row.budget)}</TableCell>
-                  <TableCell className={cn("text-right", row.control < 0 && "text-destructive")}>
+                <TableRow
+                  key={row.id}
+                  className={cn("border-border/40 transition-colors", rowBg(row.severity))}
+                >
+                  <TableCell className="pl-5 font-medium">{row.name}</TableCell>
+                  <TableCell>
+                    <TypePill type={row.budgetType} />
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm tabular-nums">
+                    {formatCOP(row.spent)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm tabular-nums text-muted-foreground">
+                    {formatCOP(row.budget)}
+                  </TableCell>
+                  <TableCell className={cn("text-right font-mono text-sm tabular-nums", row.control < 0 ? "text-destructive" : "text-emerald-400")}>
                     {formatCOP(row.control)}
                   </TableCell>
-                  <TableCell className="text-right text-sm">
+                  <TableCell className="text-right font-mono text-sm tabular-nums text-muted-foreground">
                     {row.percentUsed !== null ? `${row.percentUsed.toFixed(0)}%` : "—"}
                   </TableCell>
-                  <TableCell>
-                    <span className="text-sm">{row.status}</span>
-                  </TableCell>
-                  <TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{row.status}</TableCell>
+                  <TableCell className="pr-5">
                     <SeverityBadge severity={row.severity} />
                   </TableCell>
                 </TableRow>
@@ -138,54 +191,47 @@ export async function AnalysisDashboard({ month, year }: Props) {
   );
 }
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
+// ─── Sub-components ────────────────────────────────────────────────────────────
 
-function rowBg(severity: CategorySeverity) {
-  switch (severity) {
-    case "Critical":
-      return "bg-red-50";
-    case "Issue":
-      return "bg-yellow-50";
-    case "Unplanned":
-      return "bg-orange-50";
-    default:
-      return "";
-  }
-}
+function StatCard({
+  label,
+  value,
+  tone,
+  showTrend,
+}: {
+  label: string;
+  value: number;
+  tone: "good" | "bad" | "neutral";
+  showTrend?: boolean;
+}) {
+  const valueColor =
+    tone === "good" ? "text-emerald-400" :
+    tone === "bad" ? "text-destructive" :
+    "text-foreground";
 
-function SeverityBadge({ severity }: { severity: CategorySeverity }) {
-  const styles: Record<CategorySeverity, string> = {
-    OK: "bg-green-100 text-green-800 border-green-200",
-    Issue: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    Critical: "bg-red-100 text-red-800 border-red-200",
-    Unplanned: "bg-orange-100 text-orange-800 border-orange-200",
-  };
+  const TrendIcon =
+    tone === "good" ? TrendingUp :
+    tone === "bad" ? TrendingDown :
+    Minus;
+
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-        styles[severity]
-      )}
-    >
-      {severity}
-    </span>
+    <div className="rounded-xl border border-border/60 bg-card px-4 py-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+        {label}
+      </p>
+      <div className="flex items-end justify-between gap-2">
+        <p className={cn("font-mono text-lg font-semibold tabular-nums leading-tight", valueColor)}>
+          {formatCOP(Math.abs(value))}
+        </p>
+        {showTrend && (
+          <TrendIcon className={cn("size-4 shrink-0 mb-0.5", valueColor)} />
+        )}
+      </div>
+    </div>
   );
 }
 
-function KpiCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <Card>
-      <CardHeader className="pb-2 pt-4 px-4">
-        <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 pb-4 space-y-1.5">{children}</CardContent>
-    </Card>
-  );
-}
-
-function KpiRow({
+function PillRow({
   label,
   value,
   rawValue,
@@ -199,16 +245,56 @@ function KpiRow({
   const displayValue = rawValue ?? (value !== undefined ? formatCOP(value) : "—");
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-xs text-muted-foreground">{label}</span>
       <span
         className={cn(
-          "text-sm font-medium tabular-nums",
-          highlight === "good" && "text-green-700",
-          highlight === "bad" && "text-destructive"
+          "font-mono text-xs font-medium tabular-nums",
+          highlight === "good" && "text-emerald-400",
+          highlight === "bad" && "text-destructive",
+          !highlight && "text-foreground"
         )}
       >
         {displayValue}
       </span>
     </div>
+  );
+}
+
+function TypePill({ type }: { type: string }) {
+  const isFixed = type === "FIXED";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+        isFixed
+          ? "border-blue-500/25 bg-blue-500/8 text-blue-400"
+          : "border-violet-500/25 bg-violet-500/8 text-violet-400"
+      )}
+    >
+      {isFixed ? "Fixed" : "Variable"}
+    </span>
+  );
+}
+
+function rowBg(severity: CategorySeverity) {
+  switch (severity) {
+    case "Critical":  return "bg-red-500/5 hover:bg-red-500/8";
+    case "Issue":     return "bg-amber-500/5 hover:bg-amber-500/8";
+    case "Unplanned": return "bg-orange-500/5 hover:bg-orange-500/8";
+    default:          return "hover:bg-muted/30";
+  }
+}
+
+function SeverityBadge({ severity }: { severity: CategorySeverity }) {
+  const styles: Record<CategorySeverity, string> = {
+    OK:        "border-emerald-500/25 bg-emerald-500/10 text-emerald-400",
+    Issue:     "border-amber-500/25 bg-amber-500/10 text-amber-400",
+    Critical:  "border-red-500/25 bg-red-500/10 text-red-400",
+    Unplanned: "border-orange-500/25 bg-orange-500/10 text-orange-400",
+  };
+  return (
+    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", styles[severity])}>
+      {severity}
+    </span>
   );
 }

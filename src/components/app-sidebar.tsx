@@ -40,8 +40,13 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="px-4 py-4">
-        <span className="text-lg font-semibold tracking-tight">Finance Lab</span>
+      <SidebarHeader className="px-4 py-5">
+        <span className="font-heading text-base font-semibold tracking-tight text-foreground">
+          Finance Lab
+        </span>
+        <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+          Personal Tracker
+        </span>
       </SidebarHeader>
 
       <SidebarContent>
