@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \":*)",
+      "Bash(node -e \":*)",
+      "Bash(where python:*)",
+      "Bash(where python3:*)",
+      "Read(//usr/**)",
+      "Bash(/c/Python310/python -c \"\nimport openpyxl\nwb = openpyxl.load_workbook\\('C:/Users/Daniel/Downloads/MoneyLover_Debit Card\\(Wallet\\)_All\\(Category\\)_25_02_2026-24_03_2026.xlsx'\\)\nws = wb.active\nprint\\('Sheet:', ws.title\\)\nfor i, row in enumerate\\(ws.iter_rows\\(values_only=True\\)\\):\n    print\\(row\\)\n    if i > 10:\n        break\n\")",
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --no-turbopack)",
+      "Bash(nvm use:*)",
+      "Bash(npm --version)",
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --no-turbopack --no-react-compiler --yes)"
+    ]
+  }
+}
