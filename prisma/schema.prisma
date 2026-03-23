@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -12,4 +6,118 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ─── Module 1: Expense Tracker ────────────────────────────────────────────────
+
+model ImportBatch {
+  id           String        @id @default(cuid())
+  filename     String
+  importedAt   DateTime      @default(now())
+  periodStart  DateTime
+  periodEnd    DateTime
+  month        Int           // 1–12
+  year         Int
+  transactions Transaction[]
+
+  @@unique([month, year])
+}
+
+model MoneyLoverCategory {
+  id           String           @id @default(cuid())
+  name         String           @unique
+  mapping      CategoryMapping?
+  transactions Transaction[]
+}
+
+model AppCategory {
+  id            String            @id @default(cuid())
+  name          String            @unique
+  budgetType    BudgetType
+  monthlyBudget Float
+  mappings      CategoryMapping[]
+}
+
+model CategoryMapping {
+  id                   String             @id @default(cuid())
+  moneyLoverCategoryId String             @unique
+  moneyLoverCategory   MoneyLoverCategory @relation(fields: [moneyLoverCategoryId], references: [id])
+  appCategoryId        String
+  appCategory          AppCategory        @relation(fields: [appCategoryId], references: [id])
+}
+
+model Transaction {
+  id                   String             @id @default(cuid())
+  externalId           Int
+  date                 DateTime
+  amount               Float
+  wallet               String
+  note                 String?
+  batchId              String
+  batch                ImportBatch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  moneyLoverCategoryId String
+  moneyLoverCategory   MoneyLoverCategory @relation(fields: [moneyLoverCategoryId], references: [id])
+}
+
+enum BudgetType {
+  FIXED
+  VARIABLE
+}
+
+// ─── Module 2: Installment Tracker ────────────────────────────────────────────
+
+model Installment {
+  id                String   @id @default(cuid())
+  description       String
+  totalAmount       Float
+  numInstallments   Int
+  installmentsPaid  Int      @default(0)
+  monthlyAmount     Float
+  startDate         DateTime
+  notes             String?
+  createdAt         DateTime @default(now())
+}
+
+// ─── Module 3: Loan / Debt Tracker ────────────────────────────────────────────
+
+model SavingsAccount {
+  id             String  @id @default(cuid())
+  name           String  @unique
+  currentBalance Float
+  loans          Loan[]
+}
+
+model Debtor {
+  id    String  @id @default(cuid())
+  name  String
+  notes String?
+  loans Loan[]
+}
+
+model Loan {
+  id        String         @id @default(cuid())
+  debtorId  String
+  debtor    Debtor         @relation(fields: [debtorId], references: [id])
+  accountId String
+  account   SavingsAccount @relation(fields: [accountId], references: [id])
+  amount    Float
+  date      DateTime
+  notes     String?
+  status    LoanStatus     @default(ACTIVE)
+  payments  LoanPayment[]
+  createdAt DateTime       @default(now())
+}
+
+model LoanPayment {
+  id     String   @id @default(cuid())
+  loanId String
+  loan   Loan     @relation(fields: [loanId], references: [id])
+  amount Float
+  date   DateTime
+  notes  String?
+}
+
+enum LoanStatus {
+  ACTIVE
+  SETTLED
 }
