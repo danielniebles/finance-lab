@@ -7,70 +7,139 @@ export async function getImportBatches() {
   });
 }
 
-export async function getMonthlyAnalysis(month: number, year: number) {
-  // All transactions for the month with their resolved app category
-  const transactions = await db.transaction.findMany({
-    where: {
-      batch: { month, year },
-    },
-    include: {
-      moneyLoverCategory: {
-        include: { mapping: { include: { appCategory: true } } },
-      },
-    },
-  });
+export type CategoryStatus =
+  | "Fixed OK"
+  | "Fixed changed"
+  | "Under budget"
+  | "Over budget"
+  | "Unplanned";
 
-  // All app categories with their budgets
-  const appCategories = await db.appCategory.findMany();
+export type CategorySeverity = "OK" | "Issue" | "Critical" | "Unplanned";
 
-  // Aggregate spend per app category
-  const spendByCategory: Record<string, number> = {};
-  const uncategorized: typeof transactions = [];
-
-  for (const t of transactions) {
-    const appCategory = t.moneyLoverCategory.mapping?.appCategory;
-    if (!appCategory) {
-      uncategorized.push(t);
-      continue;
-    }
-    // Only count expenses (negative amounts)
-    if (t.amount < 0) {
-      spendByCategory[appCategory.id] =
-        (spendByCategory[appCategory.id] ?? 0) + Math.abs(t.amount);
-    }
+function getStatus(
+  budgetType: string,
+  spent: number,
+  budget: number
+): CategoryStatus {
+  if (budgetType === "FIXED") {
+    return spent === budget ? "Fixed OK" : "Fixed changed";
   }
+  if (budget === 0) return spent > 0 ? "Unplanned" : "Under budget";
+  return spent > budget ? "Over budget" : "Under budget";
+}
 
-  // Total income and total expenses for savings calculation
+function getSeverity(status: CategoryStatus): CategorySeverity {
+  switch (status) {
+    case "Fixed OK":
+    case "Under budget":
+      return "OK";
+    case "Fixed changed":
+      return "Issue";
+    case "Over budget":
+      return "Critical";
+    case "Unplanned":
+      return "Unplanned";
+  }
+}
+
+export async function getMonthlyAnalysis(month: number, year: number) {
+  const [transactions, appCategories] = await Promise.all([
+    db.transaction.findMany({
+      where: { batch: { month, year } },
+      include: {
+        moneyLoverCategory: {
+          include: { mapping: { include: { appCategory: true } } },
+        },
+      },
+    }),
+    db.appCategory.findMany(),
+  ]);
+
+  // Split income (positive) vs expenses (negative)
   const totalIncome = transactions
-    .filter((t: { amount: number }) => t.amount > 0)
-    .reduce((sum: number, t: { amount: number }) => sum + t.amount, 0);
+    .filter((t) => t.amount > 0)
+    .reduce((sum, t) => sum + t.amount, 0);
 
   const totalExpenses = transactions
-    .filter((t: { amount: number }) => t.amount < 0)
-    .reduce((sum: number, t: { amount: number }) => sum + Math.abs(t.amount), 0);
+    .filter((t) => t.amount < 0)
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
-  const categoryBreakdown = appCategories.map((cat: { id: string; name: string; budgetType: string; monthlyBudget: number }) => ({
-    id: cat.id,
-    name: cat.name,
-    budgetType: cat.budgetType,
-    budget: cat.monthlyBudget,
-    spent: spendByCategory[cat.id] ?? 0,
-    remaining: cat.monthlyBudget - (spendByCategory[cat.id] ?? 0),
-    overBudget: (spendByCategory[cat.id] ?? 0) > cat.monthlyBudget,
-  }));
+  // Aggregate spend per app category (expenses only)
+  const spendByCategory: Record<string, number> = {};
+  let uncategorizedCount = 0;
 
-  const totalBudget = appCategories.reduce((s: number, c: { monthlyBudget: number }) => s + c.monthlyBudget, 0);
-  const expectedSavings = totalIncome - totalBudget;
-  const actualSavings = totalIncome - totalExpenses;
+  for (const t of transactions) {
+    if (t.amount >= 0) continue; // skip income
+    const appCategory = t.moneyLoverCategory.mapping?.appCategory;
+    if (!appCategory) {
+      uncategorizedCount++;
+      continue;
+    }
+    spendByCategory[appCategory.id] =
+      (spendByCategory[appCategory.id] ?? 0) + Math.abs(t.amount);
+  }
+
+  // Build category breakdown
+  const categoryBreakdown = appCategories.map((cat) => {
+    const spent = spendByCategory[cat.id] ?? 0;
+    const budget = cat.monthlyBudget;
+    const control = budget - spent; // positive = under budget
+    const percentUsed = budget > 0 ? (spent / budget) * 100 : null;
+    const status = getStatus(cat.budgetType, spent, budget);
+    const severity = getSeverity(status);
+
+    return {
+      id: cat.id,
+      name: cat.name,
+      budgetType: cat.budgetType,
+      spent,
+      budget,
+      control,
+      percentUsed,
+      status,
+      severity,
+    };
+  });
+
+  // Fixed / Variable subtotals
+  const fixed = categoryBreakdown.filter((c) => c.budgetType === "FIXED");
+  const variable = categoryBreakdown.filter((c) => c.budgetType === "VARIABLE");
+
+  const fixedActual = fixed.reduce((s, c) => s + c.spent, 0);
+  const fixedBudget = fixed.reduce((s, c) => s + c.budget, 0);
+
+  const variableActual = variable.reduce((s, c) => s + c.spent, 0);
+  const variableBudget = variable.reduce((s, c) => s + c.budget, 0);
+
+  const variableBurnRate =
+    variableBudget > 0 ? (variableActual / variableBudget) * 100 : null;
+
+  const totalBudget = fixedBudget + variableBudget;
+
+  // Unplanned = variable categories with $0 budget but actual spend > 0
+  const unplannedSpendTotal = variable
+    .filter((c) => c.budget === 0 && c.spent > 0)
+    .reduce((s, c) => s + c.spent, 0);
+
+  // Savings
+  const idealSavings = totalIncome - totalBudget;
+  const realSavings = totalIncome - totalExpenses;
 
   return {
     categoryBreakdown,
-    uncategorizedCount: uncategorized.length,
+    uncategorizedCount,
     totalIncome,
     totalExpenses,
     totalBudget,
-    expectedSavings,
-    actualSavings,
+    overexpense: totalExpenses - totalBudget,
+    fixedActual,
+    fixedBudget,
+    variableActual,
+    variableBudget,
+    variableBurnRate,
+    unplannedSpendTotal,
+    idealSavings,
+    realSavings,
   };
 }
 

@@ -18,14 +18,15 @@ export type ParseResult = {
   year: number;
 };
 
-const IGNORED_CATEGORIES = new Set(["Salary"]);
+// Categories to exclude from transaction storage entirely
+const IGNORED_CATEGORIES = new Set<string>();
 
 export function parseMoneyLoverBuffer(buffer: Buffer): ParseResult {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  // raw: true preserves Date objects produced by cellDates: true
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-    raw: false,
-    dateNF: "yyyy-mm-dd",
+    raw: true,
   });
 
   const transactions: RawTransaction[] = [];
@@ -35,8 +36,8 @@ export function parseMoneyLoverBuffer(buffer: Buffer): ParseResult {
     if (!category || IGNORED_CATEGORIES.has(category)) continue;
 
     const rawDate = row["Date"];
-    const date =
-      rawDate instanceof Date ? rawDate : new Date(String(rawDate));
+    const date = rawDate instanceof Date ? rawDate : new Date(String(rawDate));
+    if (isNaN(date.getTime())) continue;
 
     const amount = Number(row["Amount"]);
     if (isNaN(amount)) continue;
