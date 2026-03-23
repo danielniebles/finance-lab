@@ -109,6 +109,9 @@ export async function AnalysisDashboard({ month, year }: Props) {
                 highlight={fixedControl >= 0 ? "good" : "bad"}
               />
             </div>
+            <div className="mt-1 border-t border-border/40 pt-2">
+              <VarianceRows variance={data.fixedVariance} />
+            </div>
           </div>
         </div>
 
@@ -141,6 +144,9 @@ export async function AnalysisDashboard({ month, year }: Props) {
                   highlight="good"
                 />
               )}
+            </div>
+            <div className="mt-1 border-t border-border/40 pt-2">
+              <VarianceRows variance={data.variableVariance} />
             </div>
           </div>
         </div>
@@ -287,6 +293,39 @@ function StatCard({
       </div>
       {hint && (
         <p className="text-xs text-muted-foreground/60 mt-1">{hint}</p>
+      )}
+    </div>
+  );
+}
+
+type Variance = {
+  surplusCount: number;
+  surplusTotal: number;
+  deficitCount: number;
+  deficitTotal: number;
+  offsetCoverage: number | null;
+};
+
+function VarianceRows({ variance: v }: { variance: Variance }) {
+  const covered = v.offsetCoverage !== null && v.offsetCoverage >= 100;
+  return (
+    <div className="space-y-1.5">
+      <PillRow
+        label={`Surplus (${v.surplusCount} cat${v.surplusCount !== 1 ? "s" : ""})`}
+        rawValue={`+${formatCOP(v.surplusTotal)}`}
+        highlight="good"
+      />
+      <PillRow
+        label={`Deficit (${v.deficitCount} cat${v.deficitCount !== 1 ? "s" : ""})`}
+        rawValue={v.deficitTotal > 0 ? `-${formatCOP(v.deficitTotal)}` : formatCOP(0)}
+        highlight={v.deficitTotal > 0 ? "bad" : "good"}
+      />
+      {v.offsetCoverage !== null && v.deficitTotal > 0 && (
+        <PillRow
+          label="Offset coverage"
+          rawValue={`${v.offsetCoverage.toFixed(0)}%`}
+          highlight={covered ? "good" : "bad"}
+        />
       )}
     </div>
   );

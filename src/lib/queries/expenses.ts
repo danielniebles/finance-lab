@@ -114,6 +114,26 @@ export async function getMonthlyAnalysis(month: number, year: number) {
   const variableBurnRate =
     variableBudget > 0 ? (variableActual / variableBudget) * 100 : null;
 
+  // Surplus / deficit breakdown per group
+  function getVariance(cats: typeof categoryBreakdown) {
+    const surplus = cats.filter((c) => c.control > 0);
+    const deficit = cats.filter((c) => c.control < 0);
+    const surplusTotal = surplus.reduce((s, c) => s + c.control, 0);
+    const deficitTotal = deficit.reduce((s, c) => s + Math.abs(c.control), 0);
+    const offsetCoverage =
+      deficitTotal > 0 ? (surplusTotal / deficitTotal) * 100 : null;
+    return {
+      surplusCount: surplus.length,
+      surplusTotal,
+      deficitCount: deficit.length,
+      deficitTotal,
+      offsetCoverage, // > 100% means surpluses cover deficits
+    };
+  }
+
+  const fixedVariance = getVariance(fixed);
+  const variableVariance = getVariance(variable);
+
   const totalBudget = fixedBudget + variableBudget;
 
   // Unplanned = variable categories with $0 budget but actual spend > 0
@@ -153,8 +173,10 @@ export async function getMonthlyAnalysis(month: number, year: number) {
     overexpense: totalExpenses - totalBudget,
     fixedActual,
     fixedBudget,
+    fixedVariance,
     variableActual,
     variableBudget,
+    variableVariance,
     variableBurnRate,
     unplannedSpendTotal,
     idealSavings,
