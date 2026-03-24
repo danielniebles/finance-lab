@@ -7,7 +7,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -101,7 +100,11 @@ function MappingRow({
           disabled={isPending}
         >
           <SelectTrigger className="h-8 flex-1">
-            <SelectValue placeholder="Select category…" />
+            <span className="flex flex-1 text-left text-sm">
+              {cat.mapping?.appCategory.name ?? (
+                <span className="text-muted-foreground">Select category…</span>
+              )}
+            </span>
           </SelectTrigger>
           <SelectContent>
             {appCategories.map((a) => (
