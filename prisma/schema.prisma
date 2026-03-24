@@ -97,43 +97,75 @@ model InstallmentPayment {
 // ─── Module 3: Loan / Debt Tracker ────────────────────────────────────────────
 
 model SavingsAccount {
-  id             String  @id @default(cuid())
-  name           String  @unique
-  currentBalance Float
-  loans          Loan[]
+  id                 String         @id @default(cuid())
+  name               String         @unique
+  accountType        AccountType
+  color              String?        // hex color for UI dot
+  includeInAvailable Boolean        @default(true)
+  entries            AccountEntry[]
+  loansGiven         Loan[]
+  transfersFrom      Transfer[]     @relation("TransferFrom")
+  transfersTo        Transfer[]     @relation("TransferTo")
+}
+
+enum AccountType {
+  BANK
+  DIGITAL
+  PENSION
+}
+
+model AccountEntry {
+  id        String         @id @default(cuid())
+  accountId String
+  account   SavingsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  type      EntryType
+  amount    Float          // positive or negative
+  date      DateTime
+  notes     String?
+}
+
+enum EntryType {
+  INITIAL
+  ADJUSTMENT
+}
+
+model Transfer {
+  id            String         @id @default(cuid())
+  fromAccountId String
+  fromAccount   SavingsAccount @relation("TransferFrom", fields: [fromAccountId], references: [id])
+  toAccountId   String
+  toAccount     SavingsAccount @relation("TransferTo", fields: [toAccountId], references: [id])
+  amount        Float
+  date          DateTime
+  notes         String?
 }
 
 model Debtor {
   id    String  @id @default(cuid())
-  name  String
+  name  String  @unique
   notes String?
   loans Loan[]
 }
 
 model Loan {
-  id        String         @id @default(cuid())
-  debtorId  String
-  debtor    Debtor         @relation(fields: [debtorId], references: [id])
-  accountId String
-  account   SavingsAccount @relation(fields: [accountId], references: [id])
-  amount    Float
-  date      DateTime
-  notes     String?
-  status    LoanStatus     @default(ACTIVE)
-  payments  LoanPayment[]
-  createdAt DateTime       @default(now())
+  id         String         @id @default(cuid())
+  debtorId   String
+  debtor     Debtor         @relation(fields: [debtorId], references: [id])
+  accountId  String
+  account    SavingsAccount @relation(fields: [accountId], references: [id])
+  amount     Float
+  date       DateTime
+  expectedBy DateTime?
+  notes      String?
+  payments   LoanPayment[]
+  createdAt  DateTime       @default(now())
 }
 
 model LoanPayment {
-  id     String   @id @default(cuid())
-  loanId String
-  loan   Loan     @relation(fields: [loanId], references: [id])
-  amount Float
-  date   DateTime
-  notes  String?
-}
-
-enum LoanStatus {
-  ACTIVE
-  SETTLED
+  id      String   @id @default(cuid())
+  loanId  String
+  loan    Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  amount  Float
+  date    DateTime
+  notes   String?
 }
