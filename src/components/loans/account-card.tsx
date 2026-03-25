@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, Plus, Trash2, ChevronDown, Trash } from "lucide-react";
+import { Pencil, Plus, Trash2, ScrollText, Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { formatCOP } from "@/lib/format";
 import { deleteAccount, deleteEntry } from "@/lib/actions/loans";
@@ -78,6 +81,12 @@ export function AccountCard({ account }: { account: AccountWithBalance }) {
           <p className={cn("font-mono text-lg font-semibold", isNegative ? "text-red-400" : "text-foreground")}>
             {formatCOP(account.balance)}
           </p>
+          {account.loansOut > 0 && (
+            <p className="text-xs text-muted-foreground font-mono">
+              {formatCOP(account.loansOut)}{" "}
+              <span className="font-sans text-muted-foreground/70">in loans</span>
+            </p>
+          )}
 
           {/* Actions — visible on hover */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pt-1 border-t border-border/40">
@@ -94,9 +103,9 @@ export function AccountCard({ account }: { account: AccountWithBalance }) {
               variant="ghost"
               size="sm"
               className="h-6 gap-1 text-xs"
-              onClick={() => setLogOpen((v) => !v)}
+              onClick={() => setLogOpen(true)}
             >
-              <ChevronDown className={cn("size-3 transition-transform", logOpen && "rotate-180")} />
+              <ScrollText className="size-3" />
               Log
             </Button>
             <Button variant="ghost" size="icon" className="size-6" onClick={() => setEditOpen(true)}>
@@ -114,44 +123,67 @@ export function AccountCard({ account }: { account: AccountWithBalance }) {
           </div>
         </div>
 
-        {/* Entries log */}
-        {logOpen && (
-          <div className="border-t border-border/60 bg-muted/10">
-            {account.entries.length === 0 ? (
-              <p className="px-4 py-3 text-xs text-muted-foreground">No entries yet.</p>
-            ) : (
-              <div className="divide-y divide-border/40">
-                {account.entries.map((entry) => (
-                  <div key={entry.id} className="flex items-center gap-3 px-4 py-2 group/row hover:bg-muted/20">
-                    <span className="text-xs text-muted-foreground w-20 shrink-0">
-                      {new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
-                    </span>
-                    <EntryTypeBadge type={entry.type} />
-                    <span className={cn("font-mono text-xs font-medium flex-1", entry.amount < 0 ? "text-red-400" : "text-emerald-400")}>
-                      {entry.amount >= 0 ? "+" : ""}{formatCOP(entry.amount)}
-                    </span>
-                    {entry.notes && (
-                      <span className="text-xs text-muted-foreground truncate max-w-28">{entry.notes}</span>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-5 opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-destructive shrink-0"
-                      onClick={() => handleDeleteEntry(entry.id)}
-                      disabled={deleteEntryPending}
-                    >
-                      <Trash className="size-3" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       <AccountForm open={editOpen} onClose={() => setEditOpen(false)} editing={account} />
       <EntryForm open={entryOpen} onClose={() => setEntryOpen(false)} account={account} />
+
+      {/* Entry log dialog */}
+      <Dialog open={logOpen} onOpenChange={(o: boolean) => setLogOpen(o)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span
+                className="size-3 rounded-full shrink-0"
+                style={{ backgroundColor: account.color ?? "#888" }}
+              />
+              {account.name} — Entry log
+            </DialogTitle>
+          </DialogHeader>
+
+          {account.entries.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No entries yet.</p>
+          ) : (
+            <div className="max-h-[60vh] overflow-y-auto -mx-6 divide-y divide-border/40">
+              {account.entries.map((entry) => (
+                <div key={entry.id} className="grid grid-cols-[5rem_6.5rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 group/row hover:bg-muted/20">
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+                  </span>
+                  <EntryTypeBadge type={entry.type} />
+                  <span className={cn("font-mono text-xs font-medium", entry.amount < 0 ? "text-red-400" : "text-emerald-400")}>
+                    {entry.amount >= 0 ? "+" : ""}{formatCOP(entry.amount)}
+                  </span>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {entry.notes ?? ""}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-5 opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleDeleteEntry(entry.id)}
+                    disabled={deleteEntryPending}
+                  >
+                    <Trash className="size-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-border/40">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-1.5"
+              onClick={() => { setLogOpen(false); setEntryOpen(true); }}
+            >
+              <Plus className="size-3" />
+              Add entry
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

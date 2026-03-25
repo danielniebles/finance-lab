@@ -7,6 +7,7 @@ export type AccountWithBalance = {
   color: string | null;
   includeInAvailable: boolean;
   balance: number;
+  loansOut: number;
   entries: { id: string; type: "INITIAL" | "ADJUSTMENT"; amount: number; date: Date; notes: string | null }[];
 };
 
@@ -78,11 +79,15 @@ export async function getLoansOverview(): Promise<LoansOverview> {
     const entriesTotal = acc.entries.reduce((s, e) => s + e.amount, 0);
     const transfersIn = acc.transfersTo.reduce((s, t) => s + t.amount, 0);
     const transfersOut = acc.transfersFrom.reduce((s, t) => s + t.amount, 0);
-    const loansOut = acc.loansGiven.reduce((s, l) => s + l.amount, 0);
+    const totalLent = acc.loansGiven.reduce((s, l) => s + l.amount, 0);
     const paymentsIn = acc.loansGiven
       .flatMap((l) => l.payments)
       .reduce((s, p) => s + p.amount, 0);
-    const balance = entriesTotal + transfersIn - transfersOut - loansOut + paymentsIn;
+    const balance = entriesTotal + transfersIn - transfersOut - totalLent + paymentsIn;
+    const loansOut = acc.loansGiven.reduce((s, l) => {
+      const paid = l.payments.reduce((sp, p) => sp + p.amount, 0);
+      return s + Math.max(0, l.amount - paid);
+    }, 0);
     return {
       id: acc.id,
       name: acc.name,
@@ -90,6 +95,7 @@ export async function getLoansOverview(): Promise<LoansOverview> {
       color: acc.color,
       includeInAvailable: acc.includeInAvailable,
       balance,
+      loansOut,
       entries: acc.entries,
     };
   });
