@@ -10,8 +10,8 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { createLoan } from "@/lib/actions/loans";
-import type { AccountWithBalance, DebtorWithLoans } from "@/lib/queries/loans";
+import { createLoan, updateLoan } from "@/lib/actions/loans";
+import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/lib/queries/loans";
 
 export function LoanForm({
   open,
@@ -19,32 +19,59 @@ export function LoanForm({
   accounts,
   debtors,
   defaultDebtorId,
+  editing,
 }: {
   open: boolean;
   onClose: () => void;
   accounts: AccountWithBalance[];
   debtors: DebtorWithLoans[];
   defaultDebtorId?: string;
+  editing?: LoanWithRemaining | null;
 }) {
-  const [debtorId, setDebtorId] = useState(defaultDebtorId ?? "");
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [expectedBy, setExpectedBy] = useState("");
-  const [notes, setNotes] = useState("");
+  const [debtorId, setDebtorId] = useState(editing?.debtorId ?? defaultDebtorId ?? "");
+  const [accountId, setAccountId] = useState(editing?.accountId ?? accounts[0]?.id ?? "");
+  const [amount, setAmount] = useState(editing ? String(editing.amount) : "");
+  const [date, setDate] = useState(
+    editing ? new Date(editing.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
+  );
+  const [expectedBy, setExpectedBy] = useState(
+    editing?.expectedBy ? new Date(editing.expectedBy).toISOString().slice(0, 10) : ""
+  );
+  const [notes, setNotes] = useState(editing?.notes ?? "");
+  const [last, setLast] = useState(editing);
   const [pending, startTransition] = useTransition();
+
+  if (editing !== last) {
+    setLast(editing);
+    setDebtorId(editing?.debtorId ?? defaultDebtorId ?? "");
+    setAccountId(editing?.accountId ?? accounts[0]?.id ?? "");
+    setAmount(editing ? String(editing.amount) : "");
+    setDate(editing ? new Date(editing.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+    setExpectedBy(editing?.expectedBy ? new Date(editing.expectedBy).toISOString().slice(0, 10) : "");
+    setNotes(editing?.notes ?? "");
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      await createLoan({
-        debtorId,
-        accountId,
-        amount: parseFloat(amount),
-        date: new Date(date + "T12:00:00"),
-        expectedBy: expectedBy ? new Date(expectedBy + "T12:00:00") : undefined,
-        notes: notes.trim() || undefined,
-      });
+      if (editing) {
+        await updateLoan(editing.id, {
+          accountId,
+          amount: parseFloat(amount),
+          date: new Date(date + "T12:00:00"),
+          expectedBy: expectedBy ? new Date(expectedBy + "T12:00:00") : undefined,
+          notes: notes.trim() || undefined,
+        });
+      } else {
+        await createLoan({
+          debtorId,
+          accountId,
+          amount: parseFloat(amount),
+          date: new Date(date + "T12:00:00"),
+          expectedBy: expectedBy ? new Date(expectedBy + "T12:00:00") : undefined,
+          notes: notes.trim() || undefined,
+        });
+      }
       onClose();
     });
   }
@@ -56,11 +83,16 @@ export function LoanForm({
     <Dialog open={open} onOpenChange={(o: boolean) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Record new loan</DialogTitle>
+          <DialogTitle>{editing ? "Edit loan" : "Record new loan"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label>Debtor</Label>
+            {editing ? (
+              <p className="text-sm px-3 py-2 rounded-md border border-border bg-muted/30 text-muted-foreground">
+                {selectedDebtor?.name ?? debtorId}
+              </p>
+            ) : (
             <Select value={debtorId} onValueChange={(v) => v && setDebtorId(v)}>
               <SelectTrigger className="h-9">
                 <span className="text-sm">{selectedDebtor?.name ?? "Select debtor…"}</span>
@@ -71,6 +103,7 @@ export function LoanForm({
                 ))}
               </SelectContent>
             </Select>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -127,7 +160,7 @@ export function LoanForm({
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={pending || !debtorId || !accountId}>Record loan</Button>
+            <Button type="submit" disabled={pending || !debtorId || !accountId}>{editing ? "Save" : "Record loan"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

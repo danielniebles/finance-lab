@@ -4,17 +4,18 @@ import { useState } from "react";
 import { Plus, ArrowRightLeft, HandCoins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccountForm } from "./account-form";
+import { DebtorForm } from "./debtor-form";
 import { LoanForm } from "./loan-form";
 import { PaymentForm } from "./payment-form";
 import { TransferForm } from "./transfer-form";
 import type { AccountWithBalance, DebtorWithLoans } from "@/lib/queries/loans";
 
 type Mode =
-  | "action-bar"     // top-right header bar
-  | "add-account"    // section header button
-  | "add-debtor"     // section header button
-  | "add-loan-button"// per-debtor row
-  | "pay-button";    // per-debtor row
+  | "action-bar"       // top-right header — Transfer, Record Payment, New Loan
+  | "add-account"      // accounts section header
+  | "add-debtor"       // debtors section header → DebtorForm
+  | "add-loan-button"  // per-debtor row → LoanForm pre-filled with debtorId
+  | "pay-button";      // per-debtor row → PaymentForm pre-filled with debtorId
 
 type Props = {
   accounts: AccountWithBalance[];
@@ -23,18 +24,15 @@ type Props = {
   debtorId?: string;
 };
 
-type Dialog = "account" | "loan" | "payment" | "transfer" | "debtor" | null;
+type Dialog = "account" | "debtor" | "loan" | "payment" | "transfer" | null;
 
 export function LoansClient({ accounts, debtors, mode, debtorId }: Props) {
   const [open, setOpen] = useState<Dialog>(null);
 
   const forms = (
     <>
-      <AccountForm
-        open={open === "account"}
-        onClose={() => setOpen(null)}
-        editing={null}
-      />
+      <AccountForm open={open === "account"} onClose={() => setOpen(null)} editing={null} />
+      <DebtorForm open={open === "debtor"} onClose={() => setOpen(null)} editing={null} />
       <LoanForm
         open={open === "loan"}
         onClose={() => setOpen(null)}
@@ -48,11 +46,7 @@ export function LoansClient({ accounts, debtors, mode, debtorId }: Props) {
         debtors={debtors}
         defaultDebtorId={debtorId}
       />
-      <TransferForm
-        open={open === "transfer"}
-        onClose={() => setOpen(null)}
-        accounts={accounts}
-      />
+      <TransferForm open={open === "transfer"} onClose={() => setOpen(null)} accounts={accounts} />
     </>
   );
 
@@ -93,9 +87,9 @@ export function LoansClient({ accounts, debtors, mode, debtorId }: Props) {
   if (mode === "add-debtor") {
     return (
       <>
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen("loan")}>
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen("debtor")}>
           <Plus className="size-3.5" />
-          Add debtor & loan
+          Add debtor
         </Button>
         {forms}
       </>

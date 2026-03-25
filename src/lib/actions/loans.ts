@@ -114,7 +114,7 @@ export async function createLoan(data: {
 
 export async function updateLoan(
   id: string,
-  data: { amount: number; date: Date; expectedBy?: Date; notes?: string }
+  data: { accountId: string; amount: number; date: Date; expectedBy?: Date; notes?: string }
 ) {
   await db.loan.update({ where: { id }, data });
   revalidatePath(PATH);

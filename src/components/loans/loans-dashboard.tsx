@@ -3,6 +3,9 @@ import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
 import { LoansClient } from "./loans-client";
+import { AccountCard } from "./account-card";
+import { LoanRowActions } from "./loan-row-actions";
+import type { AccountWithBalance, DebtorWithLoans } from "@/lib/queries/loans";
 
 // ─── KPI strip ────────────────────────────────────────────────────────────────
 
@@ -28,52 +31,17 @@ function KpiCard({
   );
 }
 
-// ─── Account card ─────────────────────────────────────────────────────────────
-
-function AccountTypeBadge({ type }: { type: string }) {
-  const map: Record<string, string> = {
-    BANK:    "bg-blue-500/10 text-blue-400",
-    DIGITAL: "bg-violet-500/10 text-violet-400",
-    PENSION: "bg-amber-500/10 text-amber-400",
-  };
-  const label: Record<string, string> = { BANK: "Bank", DIGITAL: "Digital", PENSION: "AFP" };
-  return (
-    <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", map[type] ?? map.BANK)}>
-      {label[type] ?? type}
-    </span>
-  );
-}
-
-function AccountCard({ account }: { account: Awaited<ReturnType<typeof getLoansOverview>>["accounts"][0] }) {
-  const isNegative = account.balance < 0;
-  const isExcluded = !account.includeInAvailable;
-  return (
-    <div className={cn("rounded-xl border bg-card p-4 space-y-3", isExcluded && "opacity-60")}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span
-            className="size-3 rounded-full shrink-0"
-            style={{ backgroundColor: account.color ?? "#888" }}
-          />
-          <span className="font-medium text-sm">{account.name}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <AccountTypeBadge type={account.accountType} />
-          {isExcluded && (
-            <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">excluded</span>
-          )}
-        </div>
-      </div>
-      <p className={cn("font-mono text-lg font-semibold", isNegative ? "text-red-400" : "text-foreground")}>
-        {formatCOP(account.balance)}
-      </p>
-    </div>
-  );
-}
-
 // ─── Debtor table (rendered server-side, interactions in client) ───────────────
 
-function LoanRow({ loan }: { loan: Awaited<ReturnType<typeof getLoansOverview>>["debtors"][0]["loans"][0] }) {
+function LoanRow({
+  loan,
+  accounts,
+  debtors,
+}: {
+  loan: Awaited<ReturnType<typeof getLoansOverview>>["debtors"][0]["loans"][0];
+  accounts: AccountWithBalance[];
+  debtors: DebtorWithLoans[];
+}) {
   const pct = loan.amount > 0 ? Math.min(100, (loan.paid / loan.amount) * 100) : 0;
   const ageMs = Date.now() - new Date(loan.date).getTime();
   const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
@@ -81,28 +49,28 @@ function LoanRow({ loan }: { loan: Awaited<ReturnType<typeof getLoansOverview>>[
   const isOverdue = loan.isActive && loan.expectedBy && new Date(loan.expectedBy) < new Date();
 
   return (
-    <div className="flex items-center gap-4 py-2.5 px-4 text-sm hover:bg-muted/20 transition-colors">
-      <div className="flex items-center gap-1.5 w-28 shrink-0">
-        <span className="size-2 rounded-full" style={{ backgroundColor: loan.accountColor ?? "#888" }} />
-        <span className="text-muted-foreground text-xs">{loan.accountName}</span>
+    <div className="grid grid-cols-[1.5fr_1fr_1.2fr_2fr_1.4fr_0.5fr_0.9fr_2fr_3.5rem] items-center gap-x-4 py-2.5 px-4 text-sm hover:bg-muted/20 transition-colors group/loanrow">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: loan.accountColor ?? "#888" }} />
+        <span className="text-muted-foreground text-xs truncate">{loan.accountName}</span>
       </div>
-      <span className="text-muted-foreground text-xs w-20 shrink-0">
+      <span className="text-muted-foreground text-xs">
         {new Date(loan.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
       </span>
-      <span className="font-mono text-xs text-muted-foreground w-24 shrink-0">{formatCOP(loan.amount)}</span>
-      <div className="flex-1 flex items-center gap-2">
+      <span className="font-mono text-xs text-muted-foreground">{formatCOP(loan.amount)}</span>
+      <div className="flex items-center gap-2 min-w-0">
         <div className="h-1.5 flex-1 rounded-full bg-muted/50 overflow-hidden">
           <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
         </div>
-        <span className="font-mono text-xs text-muted-foreground w-10 shrink-0 text-right">
+        <span className="font-mono text-xs text-muted-foreground w-8 shrink-0 text-right">
           {pct.toFixed(0)}%
         </span>
       </div>
-      <span className={cn("font-mono text-sm font-medium w-28 shrink-0 text-right", loan.isActive ? "text-foreground" : "text-muted-foreground")}>
+      <span className={cn("font-mono text-sm font-medium text-right", loan.isActive ? "text-foreground" : "text-muted-foreground")}>
         {loan.remaining > 0 ? formatCOP(loan.remaining) : "—"}
       </span>
-      <div className="flex items-center gap-1.5 w-20 shrink-0 justify-end">
-        <span className="text-xs text-muted-foreground">{ageLabel}</span>
+      <span className="text-xs text-muted-foreground text-right">{ageLabel}</span>
+      <div className="flex justify-end">
         {loan.isActive ? (
           <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium", isOverdue ? "bg-red-500/10 text-red-400" : "bg-amber-500/10 text-amber-400")}>
             {isOverdue ? "Overdue" : "Active"}
@@ -111,9 +79,10 @@ function LoanRow({ loan }: { loan: Awaited<ReturnType<typeof getLoansOverview>>[
           <span className="rounded-full bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 text-xs font-medium">Settled</span>
         )}
       </div>
-      {loan.notes && (
-        <span className="text-xs text-muted-foreground truncate max-w-32">{loan.notes}</span>
-      )}
+      <span className="text-xs text-muted-foreground truncate min-w-0">{loan.notes ?? "—"}</span>
+      <div className="flex justify-end opacity-0 group-hover/loanrow:opacity-100 transition-opacity">
+        <LoanRowActions loan={loan} accounts={accounts} debtors={debtors} />
+      </div>
     </div>
   );
 }
@@ -228,16 +197,19 @@ export async function LoansDashboard() {
                 {/* Loan rows */}
                 {debtor.loans.length > 0 && (
                   <div className="border-t border-border divide-y divide-border/50">
-                    <div className="flex items-center gap-4 px-4 py-1.5 bg-muted/20">
-                      <span className="text-xs text-muted-foreground w-28">Account</span>
-                      <span className="text-xs text-muted-foreground w-20">Date</span>
-                      <span className="text-xs text-muted-foreground w-24">Original</span>
-                      <span className="text-xs text-muted-foreground flex-1">Repaid</span>
-                      <span className="text-xs text-muted-foreground w-28 text-right">Remaining</span>
-                      <span className="text-xs text-muted-foreground w-20 text-right">Status</span>
+                    <div className="grid grid-cols-[1.5fr_1fr_1.2fr_2fr_1.4fr_0.5fr_0.9fr_2fr_3.5rem] items-center gap-x-4 px-4 py-1.5 bg-muted/20">
+                      <span className="text-xs text-muted-foreground">Account</span>
+                      <span className="text-xs text-muted-foreground">Date</span>
+                      <span className="text-xs text-muted-foreground">Original</span>
+                      <span className="text-xs text-muted-foreground">Repaid</span>
+                      <span className="text-xs text-muted-foreground text-right">Remaining</span>
+                      <span className="text-xs text-muted-foreground text-right">Age</span>
+                      <span className="text-xs text-muted-foreground text-right">Status</span>
+                      <span className="text-xs text-muted-foreground">Notes</span>
+                      <span />
                     </div>
                     {debtor.loans.map((loan) => (
-                      <LoanRow key={loan.id} loan={loan} />
+                      <LoanRow key={loan.id} loan={loan} accounts={data.accounts} debtors={data.debtors} />
                     ))}
                   </div>
                 )}
