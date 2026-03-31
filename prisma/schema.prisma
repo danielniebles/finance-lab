@@ -169,3 +169,12 @@ model LoanPayment {
   date    DateTime
   notes   String?
 }
+
+// ─── Milestone 5 — AI Advisor ─────────────────────────────────────────────────
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  role      String   // "user" | "assistant"
+  content   String
+  createdAt DateTime @default(now())
+}

@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useTransition } from "react";
+import { ScrollText, Trash } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCOP } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LoansClient } from "./loans-client";
 import { LoanRowActions } from "./loan-row-actions";
+import { deleteLoanPayment } from "@/lib/actions/loans";
 import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/lib/queries/loans";
 
 // ─── Loan row ─────────────────────────────────────────────────────────────────
@@ -75,6 +79,8 @@ export function DebtorsSection({
   debtors: DebtorWithLoans[];
 }) {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [paymentsDebtor, setPaymentsDebtor] = useState<DebtorWithLoans | null>(null);
+  const [deletePaymentPending, startDeletePayment] = useTransition();
 
   const filteredDebtors = useMemo(() => {
     if (!selectedAccountId) return debtors;
@@ -151,6 +157,15 @@ export function DebtorsSection({
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 text-xs text-muted-foreground"
+                        onClick={() => setPaymentsDebtor(debtors.find((d) => d.id === debtor.id) ?? null)}
+                      >
+                        <ScrollText className="size-3" />
+                        Payments
+                      </Button>
                       {debtor.totalOwed > 0 && (
                         <LoansClient
                           accounts={accounts}
@@ -193,6 +208,62 @@ export function DebtorsSection({
           )}
         </>
       )}
+      {/* Payments log dialog */}
+      {(() => {
+        const d = paymentsDebtor ? debtors.find((x) => x.id === paymentsDebtor.id) ?? paymentsDebtor : null;
+        const allPayments = d
+          ? d.loans
+              .flatMap((l) =>
+                l.payments.map((p) => ({
+                  ...p,
+                  accountName: l.accountName,
+                  accountColor: l.accountColor,
+                  loanDate: l.date,
+                }))
+              )
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          : [];
+
+        return (
+          <Dialog open={!!paymentsDebtor} onOpenChange={(o: boolean) => !o && setPaymentsDebtor(null)}>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>{d?.name} — Payment history</DialogTitle>
+              </DialogHeader>
+              {allPayments.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No payments recorded yet.</p>
+              ) : (
+                <div className="max-h-[60vh] overflow-y-auto -mx-6 divide-y divide-border/40">
+                  {allPayments.map((p) => (
+                    <div key={p.id} className="grid grid-cols-[5rem_6rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 group/row hover:bg-muted/20">
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(p.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: p.accountColor ?? "#888" }} />
+                        <span className="text-xs text-muted-foreground truncate">{p.accountName}</span>
+                      </div>
+                      <span className="font-mono text-xs font-medium text-emerald-400">
+                        +{formatCOP(p.amount)}
+                      </span>
+                      <span className="text-xs text-muted-foreground truncate">{p.notes ?? ""}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-5 opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-destructive"
+                        disabled={deletePaymentPending}
+                        onClick={() => startDeletePayment(async () => { await deleteLoanPayment(p.id); })}
+                      >
+                        <Trash className="size-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </section>
   );
 }

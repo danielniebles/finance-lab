@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CreditCard, HandCoins, Settings, ChevronDown } from "lucide-react";
+import { BarChart3, CreditCard, HandCoins, Settings, ChevronDown, Bot } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -28,6 +28,7 @@ const navItems = [
   { title: "Expenses", href: "/expenses", icon: BarChart3 },
   { title: "Installments", href: "/installments", icon: CreditCard },
   { title: "Loans", href: "/loans", icon: HandCoins },
+  { title: "Advisor", href: "/chat", icon: Bot },
 ];
 
 const settingsItems = [

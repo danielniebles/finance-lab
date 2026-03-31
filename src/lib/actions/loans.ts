@@ -129,13 +129,14 @@ export async function deleteLoan(id: string) {
 
 export async function recordPayment(data: {
   debtorId: string;
+  accountId?: string;
   totalAmount: number;
   date: Date;
   notes?: string;
 }) {
-  // Fetch all loans for debtor ordered oldest first
+  // Fetch loans for debtor (optionally scoped to one account), oldest first
   const loans = await db.loan.findMany({
-    where: { debtorId: data.debtorId },
+    where: { debtorId: data.debtorId, ...(data.accountId ? { accountId: data.accountId } : {}) },
     include: { payments: true },
     orderBy: { date: "asc" },
   });

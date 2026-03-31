@@ -43,6 +43,7 @@ export function LoansClient({ accounts, debtors, mode, debtorId }: Props) {
       <PaymentForm
         open={open === "payment"}
         onClose={() => setOpen(null)}
+        accounts={accounts}
         debtors={debtors}
         defaultDebtorId={debtorId}
       />

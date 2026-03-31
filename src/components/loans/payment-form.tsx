@@ -12,20 +12,23 @@ import {
 } from "@/components/ui/dialog";
 import { recordPayment } from "@/lib/actions/loans";
 import { formatCOP } from "@/lib/format";
-import type { DebtorWithLoans } from "@/lib/queries/loans";
+import type { AccountWithBalance, DebtorWithLoans } from "@/lib/queries/loans";
 
 export function PaymentForm({
   open,
   onClose,
+  accounts,
   debtors,
   defaultDebtorId,
 }: {
   open: boolean;
   onClose: () => void;
+  accounts: AccountWithBalance[];
   debtors: DebtorWithLoans[];
   defaultDebtorId?: string;
 }) {
   const [debtorId, setDebtorId] = useState(defaultDebtorId ?? "");
+  const [accountId, setAccountId] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
@@ -33,14 +36,23 @@ export function PaymentForm({
 
   const debtor = debtors.find((d) => d.id === debtorId);
 
-  // Preview FIFO allocation
+  // Accounts that have at least one active loan for the selected debtor
+  const relevantAccounts = useMemo(() => {
+    if (!debtor) return [];
+    const ids = new Set(debtor.loans.filter((l) => l.isActive).map((l) => l.accountId));
+    return accounts.filter((a) => ids.has(a.id));
+  }, [debtor, accounts]);
+
+  const selectedAccount = accounts.find((a) => a.id === accountId);
+
+  // Preview FIFO allocation scoped to selected account (or all if none selected)
   const preview = useMemo(() => {
     if (!debtor || !amount) return [];
     const total = parseFloat(amount);
     if (isNaN(total) || total <= 0) return [];
 
     const activeLoans = debtor.loans
-      .filter((l) => l.isActive)
+      .filter((l) => l.isActive && (!accountId || l.accountId === accountId))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     let left = total;
@@ -50,13 +62,14 @@ export function PaymentForm({
       left -= apply;
       return { loan: l, apply };
     }).filter(Boolean) as { loan: (typeof activeLoans)[0]; apply: number }[];
-  }, [debtor, amount]);
+  }, [debtor, accountId, amount]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
       await recordPayment({
         debtorId,
+        accountId: accountId || undefined,
         totalAmount: parseFloat(amount),
         date: new Date(date + "T12:00:00"),
         notes: notes.trim() || undefined,
@@ -90,6 +103,37 @@ export function PaymentForm({
             </Select>
           </div>
 
+          {relevantAccounts.length > 1 && (
+            <div className="space-y-1.5">
+              <Label>Account <span className="text-muted-foreground font-normal">(optional — leave blank for all)</span></Label>
+              <Select value={accountId} onValueChange={(v) => setAccountId(v ?? "")}>
+                <SelectTrigger className="h-9">
+                  <span className="text-sm flex items-center gap-2">
+                    {selectedAccount ? (
+                      <>
+                        <span className="size-2 rounded-full" style={{ backgroundColor: selectedAccount.color ?? "#888" }} />
+                        {selectedAccount.name}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">All accounts</span>
+                    )}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All accounts</SelectItem>
+                  {relevantAccounts.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      <span className="flex items-center gap-2">
+                        <span className="size-2 rounded-full" style={{ backgroundColor: a.color ?? "#888" }} />
+                        {a.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Amount received (COP)</Label>
@@ -112,7 +156,7 @@ export function PaymentForm({
           {preview.length > 0 && (
             <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-1.5">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Allocation preview (oldest first)
+                Allocation preview — {selectedAccount ? selectedAccount.name : "all accounts"}, oldest first
               </p>
               {preview.map(({ loan, apply }) => (
                 <div key={loan.id} className="flex items-center justify-between text-xs">
