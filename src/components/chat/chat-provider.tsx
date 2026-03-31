@@ -9,7 +9,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { getMessages, saveMessage, clearHistory as clearHistoryDB } from "@/lib/actions/chat";
+import { getMessages, clearHistory as clearHistoryDB } from "@/lib/actions/chat";
 
 export type Message = {
   id: string;
@@ -57,10 +57,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
 
     try {
-      // Save user message to DB
-      await saveMessage("user", content);
-
-      // Stream response from API
+      // Stream response from API — the route handles all DB persistence
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -90,8 +87,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         );
       }
 
-      // Save final assistant message to DB
-      await saveMessage("assistant", full);
     } catch {
       setMessages((prev) => [
         ...prev,

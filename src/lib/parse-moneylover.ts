@@ -21,7 +21,28 @@ export type ParseResult = {
 // Categories to exclude from transaction storage entirely
 const IGNORED_CATEGORIES = new Set<string>();
 
-export function parseMoneyLoverBuffer(buffer: Buffer): ParseResult {
+/**
+ * Given a transaction date, returns the financial month and year it belongs to.
+ * If the day >= startDay, the transaction falls in the *next* calendar month's
+ * financial period. E.g. with startDay=25, Feb 25 → financial month March.
+ */
+function financialMonthYear(date: Date, startDay: number): { month: number; year: number } {
+  const day = date.getDate();
+  const calMonth = date.getMonth() + 1; // 1-based
+  const calYear = date.getFullYear();
+
+  if (startDay <= 1 || day < startDay) {
+    return { month: calMonth, year: calYear };
+  }
+
+  // Advance by one month
+  if (calMonth === 12) {
+    return { month: 1, year: calYear + 1 };
+  }
+  return { month: calMonth + 1, year: calYear };
+}
+
+export function parseMoneyLoverBuffer(buffer: Buffer, startDay = 1): ParseResult {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   // raw: true preserves Date objects produced by cellDates: true
@@ -60,10 +81,13 @@ export function parseMoneyLoverBuffer(buffer: Buffer): ParseResult {
   const periodStart = new Date(Math.min(...dates));
   const periodEnd = new Date(Math.max(...dates));
 
-  // Use the month/year of the majority of transactions (the target month)
+  // Assign each transaction to its financial month, then pick the dominant one.
+  // With a custom startDay the dominant month is deterministic (all transactions
+  // exported for one financial period map to the same financial month).
   const monthCounts: Record<string, number> = {};
   for (const t of transactions) {
-    const key = `${t.date.getFullYear()}-${t.date.getMonth() + 1}`;
+    const { month, year } = financialMonthYear(t.date, startDay);
+    const key = `${year}-${month}`;
     monthCounts[key] = (monthCounts[key] ?? 0) + 1;
   }
   const dominantKey = Object.entries(monthCounts).sort((a, b) => b[1] - a[1])[0][0];

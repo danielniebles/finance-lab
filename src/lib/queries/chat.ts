@@ -21,9 +21,12 @@ export async function getFinancialSnapshot(): Promise<string> {
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 
-  // Find the most recent import batch (user may not have imported current month yet)
-  const latestBatch = await db.importBatch.findFirst({
+  const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  // Fetch last 3 import batches for trend analysis
+  const batches = await db.importBatch.findMany({
     orderBy: [{ year: "desc" }, { month: "desc" }],
+    take: 3,
   });
 
   const [loans, installments] = await Promise.all([
@@ -39,45 +42,52 @@ export async function getFinancialSnapshot(): Promise<string> {
   lines.push(``);
 
   // ── Expense analysis ──────────────────────────────────────────────────────
-  if (!latestBatch) {
+  if (batches.length === 0) {
     lines.push(`## Expenses`);
     lines.push(`No expense data imported yet.`);
   } else {
-    const isCurrentMonth = latestBatch.month === currentMonth && latestBatch.year === currentYear;
-    const analysis = await getMonthlyAnalysis(latestBatch.month, latestBatch.year);
+    // Run analysis for all available batches in parallel
+    const analyses = await Promise.all(
+      batches.map((b) => getMonthlyAnalysis(b.month, b.year))
+    );
 
-    const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const batchLabel = `${MONTH_NAMES[latestBatch.month - 1]} ${latestBatch.year}`;
+    const latest = batches[0];
+    const latestAnalysis = analyses[0];
+    const isCurrentMonth = latest.month === currentMonth && latest.year === currentYear;
+    const batchLabel = `${MONTH_NAMES[latest.month - 1]} ${latest.year}`;
 
+    // ── Most recent month — full detail ──
     lines.push(`## Expenses — ${batchLabel}${isCurrentMonth ? " (current month)" : " (most recent import)"}`);
-    lines.push(`- Income: ${cop(analysis.totalIncome)}`);
-    lines.push(`- Total expenses: ${cop(analysis.totalExpenses)}`);
-    lines.push(`- Savings rate: ${pct(analysis.savingsRate)} (target ≥ 20%)`);
-    lines.push(`- Real savings: ${cop(analysis.realSavings)}`);
-    lines.push(`- Ideal savings: ${cop(analysis.idealSavings)}`);
-    lines.push(`- Savings gap vs budget: ${cop(analysis.savingsGap)}`);
-    lines.push(`- Variable burn rate: ${pct(analysis.variableBurnRate)} (alert if > 100%)`);
-    if (analysis.unplannedSpendTotal > 0) {
-      lines.push(`- Unplanned spending: ${cop(analysis.unplannedSpendTotal)}`);
+    lines.push(`- Income: ${cop(latestAnalysis.totalIncome)}`);
+    lines.push(`- Total expenses: ${cop(latestAnalysis.totalExpenses)}`);
+    lines.push(`- Savings rate: ${pct(latestAnalysis.savingsRate)} (target ≥ 20%)`);
+    lines.push(`- Real savings: ${cop(latestAnalysis.realSavings)}`);
+    lines.push(`- Ideal savings: ${cop(latestAnalysis.idealSavings)}`);
+    lines.push(`- Savings gap vs budget: ${cop(latestAnalysis.savingsGap)}`);
+    lines.push(`- Variable burn rate: ${pct(latestAnalysis.variableBurnRate)} (alert if > 100%)`);
+    if (latestAnalysis.unplannedSpendTotal > 0) {
+      lines.push(`- Unplanned spending: ${cop(latestAnalysis.unplannedSpendTotal)}`);
     }
     lines.push(``);
 
     lines.push(`### Budget overview`);
-    lines.push(`- Fixed budget: ${cop(analysis.fixedBudget)}`);
-    lines.push(`- Variable budget: ${cop(analysis.variableBudget)}`);
-    lines.push(`- Total budget: ${cop(analysis.totalBudget)}`);
-    lines.push(`- Fixed actual: ${cop(analysis.fixedActual)}`);
-    lines.push(`- Variable actual: ${cop(analysis.variableActual)}`);
+    lines.push(`- Fixed budget: ${cop(latestAnalysis.fixedBudget)}`);
+    lines.push(`- Variable budget: ${cop(latestAnalysis.variableBudget)}`);
+    lines.push(`- Total budget: ${cop(latestAnalysis.totalBudget)}`);
+    lines.push(`- Fixed actual: ${cop(latestAnalysis.fixedActual)}`);
+    lines.push(`- Variable actual: ${cop(latestAnalysis.variableActual)}`);
     lines.push(``);
 
-    const problems = analysis.categoryBreakdown.filter(
+    const problems = latestAnalysis.categoryBreakdown.filter(
       (c) => c.severity === "Critical" || c.severity === "Unplanned"
     );
 
     lines.push(`### Category breakdown`);
-    for (const cat of analysis.categoryBreakdown) {
-      const over = cat.control < 0 ? ` (over by ${cop(Math.abs(cat.control))})` : cat.control > 0 ? ` (${cop(cat.control)} remaining)` : "";
-      lines.push(`- ${cat.name} [${cat.budgetType}]: spent ${cop(cat.spent)} / budget ${cop(cat.budget)} — ${cat.severity}${over}`);
+    for (const cat of latestAnalysis.categoryBreakdown) {
+      const ctrl = cat.control < 0
+        ? ` (over by ${cop(Math.abs(cat.control))})`
+        : cat.control > 0 ? ` (${cop(cat.control)} remaining)` : "";
+      lines.push(`- ${cat.name} [${cat.budgetType}]: spent ${cop(cat.spent)} / budget ${cop(cat.budget)} — ${cat.severity}${ctrl}`);
     }
 
     if (problems.length > 0) {
@@ -85,6 +95,52 @@ export async function getFinancialSnapshot(): Promise<string> {
       lines.push(`### ⚠ Problem categories`);
       for (const c of problems) {
         lines.push(`- ${c.name}: ${c.severity} — spent ${cop(c.spent)} vs budget ${cop(c.budget)}`);
+      }
+    }
+
+    // ── Multi-month trend (only if we have more than 1 batch) ──
+    if (batches.length > 1) {
+      lines.push(``);
+      lines.push(`## Spending trends (last ${batches.length} months, newest first)`);
+
+      // Summary table
+      lines.push(`| Month | Income | Expenses | Savings rate | Var. burn |`);
+      lines.push(`|-------|--------|----------|--------------|-----------|`);
+      for (let i = 0; i < batches.length; i++) {
+        const b = batches[i];
+        const a = analyses[i];
+        const label = `${MONTH_NAMES[b.month - 1]} ${b.year}`;
+        lines.push(`| ${label} | ${cop(a.totalIncome)} | ${cop(a.totalExpenses)} | ${pct(a.savingsRate)} | ${pct(a.variableBurnRate)} |`);
+      }
+
+      // Savings rate direction
+      if (batches.length >= 2) {
+        const rateNow = latestAnalysis.savingsRate ?? 0;
+        const ratePrev = analyses[1].savingsRate ?? 0;
+        const diff = rateNow - ratePrev;
+        const direction = diff > 1 ? `▲ improving (+${diff.toFixed(1)}pp)` : diff < -1 ? `▼ declining (${diff.toFixed(1)}pp)` : `→ stable`;
+        lines.push(``);
+        lines.push(`Savings rate trend: ${direction}`);
+      }
+
+      // Per-category trends for variable/mixed (most informative for patterns)
+      const variableCats = latestAnalysis.categoryBreakdown.filter(
+        (c) => c.budgetType !== "FIXED" && c.budget > 0
+      );
+
+      if (variableCats.length > 0) {
+        lines.push(``);
+        lines.push(`### Variable category trends (newest → oldest)`);
+        for (const cat of variableCats) {
+          const spends = analyses.map((a) => {
+            const match = a.categoryBreakdown.find((c) => c.name === cat.name);
+            return match?.spent ?? 0;
+          });
+          const trend = spends.length >= 2
+            ? spends[0] > spends[1] * 1.1 ? " ↑" : spends[0] < spends[1] * 0.9 ? " ↓" : " →"
+            : "";
+          lines.push(`- ${cat.name}: ${spends.map((s) => cop(s)).join(" → ")}${trend}`);
+        }
       }
     }
   }

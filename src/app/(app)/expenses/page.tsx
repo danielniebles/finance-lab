@@ -13,6 +13,7 @@ type Props = {
 export default async function ExpensesPage({ searchParams }: Props) {
   const params = await searchParams;
   const batches = await getImportBatches();
+  const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
 
   const selectedMonth = params.month ? parseInt(params.month) : batches[0]?.month;
   const selectedYear = params.year ? parseInt(params.year) : batches[0]?.year;
@@ -34,6 +35,7 @@ export default async function ExpensesPage({ searchParams }: Props) {
             batches={batches}
             selectedMonth={selectedMonth!}
             selectedYear={selectedYear!}
+            startDay={startDay}
           />
           <Suspense
             fallback={

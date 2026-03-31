@@ -11,9 +11,11 @@ export async function importMoneyLoverFile(formData: FormData) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
+  const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
+
   let parsed;
   try {
-    parsed = parseMoneyLoverBuffer(buffer);
+    parsed = parseMoneyLoverBuffer(buffer, startDay);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Failed to parse file." };
   }
