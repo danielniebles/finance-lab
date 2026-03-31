@@ -10,6 +10,30 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U financelab"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://financelab:financelab@db:5432/financelab
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      FINANCIAL_MONTH_START_DAY: ${FINANCIAL_MONTH_START_DAY:-1}
+    volumes:
+      # Mount source for hot reload
+      - .:/app
+      # Keep node_modules and .next inside the container
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:

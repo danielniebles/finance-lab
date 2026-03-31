@@ -4,8 +4,12 @@ import { db } from "@/lib/db";
 import { MappingList } from "@/components/settings/mapping-list";
 
 export default async function MappingsPage() {
+  // "Salary" is income and never needs mapping — exclude it from the list
+  const EXCLUDED_FROM_MAPPING = ["Salary"];
+
   const [mlCategories, appCategories] = await Promise.all([
     db.moneyLoverCategory.findMany({
+      where: { name: { notIn: EXCLUDED_FROM_MAPPING } },
       orderBy: { name: "asc" },
       include: { mapping: { include: { appCategory: true } } },
     }),
