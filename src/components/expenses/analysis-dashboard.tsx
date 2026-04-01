@@ -1,16 +1,8 @@
 import { getMonthlyAnalysis, type CategorySeverity } from "@/lib/queries/expenses";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Minus, AlertTriangle } from "lucide-react";
+import { CategoryBreakdownTable } from "@/components/expenses/category-breakdown-table";
 
 type Props = { month: number; year: number };
 
@@ -186,65 +178,11 @@ export async function AnalysisDashboard({ month, year }: Props) {
       </div>
 
       {/* ── Category breakdown table ───────────────────────────────────── */}
-      <Card className="overflow-hidden border-border/60">
-        <CardHeader className="px-5 py-4 border-b border-border/60">
-          <CardTitle className="text-sm font-semibold">Spend by Category</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-border/60 hover:bg-transparent">
-                <TableHead className="pl-5 text-xs uppercase tracking-wide text-muted-foreground">Category</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">Type</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Actual</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Budget</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Control</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground w-36">Progress</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">Status</TableHead>
-                <TableHead className="pr-5 text-xs uppercase tracking-wide text-muted-foreground">Severity</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.categoryBreakdown.map((row) => (
-                <TableRow
-                  key={row.id}
-                  className={cn("border-border/40 transition-colors", rowBg(row.severity))}
-                >
-                  <TableCell className="pl-5 font-medium">{row.name}</TableCell>
-                  <TableCell>
-                    <TypePill type={row.budgetType} />
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {formatCOP(row.spent)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums text-muted-foreground">
-                    {formatCOP(row.budget)}
-                  </TableCell>
-                  <TableCell className={cn("text-right font-mono text-sm tabular-nums", row.control < 0 ? "text-destructive" : "text-emerald-400")}>
-                    {formatCOP(row.control)}
-                  </TableCell>
-                  <TableCell>
-                    {row.percentUsed !== null ? (
-                      <div className="flex items-center gap-2">
-                        <ProgressBar percent={row.percentUsed} className="flex-1" />
-                        <span className="font-mono text-xs tabular-nums text-muted-foreground w-9 text-right shrink-0">
-                          {row.percentUsed.toFixed(0)}%
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{row.status}</TableCell>
-                  <TableCell className="pr-5">
-                    <SeverityBadge severity={row.severity} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <CategoryBreakdownTable
+        categoryBreakdown={data.categoryBreakdown}
+        month={month}
+        year={year}
+      />
     </div>
   );
 }
@@ -298,11 +236,15 @@ function StatCard({
   );
 }
 
+type VarianceCat = { name: string; control: number };
+
 type Variance = {
   surplusCount: number;
   surplusTotal: number;
+  surplusCategories: VarianceCat[];
   deficitCount: number;
   deficitTotal: number;
+  deficitCategories: VarianceCat[];
   offsetCoverage: number | null;
 };
 
@@ -315,11 +257,35 @@ function VarianceRows({ variance: v }: { variance: Variance }) {
         rawValue={`+${formatCOP(v.surplusTotal)}`}
         highlight="good"
       />
+      {v.surplusCategories.length > 0 && (
+        <div className="pl-2 space-y-0.5">
+          {v.surplusCategories.map((c) => (
+            <div key={c.name} className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground truncate">{c.name}</span>
+              <span className="font-mono text-xs tabular-nums text-emerald-400/70 shrink-0">
+                +{formatCOP(c.control)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       <PillRow
         label={`Deficit (${v.deficitCount} cat${v.deficitCount !== 1 ? "s" : ""})`}
         rawValue={v.deficitTotal > 0 ? `-${formatCOP(v.deficitTotal)}` : formatCOP(0)}
         highlight={v.deficitTotal > 0 ? "bad" : "good"}
       />
+      {v.deficitCategories.length > 0 && (
+        <div className="pl-2 space-y-0.5">
+          {v.deficitCategories.map((c) => (
+            <div key={c.name} className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground truncate">{c.name}</span>
+              <span className="font-mono text-xs tabular-nums text-destructive/70 shrink-0">
+                -{formatCOP(Math.abs(c.control))}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       {v.offsetCoverage !== null && v.deficitTotal > 0 && (
         <PillRow
           label="Offset coverage"
@@ -375,31 +341,6 @@ function ProgressBar({ percent, className }: { percent: number; className?: stri
       />
     </div>
   );
-}
-
-function TypePill({ type }: { type: string }) {
-  const styles: Record<string, string> = {
-    FIXED:    "border-blue-500/25 bg-blue-500/8 text-blue-400",
-    VARIABLE: "border-violet-500/25 bg-violet-500/8 text-violet-400",
-    MIXED:    "border-amber-500/25 bg-amber-500/8 text-amber-400",
-  };
-  const labels: Record<string, string> = {
-    FIXED: "Fixed", VARIABLE: "Variable", MIXED: "Mixed",
-  };
-  return (
-    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", styles[type] ?? styles.VARIABLE)}>
-      {labels[type] ?? type}
-    </span>
-  );
-}
-
-function rowBg(severity: CategorySeverity) {
-  switch (severity) {
-    case "Critical":  return "bg-red-500/5 hover:bg-red-500/8";
-    case "Issue":     return "bg-amber-500/5 hover:bg-amber-500/8";
-    case "Unplanned": return "bg-orange-500/5 hover:bg-orange-500/8";
-    default:          return "hover:bg-muted/30";
-  }
 }
 
 function SeverityBadge({ severity }: { severity: CategorySeverity }) {
