@@ -9,6 +9,14 @@ type Props = { month: number; year: number };
 export async function AnalysisDashboard({ month, year }: Props) {
   const data = await getMonthlyAnalysis(month, year);
 
+  if (data.totalIncome === 0 && data.totalExpenses === 0) {
+    return (
+      <div className="rounded-md border border-dashed p-12 text-center text-muted-foreground">
+        No data for this period. Import a MoneyLover export to get started.
+      </div>
+    );
+  }
+
   const fixedControl = data.fixedBudget - data.fixedActual;
   const variableControl = data.variableBudget - data.variableActual;
   const burnRateAlert = data.variableBurnRate !== null && data.variableBurnRate > 100;
