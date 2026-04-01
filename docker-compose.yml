@@ -24,6 +24,8 @@ services:
       DATABASE_URL: postgresql://financelab:financelab@db:5432/financelab
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       FINANCIAL_MONTH_START_DAY: ${FINANCIAL_MONTH_START_DAY:-1}
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
     volumes:
       # Mount source for hot reload
       - .:/app

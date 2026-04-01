@@ -59,7 +59,7 @@ function TypeBadge({ type }: { type: EffectiveType | BudgetType }) {
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${map[type]}`}
+      className={`inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium ${map[type]}`}
     >
       {label[type]}
     </span>
@@ -246,6 +246,9 @@ function AddBudgetItemRow({
   );
 }
 
+// Grid columns: chevron | name | type | amount | actions
+const ROW_GRID = "grid grid-cols-[1.25rem_1fr_5.5rem_8rem_3.75rem] items-center gap-3 px-4 py-3";
+
 function CategoryRow({ cat }: { cat: Category }) {
   const [expanded, setExpanded] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -265,105 +268,80 @@ function CategoryRow({ cat }: { cat: Category }) {
   }
 
   function handleDelete() {
-    if (
-      !confirm(
-        `Delete "${cat.name}"? This will also remove its mappings and budget items.`
-      )
-    )
+    if (!confirm(`Delete "${cat.name}"? This will also remove its mappings and budget items.`))
       return;
     startTransition(() => deleteAppCategory(cat.id));
   }
 
   return (
-    <div className="border-b border-border last:border-0">
-      {/* Category header row */}
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-3 flex-1">
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ChevronDown
-              className={`size-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}
-            />
-          </button>
-
-          {editingName ? (
-            <form onSubmit={handleNameSave} className="flex items-center gap-2">
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="h-7 w-40 text-sm"
-                autoFocus
-                required
-              />
-              <Button type="submit" size="icon" className="size-7" disabled={pending}>
-                <Check className="size-3" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                onClick={() => { setName(cat.name); setEditingName(false); }}
-              >
-                <X className="size-3" />
-              </Button>
-            </form>
-          ) : (
-            <span className="font-medium">{cat.name}</span>
-          )}
-
-          <TypeBadge type={effectiveType} />
-
-          <span className="font-mono text-sm text-muted-foreground">
-            {formatCOP(total)} / mo
-          </span>
-
-          {cat._count.mappings > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {cat._count.mappings} mapping(s)
-            </span>
-          )}
-        </div>
-
-        <div className="flex gap-1">
+    <div className="border-b border-border last:border-0 group/catrow">
+      {editingName ? (
+        <form onSubmit={handleNameSave} className="flex items-center gap-2 px-4 py-3">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="h-7 w-48 text-sm"
+            autoFocus
+            required
+          />
+          <Button type="submit" size="icon" className="size-7" disabled={pending}>
+            <Check className="size-3" />
+          </Button>
           <Button
+            type="button"
             variant="ghost"
             size="icon"
             className="size-7"
-            onClick={() => setEditingName(true)}
+            onClick={() => { setName(cat.name); setEditingName(false); }}
           >
-            <Pencil className="size-3.5" />
+            <X className="size-3" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7 text-destructive hover:text-destructive"
-            onClick={handleDelete}
-            disabled={pending}
+        </form>
+      ) : (
+        <div className={ROW_GRID}>
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="text-muted-foreground hover:text-foreground transition-colors"
           >
-            <Trash2 className="size-3.5" />
-          </Button>
+            <ChevronDown className={`size-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+          </button>
+
+          <span className="font-medium truncate">{cat.name}</span>
+
+          <TypeBadge type={effectiveType} />
+
+          <span className="font-mono text-sm text-right">
+            {formatCOP(total)}
+          </span>
+
+          <div className="flex gap-1 justify-end opacity-0 group-hover/catrow:opacity-100 transition-opacity">
+            <Button variant="ghost" size="icon" className="size-7" onClick={() => setEditingName(true)}>
+              <Pencil className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 text-destructive hover:text-destructive"
+              onClick={handleDelete}
+              disabled={pending}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Expanded: budget items */}
       {expanded && (
         <div className="border-t border-border/50 bg-muted/10">
           {cat.budgetItems.length === 0 && !addingItem && (
-            <p className="py-2 pl-8 text-xs text-muted-foreground">
-              No budget items yet.
-            </p>
+            <p className="py-2 pl-8 text-xs text-muted-foreground">No budget items yet.</p>
           )}
           {cat.budgetItems.map((item) => (
             <BudgetItemRow key={item.id} item={item} />
           ))}
           {addingItem ? (
-            <AddBudgetItemRow
-              categoryId={cat.id}
-              onDone={() => setAddingItem(false)}
-            />
+            <AddBudgetItemRow categoryId={cat.id} onDone={() => setAddingItem(false)} />
           ) : (
             <div className="py-2 pl-8 pr-3">
               <Button
@@ -423,9 +401,23 @@ function AddCategoryRow({ onDone }: { onDone: () => void }) {
 export function CategoryList({ categories }: { categories: Category[] }) {
   const [adding, setAdding] = useState(false);
 
+  const fixedTotal = categories.reduce((sum, cat) =>
+    sum + cat.budgetItems.filter((i) => i.budgetType === "FIXED").reduce((s, i) => s + i.amount, 0), 0);
+  const variableTotal = categories.reduce((sum, cat) =>
+    sum + cat.budgetItems.filter((i) => i.budgetType === "VARIABLE").reduce((s, i) => s + i.amount, 0), 0);
+
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-border divide-y-0 overflow-hidden">
+        {/* Column headers */}
+        <div className={`${ROW_GRID} border-b border-border/60 bg-muted/20 py-2 text-xs text-muted-foreground uppercase tracking-wide`}>
+          <span />
+          <span>Category</span>
+          <span>Type</span>
+          <span className="text-right">Budget / mo</span>
+          <span />
+        </div>
+
         {categories.map((cat) => (
           <CategoryRow key={cat.id} cat={cat} />
         ))}
@@ -438,6 +430,24 @@ export function CategoryList({ categories }: { categories: Category[] }) {
 
         {adding && <AddCategoryRow onDone={() => setAdding(false)} />}
       </div>
+
+      {/* Budget totals */}
+      {categories.length > 0 && (
+        <div className="flex items-center gap-6 px-4 py-2.5 rounded-lg border border-border/40 text-sm">
+          <span className="text-xs text-muted-foreground uppercase tracking-wide mr-2">Totals</span>
+          <div className="flex items-center gap-1.5">
+            <TypeBadge type="FIXED" />
+            <span className="font-mono text-sm">{formatCOP(fixedTotal)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <TypeBadge type="VARIABLE" />
+            <span className="font-mono text-sm">{formatCOP(variableTotal)}</span>
+          </div>
+          <div className="ml-auto font-mono text-sm font-medium">
+            {formatCOP(fixedTotal + variableTotal)} / mo
+          </div>
+        </div>
+      )}
 
       {!adding && (
         <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
