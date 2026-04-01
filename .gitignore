@@ -45,3 +45,7 @@ next-env.d.ts
 
 # claude code local settings
 .claude/
+
+# db backups and personal seed data
+/backups
+/prisma/seed*.sql

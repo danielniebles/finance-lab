@@ -8,5 +8,5 @@ RUN npm ci
 
 EXPOSE 3000
 
-# Generate client for this platform, run migrations, then start dev server
-CMD ["sh", "-c", "npx prisma generate && npx prisma migrate deploy && npm run dev"]
+# Sync any new packages, generate client, run migrations, then start dev server
+CMD ["sh", "-c", "npm install && npx prisma generate && npx prisma migrate deploy && npm run dev"]

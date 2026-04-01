@@ -65,8 +65,10 @@ export async function POST(req: Request) {
         }
         // Persist the complete assistant message once streaming finishes
         await saveMessage("assistant", fullResponse);
-      } finally {
         controller.close();
+      } catch (err) {
+        // Propagate error to the client so the stream closes and isLoading resets
+        controller.error(err);
       }
     },
   });

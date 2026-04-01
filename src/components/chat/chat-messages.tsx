@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import type { Message } from "./chat-provider";
 
@@ -39,7 +40,27 @@ export function ChatMessages({ messages, isLoading }: { messages: Message[]; isL
                 : "bg-muted text-foreground rounded-bl-sm"
             )}
           >
-            {msg.content || (
+            {msg.content ? (
+              msg.role === "assistant" ? (
+                <ReactMarkdown
+                  components={{
+                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                    ul: ({ children }) => <ul className="mb-2 last:mb-0 pl-4 space-y-0.5 list-disc">{children}</ul>,
+                    ol: ({ children }) => <ol className="mb-2 last:mb-0 pl-4 space-y-0.5 list-decimal">{children}</ol>,
+                    li: ({ children }) => <li className="leading-snug">{children}</li>,
+                    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                    h3: ({ children }) => <p className="font-semibold mt-2 mb-1 first:mt-0">{children}</p>,
+                    h4: ({ children }) => <p className="font-medium mt-2 mb-0.5 first:mt-0">{children}</p>,
+                    code: ({ children }) => <code className="font-mono text-xs bg-black/20 rounded px-1 py-0.5">{children}</code>,
+                    hr: () => <hr className="my-2 border-white/10" />,
+                  }}
+                >
+                  {msg.content}
+                </ReactMarkdown>
+              ) : (
+                msg.content
+              )
+            ) : (
               <span className="flex gap-1 items-center h-4">
                 <span className="size-1.5 rounded-full bg-current animate-bounce [animation-delay:0ms]" />
                 <span className="size-1.5 rounded-full bg-current animate-bounce [animation-delay:150ms]" />

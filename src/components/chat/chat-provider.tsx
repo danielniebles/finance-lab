@@ -58,11 +58,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
     try {
       // Stream response from API — the route handles all DB persistence
+      const abort = new AbortController();
+      const timeout = setTimeout(() => abort.abort(), 60_000); // 60s max
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
+        signal: abort.signal,
       });
+      clearTimeout(timeout);
 
       if (!res.ok || !res.body) throw new Error("API error");
 
