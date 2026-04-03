@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import type { PrismaClient } from "@/generated/prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { parseMoneyLoverBuffer } from "@/lib/parse-moneylover";
 import { revalidatePath } from "next/cache";
 

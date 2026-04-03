@@ -9,7 +9,7 @@ import {
   updateBudgetItem,
   deleteBudgetItem,
 } from "@/lib/actions/categories";
-import { BudgetType } from "@/generated/prisma/enums";
+import { BudgetType } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

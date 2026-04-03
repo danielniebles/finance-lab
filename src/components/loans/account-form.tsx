@@ -11,7 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { createAccount, updateAccount } from "@/lib/actions/loans";
-import { AccountType } from "@/generated/prisma/enums";
+import { AccountType } from "@prisma/client";
 import type { AccountWithBalance } from "@/lib/queries/loans";
 
 const PRESET_COLORS = [
