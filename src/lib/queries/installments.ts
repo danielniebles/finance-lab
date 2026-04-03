@@ -56,7 +56,8 @@ export async function getAllInstallments(): Promise<InstallmentRow[]> {
     include: { payments: { orderBy: { installmentNum: "asc" } } },
   });
 
-  return rows.map((r) => {
+  return rows
+    .map((r) => {
     const installmentsPaid = r.payments.length;
     const remaining = Math.max(0, r.totalAmount - installmentsPaid * r.monthlyAmount);
     const status: InstallmentStatus = remaining <= 0 ? "Finished" : "Active";
@@ -77,7 +78,13 @@ export async function getAllInstallments(): Promise<InstallmentRow[]> {
         paidAt: p.paidAt,
       })),
     };
-  });
+    })
+    // Active first, Finished at the bottom
+    .sort((a, b) => {
+      if (a.status === "Active" && b.status === "Finished") return -1;
+      if (a.status === "Finished" && b.status === "Active") return 1;
+      return 0;
+    });
 }
 
 export async function getMonthSummary(
@@ -111,6 +118,13 @@ export async function getMonthSummary(
   const totalDue = totalObligation - totalPaid;
   const activeCount = installments.filter((i) => i.status === "Active").length;
   const totalRemainingDebt = installments.reduce((s, i) => s + i.remaining, 0);
+
+  // Unpaid first, paid at the bottom
+  dueThisMonth.sort((a, b) => {
+    if (a.payment === null && b.payment !== null) return -1;
+    if (a.payment !== null && b.payment === null) return 1;
+    return 0;
+  });
 
   return {
     totalObligation,

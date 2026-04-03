@@ -74,7 +74,7 @@ export async function TrendsDashboard() {
                         className={cn(
                           "px-3 py-2.5 text-right font-mono text-sm tabular-nums",
                           amount === null && "text-muted-foreground/40",
-                          amount !== null && amount === max && max > 0 && "text-destructive/80"
+                          amount !== null && amount === max && max > 0 && "text-red-600 dark:text-red-400"
                         )}
                       >
                         {amount !== null ? formatCOP(amount) : "—"}

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CreditCard, HandCoins, Settings, ChevronDown, Bot, TrendingUp } from "lucide-react";
+import { useTheme } from "next-themes";
+import { BarChart3, CreditCard, HandCoins, Settings, ChevronDown, Bot, TrendingUp, Sun, Moon } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -39,6 +40,7 @@ const settingsItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { theme, setTheme } = useTheme();
 
   return (
     <Sidebar>
@@ -104,7 +106,15 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter />
+      <SidebarFooter className="px-3 py-3">
+        <button
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+        >
+          {theme === "dark" ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+          {theme === "dark" ? "Light mode" : "Dark mode"}
+        </button>
+      </SidebarFooter>
     </Sidebar>
   );
 }

@@ -72,7 +72,7 @@ export function ImportForm() {
             </div>
 
             {message && (
-              <p className={`text-sm ${message.type === "error" ? "text-destructive" : "text-emerald-400"}`}>
+              <p className={`text-sm ${message.type === "error" ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
                 {message.text}
               </p>
             )}

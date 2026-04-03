@@ -18,11 +18,11 @@ import type { MonthPoint } from "@/lib/queries/trends";
 // ─── Shared tooltip style ─────────────────────────────────────────────────────
 
 const TOOLTIP_STYLE = {
-  backgroundColor: "#1c1c1e",
-  border: "1px solid #2e2e32",
+  backgroundColor: "var(--card)",
+  border: "1px solid var(--border)",
   borderRadius: "8px",
   fontSize: "12px",
-  color: "#f4f4f5",
+  color: "var(--foreground)",
 };
 
 function copFormatter(value: number) {

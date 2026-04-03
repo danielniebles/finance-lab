@@ -25,7 +25,7 @@ export async function AnalysisDashboard({ month, year }: Props) {
     <div className="space-y-5">
       {/* Unmapped warning */}
       {data.uncategorizedCount > 0 && (
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-400">
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
           {data.uncategorizedCount} transaction(s) have unmapped categories and are excluded.{" "}
           <a href="/settings/mappings" className="underline underline-offset-2 hover:text-amber-300">
             Configure mappings →
@@ -95,7 +95,7 @@ export async function AnalysisDashboard({ month, year }: Props) {
         {/* Fixed pill */}
         <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-blue-400">
+            <span className="inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-blue-600 dark:text-blue-400">
               FIXED
             </span>
           </div>
@@ -118,7 +118,7 @@ export async function AnalysisDashboard({ month, year }: Props) {
         {/* Variable pill */}
         <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-violet-400">
+            <span className="inline-flex items-center rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-violet-600 dark:text-violet-400">
               VARIABLE
             </span>
             {burnRateAlert && (
@@ -154,7 +154,7 @@ export async function AnalysisDashboard({ month, year }: Props) {
         {/* Savings — real first, then ideal, then gap */}
         <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-emerald-400">
+            <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-emerald-600 dark:text-emerald-400">
               SAVINGS
             </span>
           </div>
@@ -213,7 +213,7 @@ function StatCard({
   hint?: string;
 }) {
   const valueColor =
-    tone === "good" ? "text-emerald-400" :
+    tone === "good" ? "text-emerald-600 dark:text-emerald-400" :
     tone === "bad" ? "text-destructive" :
     "text-foreground";
 
@@ -270,7 +270,7 @@ function VarianceRows({ variance: v }: { variance: Variance }) {
           {v.surplusCategories.map((c) => (
             <div key={c.name} className="flex items-center justify-between gap-2">
               <span className="text-xs text-muted-foreground truncate">{c.name}</span>
-              <span className="font-mono text-xs tabular-nums text-emerald-400/70 shrink-0">
+              <span className="font-mono text-xs tabular-nums text-emerald-600/70 dark:text-emerald-400/70 shrink-0">
                 +{formatCOP(c.control)}
               </span>
             </div>
@@ -323,7 +323,7 @@ function PillRow({
       <span
         className={cn(
           "font-mono text-xs font-medium tabular-nums",
-          highlight === "good" && "text-emerald-400",
+          highlight === "good" && "text-emerald-600 dark:text-emerald-400",
           highlight === "bad" && "text-destructive",
           !highlight && "text-foreground"
         )}
@@ -353,10 +353,10 @@ function ProgressBar({ percent, className }: { percent: number; className?: stri
 
 function SeverityBadge({ severity }: { severity: CategorySeverity }) {
   const styles: Record<CategorySeverity, string> = {
-    OK:        "border-emerald-500/25 bg-emerald-500/10 text-emerald-400",
-    Issue:     "border-amber-500/25 bg-amber-500/10 text-amber-400",
-    Critical:  "border-red-500/25 bg-red-500/10 text-red-400",
-    Unplanned: "border-orange-500/25 bg-orange-500/10 text-orange-400",
+    OK:        "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    Issue:     "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    Critical:  "border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-400",
+    Unplanned: "border-orange-500/25 bg-orange-500/10 text-orange-600 dark:text-orange-400",
   };
   return (
     <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", styles[severity])}>

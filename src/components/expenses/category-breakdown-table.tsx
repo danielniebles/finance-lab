@@ -98,7 +98,7 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year }: Props
                   <TableCell
                     className={cn(
                       "text-right font-mono text-sm tabular-nums",
-                      row.control < 0 ? "text-destructive" : "text-emerald-400"
+                      row.control < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"
                     )}
                   >
                     {formatCOP(row.control)}
@@ -193,9 +193,9 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year }: Props
 
 function TypePill({ type }: { type: string }) {
   const styles: Record<string, string> = {
-    FIXED:    "border-blue-500/25 bg-blue-500/8 text-blue-400",
-    VARIABLE: "border-violet-500/25 bg-violet-500/8 text-violet-400",
-    MIXED:    "border-amber-500/25 bg-amber-500/8 text-amber-400",
+    FIXED:    "border-blue-500/25 bg-blue-500/8 text-blue-600 dark:text-blue-400",
+    VARIABLE: "border-violet-500/25 bg-violet-500/8 text-violet-600 dark:text-violet-400",
+    MIXED:    "border-amber-500/25 bg-amber-500/8 text-amber-600 dark:text-amber-400",
   };
   const labels: Record<string, string> = {
     FIXED: "Fixed", VARIABLE: "Variable", MIXED: "Mixed",
@@ -230,10 +230,10 @@ function ProgressBar({ percent, className }: { percent: number; className?: stri
 
 function SeverityBadge({ severity }: { severity: CategorySeverity }) {
   const styles: Record<CategorySeverity, string> = {
-    OK:        "border-emerald-500/25 bg-emerald-500/10 text-emerald-400",
-    Issue:     "border-amber-500/25 bg-amber-500/10 text-amber-400",
-    Critical:  "border-red-500/25 bg-red-500/10 text-red-400",
-    Unplanned: "border-orange-500/25 bg-orange-500/10 text-orange-400",
+    OK:        "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    Issue:     "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    Critical:  "border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-400",
+    Unplanned: "border-orange-500/25 bg-orange-500/10 text-orange-600 dark:text-orange-400",
   };
   return (
     <span

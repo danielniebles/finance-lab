@@ -48,9 +48,9 @@ function getEffectiveType(items: BudgetItemData[]): EffectiveType {
 
 function TypeBadge({ type }: { type: EffectiveType | BudgetType }) {
   const map: Record<string, string> = {
-    FIXED: "bg-blue-500/10 text-blue-400",
-    VARIABLE: "bg-violet-500/10 text-violet-400",
-    MIXED: "bg-amber-500/10 text-amber-400",
+    FIXED: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+    VARIABLE: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+    MIXED: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   };
   const label: Record<string, string> = {
     FIXED: "Fixed",
