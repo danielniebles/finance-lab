@@ -52,7 +52,7 @@ export function IncomeExpensesChart({ data }: { data: MonthPoint[] }) {
           width={52}
         />
         <Tooltip
-          formatter={(value: number) => copFormatter(value)}
+          formatter={(value) => typeof value === "number" ? copFormatter(value) : String(value)}
           contentStyle={TOOLTIP_STYLE}
           cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
         />
@@ -97,7 +97,7 @@ export function SavingsRateChart({ data }: { data: MonthPoint[] }) {
           domain={["auto", "auto"]}
         />
         <Tooltip
-          formatter={(value: number) => [`${value}%`, "Savings Rate"]}
+          formatter={(value) => [`${value}%`, "Savings Rate"]}
           contentStyle={TOOLTIP_STYLE}
         />
         <ReferenceLine
