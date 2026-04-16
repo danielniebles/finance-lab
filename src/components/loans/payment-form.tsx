@@ -53,7 +53,7 @@ export function PaymentForm({
 
     const activeLoans = debtor.loans
       .filter((l) => l.isActive && (!accountId || l.accountId === accountId))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     let left = total;
     return activeLoans.map((l) => {
@@ -156,7 +156,7 @@ export function PaymentForm({
           {preview.length > 0 && (
             <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-1.5">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Allocation preview — {selectedAccount ? selectedAccount.name : "all accounts"}, oldest first
+                Allocation preview — {selectedAccount ? selectedAccount.name : "all accounts"}, newest first
               </p>
               {preview.map(({ loan, apply }) => (
                 <div key={loan.id} className="flex items-center justify-between text-xs">

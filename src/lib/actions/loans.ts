@@ -125,7 +125,7 @@ export async function deleteLoan(id: string) {
   revalidatePath(PATH);
 }
 
-// ─── Payments (FIFO per debtor) ───────────────────────────────────────────────
+// ─── Payments (LIFO per debtor — newest debt paid first) ─────────────────────
 
 export async function recordPayment(data: {
   debtorId: string;
@@ -134,11 +134,11 @@ export async function recordPayment(data: {
   date: Date;
   notes?: string;
 }) {
-  // Fetch loans for debtor (optionally scoped to one account), oldest first
+  // Fetch loans for debtor (optionally scoped to one account), newest first
   const loans = await db.loan.findMany({
     where: { debtorId: data.debtorId, ...(data.accountId ? { accountId: data.accountId } : {}) },
     include: { payments: true },
-    orderBy: { date: "asc" },
+    orderBy: { date: "desc" },
   });
 
   const active = loans
