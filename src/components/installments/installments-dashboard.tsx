@@ -17,9 +17,9 @@ function StatCard({
 }) {
   const valueColor =
     highlight === "good"
-      ? "text-emerald-400"
+      ? "text-success"
       : highlight === "bad"
-      ? "text-red-400"
+      ? "text-destructive"
       : "text-foreground";
   return (
     <div className="rounded-xl border border-border bg-card px-5 py-4 flex flex-col gap-1">
@@ -35,13 +35,13 @@ function StatCard({
 function StatusBadge({ status }: { status: "Active" | "Finished" }) {
   if (status === "Finished") {
     return (
-      <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
+      <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
         Finished
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
+    <span className="inline-flex items-center rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
       Active
     </span>
   );
@@ -125,7 +125,7 @@ export async function InstallmentsDashboard({
         {summary.dueThisMonth.length === 0 ? (
           <p className="text-sm text-muted-foreground">No installments due this month.</p>
         ) : (
-          <div className="rounded-xl border border-border overflow-hidden">
+          <div className="rounded-xl border border-border overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
@@ -193,7 +193,7 @@ export async function InstallmentsDashboard({
         {allInstallments.length === 0 ? (
           <p className="text-sm text-muted-foreground">No installments yet. Add one above.</p>
         ) : (
-          <div className="rounded-xl border border-border overflow-hidden">
+          <div className="rounded-xl border border-border overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
@@ -203,10 +203,10 @@ export async function InstallmentsDashboard({
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Total
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground hidden sm:table-cell">
                     Monthly
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground hidden sm:table-cell">
                     Progress
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -230,10 +230,10 @@ export async function InstallmentsDashboard({
                     <td className="px-4 py-3 text-right font-mono text-sm">
                       {formatCOP(inst.totalAmount)}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-sm text-muted-foreground">
+                    <td className="px-4 py-3 text-right font-mono text-sm text-muted-foreground hidden sm:table-cell">
                       {formatCOP(inst.monthlyAmount)}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 hidden sm:table-cell">
                       <div className="flex justify-center">
                         <ProgressBar
                           paid={inst.installmentsPaid}

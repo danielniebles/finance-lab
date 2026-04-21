@@ -62,9 +62,9 @@ export function IncomeExpensesChart({ data }: { data: MonthPoint[] }) {
             value === "income" ? "Income" : value === "expenses" ? "Expenses" : "Budget"
           }
         />
-        <Bar dataKey="income" fill="#34d399" radius={[3, 3, 0, 0]} />
-        <Bar dataKey="expenses" fill="#f87171" radius={[3, 3, 0, 0]} />
-        <Bar dataKey="budget" fill="#60a5fa" radius={[3, 3, 0, 0]} opacity={0.6} />
+        <Bar dataKey="income" fill="var(--success)" radius={[3, 3, 0, 0]} />
+        <Bar dataKey="expenses" fill="var(--destructive)" radius={[3, 3, 0, 0]} />
+        <Bar dataKey="budget" fill="var(--chart-2)" radius={[3, 3, 0, 0]} opacity={0.6} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -102,17 +102,17 @@ export function SavingsRateChart({ data }: { data: MonthPoint[] }) {
         />
         <ReferenceLine
           y={20}
-          stroke="#34d399"
+          stroke="var(--success)"
           strokeDasharray="4 4"
           strokeOpacity={0.6}
-          label={{ value: "Target 20%", position: "insideTopRight", fontSize: 10, fill: "#6b7280" }}
+          label={{ value: "Target 20%", position: "insideTopRight", fontSize: 10, fill: "var(--muted-foreground)" }}
         />
         <Line
           type="monotone"
           dataKey="savingsRate"
-          stroke="#a78bfa"
+          stroke="var(--chart-5)"
           strokeWidth={2}
-          dot={{ r: 3, fill: "#a78bfa" }}
+          dot={{ r: 3, fill: "var(--chart-5)" }}
           connectNulls
         />
       </LineChart>

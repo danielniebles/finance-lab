@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { IncomeExpensesChart, SavingsRateChart } from "./trends-charts";
+import { HealthScoreCard } from "./health-score-card";
 
 export async function TrendsDashboard() {
   const data = await getTrends(6);
@@ -17,6 +18,7 @@ export async function TrendsDashboard() {
 
   return (
     <div className="space-y-6">
+      <HealthScoreCard />
       {/* ── Charts row ──────────────────────────────────────────────────── */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="border-border/60">
@@ -74,7 +76,7 @@ export async function TrendsDashboard() {
                         className={cn(
                           "px-3 py-2.5 text-right font-mono text-sm tabular-nums",
                           amount === null && "text-muted-foreground/40",
-                          amount !== null && amount === max && max > 0 && "text-red-600 dark:text-red-400"
+                          amount !== null && amount === max && max > 0 && "text-destructive"
                         )}
                       >
                         {amount !== null ? formatCOP(amount) : "—"}

@@ -35,11 +35,11 @@ export function MappingList({
   return (
     <div className="space-y-4">
       {unmapped.length > 0 && (
-        <div className="rounded-md border border-amber-600/30 bg-amber-500/10 p-1">
-          <p className="px-3 py-2 text-xs font-medium text-amber-600 dark:text-amber-400">
+        <div className="rounded-md border border-warning/30 bg-warning/10 p-1">
+          <p className="px-3 py-2 text-xs font-medium text-warning">
             {unmapped.length} unmapped — these are excluded from analysis
           </p>
-          <div className="divide-y divide-amber-600/20">
+          <div className="divide-y divide-warning/20">
             {unmapped.map((cat) => (
               <MappingRow
                 key={cat.id}

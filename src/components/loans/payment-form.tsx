@@ -164,7 +164,7 @@ export function PaymentForm({
                     {new Date(loan.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                     <span className="text-muted-foreground/50 ml-1">· {loan.accountName}</span>
                   </span>
-                  <span className="font-mono text-emerald-400">+{formatCOP(apply)}</span>
+                  <span className="font-mono text-success">+{formatCOP(apply)}</span>
                 </div>
               ))}
             </div>

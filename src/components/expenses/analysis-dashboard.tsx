@@ -25,9 +25,9 @@ export async function AnalysisDashboard({ month, year }: Props) {
     <div className="space-y-5">
       {/* Unmapped warning */}
       {data.uncategorizedCount > 0 && (
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
+        <div className="rounded-lg border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning">
           {data.uncategorizedCount} transaction(s) have unmapped categories and are excluded.{" "}
-          <a href="/settings/mappings" className="underline underline-offset-2 hover:text-amber-300">
+          <a href="/settings/mappings" className="underline underline-offset-2 hover:text-warning/70">
             Configure mappings →
           </a>
         </div>
@@ -154,7 +154,7 @@ export async function AnalysisDashboard({ month, year }: Props) {
         {/* Savings — real first, then ideal, then gap */}
         <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-emerald-600 dark:text-emerald-400">
+            <span className="inline-flex items-center rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold tracking-wide text-success">
               SAVINGS
             </span>
           </div>
@@ -213,7 +213,7 @@ function StatCard({
   hint?: string;
 }) {
   const valueColor =
-    tone === "good" ? "text-emerald-600 dark:text-emerald-400" :
+    tone === "good" ? "text-success" :
     tone === "bad" ? "text-destructive" :
     "text-foreground";
 
@@ -270,7 +270,7 @@ function VarianceRows({ variance: v }: { variance: Variance }) {
           {v.surplusCategories.map((c) => (
             <div key={c.name} className="flex items-center justify-between gap-2">
               <span className="text-xs text-muted-foreground truncate">{c.name}</span>
-              <span className="font-mono text-xs tabular-nums text-emerald-600/70 dark:text-emerald-400/70 shrink-0">
+              <span className="font-mono text-xs tabular-nums text-success/70 shrink-0">
                 +{formatCOP(c.control)}
               </span>
             </div>
@@ -323,7 +323,7 @@ function PillRow({
       <span
         className={cn(
           "font-mono text-xs font-medium tabular-nums",
-          highlight === "good" && "text-emerald-600 dark:text-emerald-400",
+          highlight === "good" && "text-success",
           highlight === "bad" && "text-destructive",
           !highlight && "text-foreground"
         )}
@@ -338,8 +338,8 @@ function ProgressBar({ percent, className }: { percent: number; className?: stri
   const clamped = Math.min(percent, 100);
   const barColor =
     percent >= 100 ? "bg-destructive" :
-    percent >= 80  ? "bg-amber-500" :
-    "bg-emerald-500";
+    percent >= 80  ? "bg-warning" :
+    "bg-success";
 
   return (
     <div className={cn("h-1.5 w-full rounded-full bg-muted/50", className)}>
@@ -353,10 +353,10 @@ function ProgressBar({ percent, className }: { percent: number; className?: stri
 
 function SeverityBadge({ severity }: { severity: CategorySeverity }) {
   const styles: Record<CategorySeverity, string> = {
-    OK:        "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    Issue:     "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    Critical:  "border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-400",
-    Unplanned: "border-orange-500/25 bg-orange-500/10 text-orange-600 dark:text-orange-400",
+    OK:        "border-success/25 bg-success/10 text-success",
+    Issue:     "border-warning/25 bg-warning/10 text-warning",
+    Critical:  "border-destructive/25 bg-destructive/10 text-destructive",
+    Unplanned: "border-warning/25 bg-warning/10 text-warning",
   };
   return (
     <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", styles[severity])}>

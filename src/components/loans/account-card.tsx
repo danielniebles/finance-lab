@@ -78,7 +78,7 @@ export function AccountCard({ account }: { account: AccountWithBalance }) {
           </div>
 
           {/* Balance */}
-          <p className={cn("font-mono text-lg font-semibold", isNegative ? "text-red-400" : "text-foreground")}>
+          <p className={cn("font-mono text-lg font-semibold", isNegative ? "text-destructive" : "text-foreground")}>
             {formatCOP(account.balance)}
           </p>
           {account.loansOut > 0 && (
@@ -144,14 +144,14 @@ export function AccountCard({ account }: { account: AccountWithBalance }) {
           {account.entries.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">No entries yet.</p>
           ) : (
-            <div className="max-h-[60vh] overflow-y-auto -mx-6 divide-y divide-border/40">
+            <div className="max-h-[60vh] overflow-x-auto overflow-y-auto -mx-6 divide-y divide-border/40">
               {account.entries.map((entry) => (
                 <div key={entry.id} className="grid grid-cols-[5rem_6.5rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 group/row hover:bg-muted/20">
                   <span className="text-xs text-muted-foreground">
                     {new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
                   </span>
                   <EntryTypeBadge type={entry.type} />
-                  <span className={cn("font-mono text-xs font-medium", entry.amount < 0 ? "text-red-400" : "text-emerald-400")}>
+                  <span className={cn("font-mono text-xs font-medium", entry.amount < 0 ? "text-destructive" : "text-success")}>
                     {entry.amount >= 0 ? "+" : ""}{formatCOP(entry.amount)}
                   </span>
                   <span className="text-xs text-muted-foreground truncate">

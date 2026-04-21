@@ -61,17 +61,17 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year }: Props
         <CardHeader className="px-5 py-4 border-b border-border/60">
           <CardTitle className="text-sm font-semibold">Spend by Category</CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="border-border/60 hover:bg-transparent">
                 <TableHead className="pl-5 text-xs uppercase tracking-wide text-muted-foreground">Category</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">Type</TableHead>
+                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground hidden sm:table-cell">Type</TableHead>
                 <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Actual</TableHead>
                 <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Budget</TableHead>
                 <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Control</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground w-36">Progress</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">Status</TableHead>
+                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground w-36 hidden sm:table-cell">Progress</TableHead>
+                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground hidden sm:table-cell">Status</TableHead>
                 <TableHead className="pr-5 text-xs uppercase tracking-wide text-muted-foreground">Severity</TableHead>
               </TableRow>
             </TableHeader>
@@ -86,7 +86,7 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year }: Props
                   onClick={() => handleRowClick(row)}
                 >
                   <TableCell className="pl-5 font-medium">{row.name}</TableCell>
-                  <TableCell>
+                  <TableCell className="hidden sm:table-cell">
                     <TypePill type={row.budgetType} />
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm tabular-nums">
@@ -98,12 +98,12 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year }: Props
                   <TableCell
                     className={cn(
                       "text-right font-mono text-sm tabular-nums",
-                      row.control < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"
+                      row.control < 0 ? "text-destructive" : "text-success"
                     )}
                   >
                     {formatCOP(row.control)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden sm:table-cell">
                     {row.percentUsed !== null ? (
                       <div className="flex items-center gap-2">
                         <ProgressBar percent={row.percentUsed} className="flex-1" />
@@ -115,7 +115,7 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year }: Props
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{row.status}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground hidden sm:table-cell">{row.status}</TableCell>
                   <TableCell className="pr-5">
                     <SeverityBadge severity={row.severity} />
                   </TableCell>
@@ -216,8 +216,8 @@ function ProgressBar({ percent, className }: { percent: number; className?: stri
   const clamped = Math.min(percent, 100);
   const barColor =
     percent >= 100 ? "bg-destructive" :
-    percent >= 80  ? "bg-amber-500" :
-    "bg-emerald-500";
+    percent >= 80  ? "bg-warning" :
+    "bg-success";
   return (
     <div className={cn("h-1.5 w-full rounded-full bg-muted/50", className)}>
       <div
@@ -230,10 +230,10 @@ function ProgressBar({ percent, className }: { percent: number; className?: stri
 
 function SeverityBadge({ severity }: { severity: CategorySeverity }) {
   const styles: Record<CategorySeverity, string> = {
-    OK:        "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    Issue:     "border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    Critical:  "border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-400",
-    Unplanned: "border-orange-500/25 bg-orange-500/10 text-orange-600 dark:text-orange-400",
+    OK:        "border-success/25 bg-success/10 text-success",
+    Issue:     "border-warning/25 bg-warning/10 text-warning",
+    Critical:  "border-destructive/25 bg-destructive/10 text-destructive",
+    Unplanned: "border-warning/25 bg-warning/10 text-warning",
   };
   return (
     <span
@@ -249,9 +249,9 @@ function SeverityBadge({ severity }: { severity: CategorySeverity }) {
 
 function rowBg(severity: CategorySeverity) {
   switch (severity) {
-    case "Critical":  return "bg-red-500/5 hover:bg-red-500/8";
-    case "Issue":     return "bg-amber-500/5 hover:bg-amber-500/8";
-    case "Unplanned": return "bg-orange-500/5 hover:bg-orange-500/8";
+    case "Critical":  return "bg-destructive/5 hover:bg-destructive/8";
+    case "Issue":     return "bg-warning/5 hover:bg-warning/8";
+    case "Unplanned": return "bg-warning/5 hover:bg-warning/8";
     default:          return "hover:bg-muted/30";
   }
 }

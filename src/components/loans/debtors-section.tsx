@@ -13,7 +13,7 @@ import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/l
 
 // ─── Loan row ─────────────────────────────────────────────────────────────────
 
-const COL = "grid-cols-[1.5fr_1fr_1.2fr_2fr_1.4fr_0.5fr_0.9fr_2fr_3.5rem]";
+const COL = "grid-cols-[1.5fr_1fr_1.2fr_2fr_1.4fr_0.9fr_3.5rem] md:grid-cols-[1.5fr_1fr_1.2fr_2fr_1.4fr_0.5fr_0.9fr_2fr_3.5rem]";
 
 function LoanRow({
   loan,
@@ -42,7 +42,7 @@ function LoanRow({
       <span className="font-mono text-xs text-muted-foreground">{formatCOP(loan.amount)}</span>
       <div className="flex items-center gap-2 min-w-0">
         <div className="h-1.5 flex-1 rounded-full bg-muted/50 overflow-hidden">
-          <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+          <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pct}%` }} />
         </div>
         <span className="font-mono text-xs text-muted-foreground w-8 shrink-0 text-right">
           {pct.toFixed(0)}%
@@ -51,17 +51,17 @@ function LoanRow({
       <span className={cn("font-mono text-sm font-medium text-right", loan.isActive ? "text-foreground" : "text-muted-foreground")}>
         {loan.remaining > 0 ? formatCOP(loan.remaining) : "—"}
       </span>
-      <span className="text-xs text-muted-foreground text-right">{ageLabel}</span>
+      <span className="text-xs text-muted-foreground text-right hidden md:block">{ageLabel}</span>
       <div className="flex justify-end">
         {loan.isActive ? (
-          <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium", isOverdue ? "bg-red-500/10 text-red-400" : "bg-amber-500/10 text-amber-400")}>
+          <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium", isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning")}>
             {isOverdue ? "Overdue" : "Active"}
           </span>
         ) : (
-          <span className="rounded-full bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 text-xs font-medium">Settled</span>
+          <span className="rounded-full bg-success/10 text-success px-1.5 py-0.5 text-xs font-medium">Settled</span>
         )}
       </div>
-      <span className="text-xs text-muted-foreground truncate min-w-0">{loan.notes ?? "—"}</span>
+      <span className="text-xs text-muted-foreground truncate min-w-0 hidden md:block">{loan.notes ?? "—"}</span>
       <div className="flex justify-end opacity-0 group-hover/loanrow:opacity-100 transition-opacity">
         <LoanRowActions loan={loan} accounts={accounts} debtors={debtors} />
       </div>
@@ -185,16 +185,16 @@ export function DebtorsSection({
 
                   {/* Loan rows */}
                   {debtor.loans.length > 0 && (
-                    <div className="border-t border-border divide-y divide-border/50">
-                      <div className={cn("grid items-center gap-x-4 px-4 py-1.5 bg-muted/20", COL)}>
+                    <div className="border-t border-border divide-y divide-border/50 overflow-x-auto">
+                      <div className={cn("grid items-center gap-x-4 px-4 py-1.5 bg-muted/20 min-w-0", COL)}>
                         <span className="text-xs text-muted-foreground">Account</span>
                         <span className="text-xs text-muted-foreground">Date</span>
                         <span className="text-xs text-muted-foreground">Original</span>
                         <span className="text-xs text-muted-foreground">Repaid</span>
                         <span className="text-xs text-muted-foreground text-right">Remaining</span>
-                        <span className="text-xs text-muted-foreground text-right">Age</span>
+                        <span className="text-xs text-muted-foreground text-right hidden md:block">Age</span>
                         <span className="text-xs text-muted-foreground text-right">Status</span>
-                        <span className="text-xs text-muted-foreground">Notes</span>
+                        <span className="text-xs text-muted-foreground hidden md:block">Notes</span>
                         <span />
                       </div>
                       {debtor.loans.map((loan) => (
@@ -233,7 +233,7 @@ export function DebtorsSection({
               {allPayments.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">No payments recorded yet.</p>
               ) : (
-                <div className="max-h-[60vh] overflow-y-auto -mx-6 divide-y divide-border/40">
+                <div className="max-h-[60vh] overflow-x-auto overflow-y-auto -mx-6 divide-y divide-border/40">
                   {allPayments.map((p) => (
                     <div key={p.id} className="grid grid-cols-[5rem_6rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 group/row hover:bg-muted/20">
                       <span className="text-xs text-muted-foreground">
@@ -243,7 +243,7 @@ export function DebtorsSection({
                         <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: p.accountColor ?? "#888" }} />
                         <span className="text-xs text-muted-foreground truncate">{p.accountName}</span>
                       </div>
-                      <span className="font-mono text-xs font-medium text-emerald-400">
+                      <span className="font-mono text-xs font-medium text-success">
                         +{formatCOP(p.amount)}
                       </span>
                       <span className="text-xs text-muted-foreground truncate">{p.notes ?? ""}</span>

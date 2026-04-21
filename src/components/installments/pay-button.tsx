@@ -34,7 +34,7 @@ export function PayButton({
       <button
         onClick={handleClick}
         disabled={pending}
-        className="flex items-center gap-1.5 text-sm text-emerald-400 hover:text-muted-foreground transition-colors disabled:opacity-50"
+        className="flex items-center gap-1.5 text-sm text-success hover:text-muted-foreground transition-colors disabled:opacity-50"
       >
         <CheckCircle2 className="size-4" />
         <span className="font-mono text-xs">

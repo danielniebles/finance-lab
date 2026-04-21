@@ -17,13 +17,13 @@ function KpiCard({
   highlight?: "good" | "bad" | "neutral";
   warn?: boolean;
 }) {
-  const color = highlight === "good" ? "text-emerald-400" : highlight === "bad" ? "text-red-400" : "text-foreground";
+  const color = highlight === "good" ? "text-success" : highlight === "bad" ? "text-destructive" : "text-foreground";
   return (
     <div className="rounded-xl border border-border bg-card px-5 py-4 space-y-1">
       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
       <div className="flex items-end gap-2">
         <p className={cn("font-mono text-xl font-semibold", color)}>{value}</p>
-        {warn && <AlertTriangle className="size-4 text-amber-400 mb-0.5 shrink-0" />}
+        {warn && <AlertTriangle className="size-4 text-warning mb-0.5 shrink-0" />}
       </div>
       {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
     </div>
