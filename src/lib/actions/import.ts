@@ -5,12 +5,7 @@ import type { PrismaClient } from "@prisma/client";
 import { parseMoneyLoverBuffer } from "@/lib/parse-moneylover";
 import { revalidatePath } from "next/cache";
 
-export async function importMoneyLoverFile(formData: FormData) {
-  const file = formData.get("file") as File | null;
-  if (!file) return { error: "No file provided." };
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-
+export async function importBuffer(buffer: Buffer, filename: string) {
   const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
 
   let parsed;
@@ -44,13 +39,7 @@ export async function importMoneyLoverFile(formData: FormData) {
 
     // Create the import batch
     const batch = await tx.importBatch.create({
-      data: {
-        filename: file.name,
-        periodStart,
-        periodEnd,
-        month,
-        year,
-      },
+      data: { filename, periodStart, periodEnd, month, year },
     });
 
     // Insert transactions
@@ -69,4 +58,10 @@ export async function importMoneyLoverFile(formData: FormData) {
 
   revalidatePath("/expenses");
   return { success: true, month, year, count: transactions.length };
+}
+
+export async function importMoneyLoverFile(formData: FormData) {
+  const file = formData.get("file") as File | null;
+  if (!file) return { error: "No file provided." };
+  return importBuffer(Buffer.from(await file.arrayBuffer()), file.name);
 }
