@@ -37,6 +37,7 @@ export function FloatingChat() {
               size="icon"
               className="size-6"
               render={<Link href="/chat" onClick={() => setOpen(false)} />}
+              nativeButton={false}
             >
               <Maximize2 className="size-3.5" />
             </Button>
