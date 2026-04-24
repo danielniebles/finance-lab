@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Pencil, Trash2, Plus, Check, X, ChevronDown } from "lucide-react";
 import { formatCOP } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type BudgetItemData = {
   id: string;
@@ -246,8 +247,8 @@ function AddBudgetItemRow({
   );
 }
 
-// Grid columns: chevron | name | type | amount | actions
-const ROW_GRID = "grid grid-cols-[1.25rem_1fr_5.5rem_8rem_3.75rem] items-center gap-3 px-4 py-3";
+// Grid columns: chevron | name+count | type | mappings | amount | actions
+const ROW_GRID = "grid grid-cols-[1.25rem_1fr_5.5rem_7rem_8rem_3.75rem] items-center gap-3 px-4 py-3";
 
 function CategoryRow({ cat }: { cat: Category }) {
   const [expanded, setExpanded] = useState(false);
@@ -306,9 +307,24 @@ function CategoryRow({ cat }: { cat: Category }) {
             <ChevronDown className={`size-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
           </button>
 
-          <span className="font-medium truncate">{cat.name}</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-medium truncate">{cat.name}</span>
+            <span className="text-xs text-muted-foreground shrink-0">
+              {cat.budgetItems.length} item{cat.budgetItems.length !== 1 ? "s" : ""}
+            </span>
+          </div>
 
           <TypeBadge type={effectiveType} />
+
+          {cat._count.mappings === 0 ? (
+            <span className="inline-flex items-center rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+              No mappings
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground w-fit">
+              {cat._count.mappings} mapping{cat._count.mappings !== 1 ? "s" : ""}
+            </span>
+          )}
 
           <span className="font-mono text-sm text-right">
             {formatCOP(total)}
@@ -398,33 +414,100 @@ function AddCategoryRow({ onDone }: { onDone: () => void }) {
   );
 }
 
+type FilterType = "ALL" | "FIXED" | "VARIABLE" | "MIXED";
+type SortBy = "name" | "amount" | "type";
+
+const FILTER_LABELS: Record<FilterType, string> = {
+  ALL: "All", FIXED: "Fixed", VARIABLE: "Variable", MIXED: "Mixed",
+};
+
 export function CategoryList({ categories }: { categories: Category[] }) {
   const [adding, setAdding] = useState(false);
+  const [filterType, setFilterType] = useState<FilterType>("ALL");
+  const [sortBy, setSortBy] = useState<SortBy>("name");
 
+  // Totals always reflect full list regardless of filter
   const fixedTotal = categories.reduce((sum, cat) =>
     sum + cat.budgetItems.filter((i) => i.budgetType === "FIXED").reduce((s, i) => s + i.amount, 0), 0);
   const variableTotal = categories.reduce((sum, cat) =>
     sum + cat.budgetItems.filter((i) => i.budgetType === "VARIABLE").reduce((s, i) => s + i.amount, 0), 0);
 
+  const filtered = filterType === "ALL"
+    ? categories
+    : categories.filter((c) => getEffectiveType(c.budgetItems) === filterType);
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === "amount") {
+      const aTotal = a.budgetItems.reduce((s, i) => s + i.amount, 0);
+      const bTotal = b.budgetItems.reduce((s, i) => s + i.amount, 0);
+      return bTotal - aTotal;
+    }
+    if (sortBy === "type") {
+      const order: Record<EffectiveType, number> = { FIXED: 0, MIXED: 1, VARIABLE: 2 };
+      return order[getEffectiveType(a.budgetItems)] - order[getEffectiveType(b.budgetItems)];
+    }
+    return a.name.localeCompare(b.name);
+  });
+
   return (
     <div className="space-y-3">
+      {/* Filter + sort bar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {(Object.keys(FILTER_LABELS) as FilterType[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setFilterType(t)}
+            className={cn(
+              "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+              filterType === t
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            {FILTER_LABELS[t]}
+          </button>
+        ))}
+        <div className="flex items-center gap-1 ml-auto">
+          <span className="text-xs text-muted-foreground">Sort:</span>
+          {(["name", "amount", "type"] as SortBy[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => setSortBy(s)}
+              className={cn(
+                "rounded px-2 py-0.5 text-xs transition-colors",
+                sortBy === s ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {s[0].toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="rounded-xl border border-border divide-y-0 overflow-hidden">
         {/* Column headers */}
         <div className={`${ROW_GRID} border-b border-border/60 bg-muted/20 py-2 text-xs text-muted-foreground uppercase tracking-wide`}>
           <span />
           <span>Category</span>
           <span>Type</span>
+          <span>Mappings</span>
           <span className="text-right">Budget / mo</span>
           <span />
         </div>
 
-        {categories.map((cat) => (
+        {sorted.map((cat) => (
           <CategoryRow key={cat.id} cat={cat} />
         ))}
 
         {categories.length === 0 && (
           <div className="px-4 py-6 text-center text-sm text-muted-foreground">
             No categories yet. Add one below.
+          </div>
+        )}
+
+        {categories.length > 0 && sorted.length === 0 && (
+          <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+            No {FILTER_LABELS[filterType].toLowerCase()} categories.
           </div>
         )}
 
