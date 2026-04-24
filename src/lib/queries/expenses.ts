@@ -9,40 +9,46 @@ export async function getImportBatches() {
 
 export type CategoryBudgetType = "FIXED" | "VARIABLE" | "MIXED";
 
-export type CategoryStatus =
-  | "Fixed OK"
-  | "Fixed changed"
-  | "Under budget"
-  | "Over budget"
-  | "Unplanned";
-
 export type CategorySeverity = "OK" | "Issue" | "Critical" | "Unplanned";
 
-function getStatus(
+type CategoryClassification = {
+  severity: CategorySeverity;
+  note: string | null;
+};
+
+// ─── Single source of truth for category health classification ────────────────
+//
+// FIXED categories: severity is note-driven (amount deviation or unpaid flag)
+//   spent = 0          → Issue  + "Unpaid"              (flag for review)
+//   spent = budget     → OK     + no note               (as expected)
+//   spent < budget     → OK     + "Lower than expected" (informational)
+//   spent > budget     → Issue  + "Higher than expected"(informational)
+//
+// VARIABLE / MIXED: severity is proportional to percentUsed
+//   budget = 0, spent > 0 → Unplanned
+//   ≤ 100%                → OK
+//   101 – 120%            → Issue    (mildly over)
+//   > 120%                → Critical (significantly over)
+// ─────────────────────────────────────────────────────────────────────────────
+function classifyCategory(
   budgetType: CategoryBudgetType,
   spent: number,
-  budget: number
-): CategoryStatus {
+  budget: number,
+  percentUsed: number | null,
+): CategoryClassification {
   if (budgetType === "FIXED") {
-    return spent === budget ? "Fixed OK" : "Fixed changed";
+    if (spent === 0)      return { severity: "Issue", note: "Unpaid" };
+    if (spent === budget) return { severity: "OK",    note: null };
+    if (spent < budget)   return { severity: "OK",    note: "Lower than expected" };
+    /* spent > budget */  return { severity: "Issue", note: "Higher than expected" };
   }
   // VARIABLE or MIXED
-  if (budget === 0) return spent > 0 ? "Unplanned" : "Under budget";
-  return spent > budget ? "Over budget" : "Under budget";
-}
-
-function getSeverity(status: CategoryStatus): CategorySeverity {
-  switch (status) {
-    case "Fixed OK":
-    case "Under budget":
-      return "OK";
-    case "Fixed changed":
-      return "Issue";
-    case "Over budget":
-      return "Critical";
-    case "Unplanned":
-      return "Unplanned";
-  }
+  if (budget === 0) return spent > 0
+    ? { severity: "Unplanned", note: null }
+    : { severity: "OK",        note: null };
+  if (!percentUsed || percentUsed <= 100) return { severity: "OK",       note: null };
+  if (percentUsed <= 120)                 return { severity: "Issue",    note: null };
+  /* percentUsed > 120 */                 return { severity: "Critical", note: null };
 }
 
 export async function getMonthlyAnalysis(month: number, year: number) {
@@ -103,8 +109,7 @@ export async function getMonthlyAnalysis(month: number, year: number) {
 
     const control = budget - spent;
     const percentUsed = budget > 0 ? (spent / budget) * 100 : null;
-    const status = getStatus(budgetType, spent, budget);
-    const severity = getSeverity(status);
+    const { severity, note } = classifyCategory(budgetType, spent, budget, percentUsed);
 
     return {
       id: cat.id,
@@ -116,7 +121,7 @@ export async function getMonthlyAnalysis(month: number, year: number) {
       budget,
       control,
       percentUsed,
-      status,
+      note,
       severity,
     };
   });

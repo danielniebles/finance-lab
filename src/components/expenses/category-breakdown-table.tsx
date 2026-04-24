@@ -29,7 +29,7 @@ type CategoryRow = {
   budget: number;
   control: number;
   percentUsed: number | null;
-  status: string;
+  note: string | null;
   severity: CategorySeverity;
 };
 
@@ -71,7 +71,6 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year }: Props
                 <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Budget</TableHead>
                 <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Control</TableHead>
                 <TableHead className="text-xs uppercase tracking-wide text-muted-foreground w-36 hidden sm:table-cell">Progress</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground hidden sm:table-cell">Status</TableHead>
                 <TableHead className="pr-5 text-xs uppercase tracking-wide text-muted-foreground">Severity</TableHead>
               </TableRow>
             </TableHeader>
@@ -115,9 +114,13 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year }: Props
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground hidden sm:table-cell">{row.status}</TableCell>
                   <TableCell className="pr-5">
-                    <SeverityBadge severity={row.severity} />
+                    <div className="flex items-center gap-2">
+                      <SeverityBadge severity={row.severity} />
+                      {row.note && (
+                        <span className="text-xs text-muted-foreground">{row.note}</span>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -228,7 +231,7 @@ function ProgressBar({ percent, className }: { percent: number; className?: stri
   );
 }
 
-function SeverityBadge({ severity }: { severity: CategorySeverity }) {
+export function SeverityBadge({ severity }: { severity: CategorySeverity }) {
   const styles: Record<CategorySeverity, string> = {
     OK:        "border-success/25 bg-success/10 text-success",
     Issue:     "border-warning/25 bg-warning/10 text-warning",

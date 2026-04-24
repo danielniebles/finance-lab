@@ -1,8 +1,8 @@
-import { getMonthlyAnalysis, type CategorySeverity } from "@/lib/queries/expenses";
+import { getMonthlyAnalysis } from "@/lib/queries/expenses";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Minus, AlertTriangle } from "lucide-react";
-import { CategoryBreakdownTable } from "@/components/expenses/category-breakdown-table";
+import { CategoryBreakdownTable, SeverityBadge } from "@/components/expenses/category-breakdown-table";
 
 type Props = { month: number; year: number };
 
@@ -369,19 +369,5 @@ function ProgressBar({ percent, className }: { percent: number; className?: stri
         style={{ width: `${clamped}%` }}
       />
     </div>
-  );
-}
-
-function SeverityBadge({ severity }: { severity: CategorySeverity }) {
-  const styles: Record<CategorySeverity, string> = {
-    OK:        "border-success/25 bg-success/10 text-success",
-    Issue:     "border-warning/25 bg-warning/10 text-warning",
-    Critical:  "border-destructive/25 bg-destructive/10 text-destructive",
-    Unplanned: "border-warning/25 bg-warning/10 text-warning",
-  };
-  return (
-    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", styles[severity])}>
-      {severity}
-    </span>
   );
 }
