@@ -105,6 +105,7 @@ export async function AnalysisDashboard({ month, year }: Props) {
             <div className="mt-1 border-t border-border/40 pt-2">
               <PillRow
                 label="Control (Budget − Actual)"
+                prominent
                 value={fixedControl}
                 highlight={fixedControl >= 0 ? "good" : "bad"}
               />
@@ -134,6 +135,7 @@ export async function AnalysisDashboard({ month, year }: Props) {
             <div className="mt-1 border-t border-border/40 pt-2">
               <PillRow
                 label="Control (Budget − Actual)"
+                prominent
                 value={variableControl}
                 highlight={variableControl >= 0 ? "good" : "bad"}
               />
@@ -151,35 +153,47 @@ export async function AnalysisDashboard({ month, year }: Props) {
           </div>
         </div>
 
-        {/* Savings — real first, then ideal, then gap */}
+        {/* Savings */}
         <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-2">
             <span className="inline-flex items-center rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold tracking-wide text-success">
               SAVINGS
             </span>
+            {data.savingsRate !== null && (
+              <span className={cn(
+                "font-mono text-lg font-semibold",
+                data.savingsRate >= 20 ? "text-success" : data.savingsRate >= 10 ? "text-foreground" : "text-destructive"
+              )}>
+                {data.savingsRate.toFixed(1)}%
+                <span className="ml-1 text-xs font-normal text-muted-foreground"> saved</span>
+              </span>
+            )}
           </div>
           <div className="space-y-2">
             <PillRow
-              label="Real (Salary − Actual)"
+              label="Actual (Salary − Spend)"
               value={data.realSavings}
               highlight={data.realSavings >= 0 ? "good" : "bad"}
+              prominent
             />
             <PillRow
-              label="Ideal (Salary − Budget)"
+              label="Target (Salary − Budget)"
               value={data.idealSavings}
               highlight={data.idealSavings >= 0 ? "good" : "bad"}
             />
             <div className="mt-1 border-t border-border/40 pt-2">
               <PillRow
-                label="Gap (Real − Ideal)"
-                value={data.savingsGap}
+                label="Gap (Actual − Target)"
+                rawValue={`${data.savingsGap >= 0 ? "+" : ""}${formatCOP(data.savingsGap)}`}
                 highlight={data.savingsGap >= 0 ? "good" : "bad"}
               />
-              <PillRow
-                label="Unplanned Spend"
-                value={data.unplannedSpendTotal}
-                highlight={data.unplannedSpendTotal > 0 ? "bad" : "good"}
-              />
+              {data.unplannedSpendTotal > 0 && (
+                <PillRow
+                  label="Unplanned spend"
+                  value={data.unplannedSpendTotal}
+                  highlight="bad"
+                />
+              )}
             </div>
           </div>
         </div>
@@ -260,43 +274,47 @@ function VarianceRows({ variance: v }: { variance: Variance }) {
   const covered = v.offsetCoverage !== null && v.offsetCoverage >= 100;
   return (
     <div className="space-y-1.5">
-      <PillRow
-        label={`Surplus (${v.surplusCount} cat${v.surplusCount !== 1 ? "s" : ""})`}
-        rawValue={`+${formatCOP(v.surplusTotal)}`}
-        highlight="good"
-      />
-      {v.surplusCategories.length > 0 && (
-        <div className="pl-2 space-y-0.5">
-          {v.surplusCategories.map((c) => (
-            <div key={c.name} className="flex items-center justify-between gap-2">
-              <span className="text-xs text-muted-foreground truncate">{c.name}</span>
-              <span className="font-mono text-xs tabular-nums text-success/70 shrink-0">
-                +{formatCOP(c.control)}
-              </span>
-            </div>
-          ))}
-        </div>
+      {v.surplusCount > 0 && (
+        <>
+          <PillRow
+            label={`Under budget (${v.surplusCount} cat${v.surplusCount !== 1 ? "s" : ""})`}
+            rawValue={`+${formatCOP(v.surplusTotal)}`}
+            highlight="good"
+          />
+          <div className="pl-2 space-y-0.5">
+            {v.surplusCategories.map((c) => (
+              <div key={c.name} className="flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground truncate">{c.name}</span>
+                <span className="font-mono text-xs tabular-nums text-success/70 shrink-0">
+                  +{formatCOP(c.control)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
-      <PillRow
-        label={`Deficit (${v.deficitCount} cat${v.deficitCount !== 1 ? "s" : ""})`}
-        rawValue={v.deficitTotal > 0 ? `-${formatCOP(v.deficitTotal)}` : formatCOP(0)}
-        highlight={v.deficitTotal > 0 ? "bad" : "good"}
-      />
-      {v.deficitCategories.length > 0 && (
-        <div className="pl-2 space-y-0.5">
-          {v.deficitCategories.map((c) => (
-            <div key={c.name} className="flex items-center justify-between gap-2">
-              <span className="text-xs text-muted-foreground truncate">{c.name}</span>
-              <span className="font-mono text-xs tabular-nums text-destructive/70 shrink-0">
-                -{formatCOP(Math.abs(c.control))}
-              </span>
-            </div>
-          ))}
-        </div>
+      {v.deficitCount > 0 && (
+        <>
+          <PillRow
+            label={`Over budget (${v.deficitCount} cat${v.deficitCount !== 1 ? "s" : ""})`}
+            rawValue={v.deficitTotal > 0 ? `-${formatCOP(v.deficitTotal)}` : formatCOP(0)}
+            highlight={v.deficitTotal > 0 ? "bad" : "good"}
+          />
+          <div className="pl-2 space-y-0.5">
+            {v.deficitCategories.map((c) => (
+              <div key={c.name} className="flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground truncate">{c.name}</span>
+                <span className="font-mono text-xs tabular-nums text-destructive/70 shrink-0">
+                  -{formatCOP(Math.abs(c.control))}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
       {v.offsetCoverage !== null && v.deficitTotal > 0 && (
         <PillRow
-          label="Offset coverage"
+          label="Overspend covered by savings"
           rawValue={`${v.offsetCoverage.toFixed(0)}%`}
           highlight={covered ? "good" : "bad"}
         />
@@ -310,11 +328,13 @@ function PillRow({
   value,
   rawValue,
   highlight,
+  prominent,
 }: {
   label: string;
   value?: number;
   rawValue?: string;
   highlight?: "good" | "bad";
+  prominent?: boolean;
 }) {
   const displayValue = rawValue ?? (value !== undefined ? formatCOP(value) : "—");
   return (
@@ -322,7 +342,8 @@ function PillRow({
       <span className="text-xs text-muted-foreground">{label}</span>
       <span
         className={cn(
-          "font-mono text-xs font-medium tabular-nums",
+          "font-mono tabular-nums",
+          prominent ? "text-sm font-semibold" : "text-xs font-medium",
           highlight === "good" && "text-success",
           highlight === "bad" && "text-destructive",
           !highlight && "text-foreground"

@@ -153,10 +153,14 @@ export async function getMonthlyAnalysis(month: number, year: number) {
     return {
       surplusCount: surplus.length,
       surplusTotal,
-      surplusCategories: surplus.map((c) => ({ name: c.name, control: c.control })),
+      surplusCategories: surplus
+        .sort((a, b) => b.control - a.control)
+        .map((c) => ({ name: c.name, control: c.control })),
       deficitCount: deficit.length,
       deficitTotal,
-      deficitCategories: deficit.map((c) => ({ name: c.name, control: c.control })),
+      deficitCategories: deficit
+        .sort((a, b) => Math.abs(b.control) - Math.abs(a.control))
+        .map((c) => ({ name: c.name, control: c.control })),
       offsetCoverage,
     };
   }
