@@ -3,6 +3,7 @@ import { formatCOP } from "@/lib/format";
 import { MonthNav } from "./month-nav";
 import { PayButton } from "./pay-button";
 import { InstallmentActions } from "./installment-actions";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 function StatCard({
   label,
@@ -79,7 +80,7 @@ export async function InstallmentsDashboard({
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-heading text-2xl font-semibold">Installments</h1>
           <p className="text-sm text-muted-foreground">Credit card installment tracker</p>
@@ -125,58 +126,48 @@ export async function InstallmentsDashboard({
         {summary.dueThisMonth.length === 0 ? (
           <p className="text-sm text-muted-foreground">No installments due this month.</p>
         ) : (
-          <div className="rounded-xl border border-border overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Item
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Installment
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Amount
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+          <div className="rounded-xl border border-border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30 hover:bg-muted/30 border-border">
+                  <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground">Item</TableHead>
+                  <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground">Installment</TableHead>
+                  <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Amount</TableHead>
+                  <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {summary.dueThisMonth.map((due) => (
-                  <tr key={`${due.installment.id}-${due.installmentNum}`} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3 font-medium">{due.installment.description}</td>
-                    <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
+                  <TableRow key={`${due.installment.id}-${due.installmentNum}`} className="border-border">
+                    <TableCell className="px-4 font-medium">{due.installment.description}</TableCell>
+                    <TableCell className="px-4 text-muted-foreground font-mono text-xs">
                       {due.installmentNum} of {due.installment.numInstallments}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono">
-                      {formatCOP(due.amount)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
+                    </TableCell>
+                    <TableCell className="px-4 text-right font-mono">{formatCOP(due.amount)}</TableCell>
+                    <TableCell className="px-4 text-right">
                       <PayButton
                         installmentId={due.installment.id}
                         installmentNum={due.installmentNum}
                         paymentId={due.payment?.id ?? null}
                         paidAt={due.payment?.paidAt ?? null}
                       />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-border bg-muted/30">
-                  <td colSpan={2} className="px-4 py-3 text-xs font-medium text-muted-foreground">
+              </TableBody>
+              <TableFooter className="border-border">
+                <TableRow className="border-border">
+                  <TableCell colSpan={2} className="px-4 text-xs font-medium text-muted-foreground">
                     {summary.dueThisMonth.filter((d) => d.payment).length} of{" "}
                     {summary.dueThisMonth.length} paid
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono font-semibold">
+                  </TableCell>
+                  <TableCell className="px-4 text-right font-mono font-semibold">
                     {formatCOP(summary.totalObligation)}
-                  </td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableFooter>
+            </Table>
           </div>
         )}
       </section>
@@ -193,69 +184,52 @@ export async function InstallmentsDashboard({
         {allInstallments.length === 0 ? (
           <p className="text-sm text-muted-foreground">No installments yet. Add one above.</p>
         ) : (
-          <div className="rounded-xl border border-border overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Item
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Total
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground hidden sm:table-cell">
-                    Monthly
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground hidden sm:table-cell">
-                    Progress
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Remaining
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Status
-                  </th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+          <div className="rounded-xl border border-border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30 hover:bg-muted/30 border-border">
+                  <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground">Item</TableHead>
+                  <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Total</TableHead>
+                  <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Monthly</TableHead>
+                  <TableHead className="px-4 text-center text-xs uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Progress</TableHead>
+                  <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Remaining</TableHead>
+                  <TableHead className="px-4 text-center text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                  <TableHead className="px-4" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {allInstallments.map((inst) => (
-                  <tr key={inst.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3">
+                  <TableRow key={inst.id} className="border-border">
+                    <TableCell className="px-4">
                       <div className="font-medium">{inst.description}</div>
                       {inst.notes && (
                         <div className="text-xs text-muted-foreground">{inst.notes}</div>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-sm">
-                      {formatCOP(inst.totalAmount)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-sm text-muted-foreground hidden sm:table-cell">
+                    </TableCell>
+                    <TableCell className="px-4 text-right font-mono text-sm">{formatCOP(inst.totalAmount)}</TableCell>
+                    <TableCell className="px-4 text-right font-mono text-sm text-muted-foreground hidden sm:table-cell">
                       {formatCOP(inst.monthlyAmount)}
-                    </td>
-                    <td className="px-4 py-3 hidden sm:table-cell">
+                    </TableCell>
+                    <TableCell className="px-4 hidden sm:table-cell">
                       <div className="flex justify-center">
-                        <ProgressBar
-                          paid={inst.installmentsPaid}
-                          total={inst.numInstallments}
-                        />
+                        <ProgressBar paid={inst.installmentsPaid} total={inst.numInstallments} />
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-sm">
+                    </TableCell>
+                    <TableCell className="px-4 text-right font-mono text-sm">
                       {inst.remaining > 0 ? formatCOP(inst.remaining) : "—"}
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell className="px-4">
                       <div className="flex justify-center">
                         <StatusBadge status={inst.status} />
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell className="px-4">
                       <InstallmentActions mode="row-actions" installment={inst} />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </section>

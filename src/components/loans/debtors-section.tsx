@@ -6,14 +6,13 @@ import { cn } from "@/lib/utils";
 import { formatCOP } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LoansClient } from "./loans-client";
 import { LoanRowActions } from "./loan-row-actions";
 import { deleteLoanPayment } from "@/lib/actions/loans";
 import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/lib/queries/loans";
 
 // ─── Loan row ─────────────────────────────────────────────────────────────────
-
-const COL = "grid-cols-[1.5fr_1fr_1.2fr_2fr_1.4fr_0.9fr_3.5rem] md:grid-cols-[1.5fr_1fr_1.2fr_2fr_1.4fr_0.5fr_0.9fr_2fr_3.5rem]";
 
 function LoanRow({
   loan,
@@ -31,41 +30,55 @@ function LoanRow({
   const isOverdue = loan.isActive && loan.expectedBy && new Date(loan.expectedBy) < new Date();
 
   return (
-    <div className={cn("grid items-center gap-x-4 py-2.5 px-4 text-sm hover:bg-muted/20 transition-colors group/loanrow", COL)}>
-      <div className="flex items-center gap-1.5 min-w-0">
-        <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: loan.accountColor ?? "#888" }} />
-        <span className="text-muted-foreground text-xs truncate">{loan.accountName}</span>
-      </div>
-      <span className="text-muted-foreground text-xs">
-        {new Date(loan.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
-      </span>
-      <span className="font-mono text-xs text-muted-foreground">{formatCOP(loan.amount)}</span>
-      <div className="flex items-center gap-2 min-w-0">
-        <div className="h-1.5 flex-1 rounded-full bg-muted/50 overflow-hidden">
-          <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pct}%` }} />
+    <TableRow className="group/loanrow border-border/50">
+      <TableCell className="px-4">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: loan.accountColor ?? "#888" }} />
+          <span className="text-muted-foreground text-xs truncate">{loan.accountName}</span>
         </div>
-        <span className="font-mono text-xs text-muted-foreground w-8 shrink-0 text-right">
-          {pct.toFixed(0)}%
-        </span>
-      </div>
-      <span className={cn("font-mono text-sm font-medium text-right", loan.isActive ? "text-foreground" : "text-muted-foreground")}>
-        {loan.remaining > 0 ? formatCOP(loan.remaining) : "—"}
-      </span>
-      <span className="text-xs text-muted-foreground text-right hidden md:block">{ageLabel}</span>
-      <div className="flex justify-end">
-        {loan.isActive ? (
-          <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium", isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning")}>
-            {isOverdue ? "Overdue" : "Active"}
+      </TableCell>
+      <TableCell className="px-4 text-muted-foreground text-xs">
+        {new Date(loan.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+      </TableCell>
+      <TableCell className="px-4 font-mono text-xs text-muted-foreground">
+        {formatCOP(loan.amount)}
+      </TableCell>
+      <TableCell className="px-4">
+        <div className="flex items-center gap-2 min-w-[8rem]">
+          <div className="h-1.5 flex-1 rounded-full bg-muted/50 overflow-hidden">
+            <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pct}%` }} />
+          </div>
+          <span className="font-mono text-xs text-muted-foreground w-8 shrink-0 text-right">
+            {pct.toFixed(0)}%
           </span>
-        ) : (
-          <span className="rounded-full bg-success/10 text-success px-1.5 py-0.5 text-xs font-medium">Settled</span>
-        )}
-      </div>
-      <span className="text-xs text-muted-foreground truncate min-w-0 hidden md:block">{loan.notes ?? "—"}</span>
-      <div className="flex justify-end opacity-0 group-hover/loanrow:opacity-100 transition-opacity">
-        <LoanRowActions loan={loan} accounts={accounts} debtors={debtors} />
-      </div>
-    </div>
+        </div>
+      </TableCell>
+      <TableCell className={cn("px-4 font-mono text-sm font-medium text-right", loan.isActive ? "text-foreground" : "text-muted-foreground")}>
+        {loan.remaining > 0 ? formatCOP(loan.remaining) : "—"}
+      </TableCell>
+      <TableCell className="px-4 text-xs text-muted-foreground text-right hidden md:table-cell">
+        {ageLabel}
+      </TableCell>
+      <TableCell className="px-4">
+        <div className="flex justify-end">
+          {loan.isActive ? (
+            <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium whitespace-nowrap", isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning")}>
+              {isOverdue ? "Overdue" : "Active"}
+            </span>
+          ) : (
+            <span className="rounded-full bg-success/10 text-success px-1.5 py-0.5 text-xs font-medium whitespace-nowrap">Settled</span>
+          )}
+        </div>
+      </TableCell>
+      <TableCell className="px-4 text-xs text-muted-foreground truncate max-w-[10rem] hidden md:table-cell">
+        {loan.notes ?? "—"}
+      </TableCell>
+      <TableCell className="px-4 w-14">
+        <div className="flex justify-end opacity-0 group-hover/loanrow:opacity-100 transition-opacity">
+          <LoanRowActions loan={loan} accounts={accounts} debtors={debtors} />
+        </div>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -146,17 +159,17 @@ export function DebtorsSection({
               {filteredDebtors.map((debtor) => (
                 <div key={debtor.id} className="rounded-xl border border-border overflow-hidden">
                   {/* Debtor header */}
-                  <div className="flex items-center justify-between px-4 py-3 bg-card">
-                    <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-y-2 px-4 py-3 bg-card">
+                    <div className="flex items-center gap-3 min-w-0">
                       <span className="font-medium">{debtor.name}</span>
-                      <span className="font-mono text-sm text-muted-foreground">
+                      <span className="font-mono text-sm text-muted-foreground whitespace-nowrap">
                         {formatCOP(debtor.totalOwed)}
                       </span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
                         {debtor.activeLoansCount} active loan{debtor.activeLoansCount !== 1 ? "s" : ""}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -185,21 +198,27 @@ export function DebtorsSection({
 
                   {/* Loan rows */}
                   {debtor.loans.length > 0 && (
-                    <div className="border-t border-border divide-y divide-border/50 overflow-x-auto">
-                      <div className={cn("grid items-center gap-x-4 px-4 py-1.5 bg-muted/20 min-w-0", COL)}>
-                        <span className="text-xs text-muted-foreground">Account</span>
-                        <span className="text-xs text-muted-foreground">Date</span>
-                        <span className="text-xs text-muted-foreground">Original</span>
-                        <span className="text-xs text-muted-foreground">Repaid</span>
-                        <span className="text-xs text-muted-foreground text-right">Remaining</span>
-                        <span className="text-xs text-muted-foreground text-right hidden md:block">Age</span>
-                        <span className="text-xs text-muted-foreground text-right">Status</span>
-                        <span className="text-xs text-muted-foreground hidden md:block">Notes</span>
-                        <span />
-                      </div>
-                      {debtor.loans.map((loan) => (
-                        <LoanRow key={loan.id} loan={loan} accounts={accounts} debtors={debtors} />
-                      ))}
+                    <div className="border-t border-border">
+                      <Table className="table-fixed">
+                        <TableHeader>
+                          <TableRow className="bg-muted/20 hover:bg-muted/20 border-border/50">
+                            <TableHead className="px-4 h-8 w-[130px] text-xs text-muted-foreground">Account</TableHead>
+                            <TableHead className="px-4 h-8 w-[95px] text-xs text-muted-foreground">Date</TableHead>
+                            <TableHead className="px-4 h-8 w-[110px] text-xs text-muted-foreground">Original</TableHead>
+                            <TableHead className="px-4 h-8 w-[155px] text-xs text-muted-foreground">Repaid</TableHead>
+                            <TableHead className="px-4 h-8 w-[125px] text-right text-xs text-muted-foreground">Remaining</TableHead>
+                            <TableHead className="px-4 h-8 w-[60px] text-right text-xs text-muted-foreground hidden md:table-cell">Age</TableHead>
+                            <TableHead className="px-4 h-8 w-[85px] text-right text-xs text-muted-foreground">Status</TableHead>
+                            <TableHead className="px-4 h-8 w-[160px] text-xs text-muted-foreground hidden md:table-cell">Notes</TableHead>
+                            <TableHead className="px-4 h-8 w-14" />
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {debtor.loans.map((loan) => (
+                            <LoanRow key={loan.id} loan={loan} accounts={accounts} debtors={debtors} />
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
                   )}
                 </div>

@@ -22,7 +22,7 @@ function KpiCard({
     <div className="rounded-xl border border-border bg-card px-5 py-4 space-y-1">
       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
       <div className="flex items-end gap-2">
-        <p className={cn("font-mono text-xl font-semibold", color)}>{value}</p>
+        <p className={cn("font-mono text-lg font-semibold", color)}>{value}</p>
         {warn && <AlertTriangle className="size-4 text-warning mb-0.5 shrink-0" />}
       </div>
       {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
@@ -39,7 +39,7 @@ export async function LoansDashboard() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-heading text-2xl font-semibold">Savings & Loans</h1>
           <p className="text-sm text-muted-foreground">Account balances and outstanding loans</p>
