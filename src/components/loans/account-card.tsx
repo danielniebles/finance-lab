@@ -29,9 +29,9 @@ function AccountTypeBadge({ type }: { type: string }) {
 
 function EntryTypeBadge({ type }: { type: string }) {
   return type === "INITIAL" ? (
-    <span className="rounded-full bg-blue-500/10 text-blue-400 px-1.5 py-0.5 text-xs font-medium">Opening</span>
+    <span className="rounded-full bg-blue-500/10 text-blue-400 px-1.5 py-0.5 text-xs font-medium w-fit">Opening</span>
   ) : (
-    <span className="rounded-full bg-violet-500/10 text-violet-400 px-1.5 py-0.5 text-xs font-medium">Adjustment</span>
+    <span className="rounded-full bg-violet-500/10 text-violet-400 px-1.5 py-0.5 text-xs font-medium w-fit">Adjustment</span>
   );
 }
 
@@ -57,7 +57,7 @@ export function AccountCard({ account }: { account: AccountWithBalance }) {
   return (
     <>
       <div className={cn("rounded-xl border bg-card overflow-hidden", isExcluded && "opacity-60")}>
-        <div className="p-4 space-y-3 group">
+        <div className="p-4 flex flex-col gap-3 h-full">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -78,30 +78,21 @@ export function AccountCard({ account }: { account: AccountWithBalance }) {
           </div>
 
           {/* Balance */}
-          {account.loansOut > 0 ? (
-            <div className="space-y-0.5">
-              <p className={cn("font-mono text-lg font-semibold", isNegative ? "text-destructive" : "text-foreground")}>
-                {formatCOP(account.balance + account.loansOut)}
-              </p>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono">
-                <span>
-                  <span className="font-sans text-muted-foreground/70">liquid </span>
-                  {formatCOP(account.balance)}
-                </span>
-                <span>
-                  <span className="font-sans text-muted-foreground/70">lent </span>
-                  {formatCOP(account.loansOut)}
-                </span>
-              </div>
-            </div>
-          ) : (
+          <div className="flex-1">
             <p className={cn("font-mono text-lg font-semibold", isNegative ? "text-destructive" : "text-foreground")}>
               {formatCOP(account.balance)}
             </p>
-          )}
+            {account.loansOut > 0 && (
+              <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                <span className="font-sans text-muted-foreground/70">+ lent </span>
+                {formatCOP(account.loansOut)}
+                <span className="font-sans text-muted-foreground/50"> = {formatCOP(account.balance + account.loansOut)}</span>
+              </p>
+            )}
+          </div>
 
-          {/* Actions — visible on hover */}
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pt-1 border-t border-border/40">
+          {/* Actions — always visible, pinned to bottom */}
+          <div className="flex items-center gap-1 pt-1 border-t border-border/40">
             <Button
               variant="ghost"
               size="sm"
