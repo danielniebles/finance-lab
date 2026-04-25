@@ -95,6 +95,19 @@ export async function HealthScoreCard() {
             >
               {data.tier}
             </span>
+            {data.scoreDelta !== null && data.scoreDelta !== 0 && (
+              <span
+                className={cn(
+                  "text-xs font-mono tabular-nums",
+                  data.scoreDelta > 0 ? "text-success" : "text-destructive"
+                )}
+              >
+                {data.scoreDelta > 0 ? "+" : ""}{data.scoreDelta} vs prev
+              </span>
+            )}
+            {data.scoreDelta === 0 && (
+              <span className="text-xs text-muted-foreground/60">= vs prev</span>
+            )}
           </div>
           <div className="flex-1 space-y-3 pt-1">
             {data.metrics.map((m) => (

@@ -19,6 +19,7 @@ export type HealthScore = {
   tier: HealthScoreTier;
   monthLabel: string;
   metrics: HealthScoreMetric[];
+  scoreDelta: number | null; // vs previous month, null if no prior data
 };
 
 function scorePoints(
@@ -39,11 +40,38 @@ function fmt(value: number | null, suffix = "%"): string {
   return `${value.toFixed(1)}${suffix}`;
 }
 
+// ─── Pure score computation (reusable for delta) ─────────────────────────────
+
+type ScoreInputs = {
+  savingsRate: number | null;
+  variableBurnRate: number | null;
+  totalIncome: number;
+  totalObligation: number;
+  liquidityRatio: number | null;
+};
+
+function computeNumericScore(inputs: ScoreInputs): number {
+  const burden =
+    inputs.totalIncome > 0
+      ? (inputs.totalObligation / inputs.totalIncome) * 100
+      : null;
+  return (
+    scorePoints(inputs.savingsRate, { good: 20, warn: 10, ok: 0, direction: "asc" }).points +
+    scorePoints(inputs.variableBurnRate, { good: 80, warn: 100, ok: 120, direction: "desc" }).points +
+    scorePoints(burden, { good: 10, warn: 20, ok: 30, direction: "desc" }).points +
+    scorePoints(inputs.liquidityRatio, { good: 70, warn: 50, ok: 30, direction: "asc" }).points
+  );
+}
+
+// ─── Main query ───────────────────────────────────────────────────────────────
+
 export async function getHealthScore(): Promise<HealthScore | null> {
-  const batch = await db.importBatch.findFirst({
+  const batches = await db.importBatch.findMany({
     orderBy: [{ year: "desc" }, { month: "desc" }],
+    take: 2,
   });
-  if (!batch) return null;
+  if (batches.length === 0) return null;
+  const [batch, prevBatch] = batches;
 
   const [analysis, monthSummary, loansOverview] = await Promise.all([
     getMonthlyAnalysis(batch.month, batch.year),
@@ -54,11 +82,9 @@ export async function getHealthScore(): Promise<HealthScore | null> {
   const savingsScore = scorePoints(analysis.savingsRate, {
     good: 20, warn: 10, ok: 0, direction: "asc",
   });
-
   const burnScore = scorePoints(analysis.variableBurnRate, {
     good: 80, warn: 100, ok: 120, direction: "desc",
   });
-
   const burden =
     analysis.totalIncome > 0
       ? (monthSummary.totalObligation / analysis.totalIncome) * 100
@@ -66,7 +92,6 @@ export async function getHealthScore(): Promise<HealthScore | null> {
   const burdenScore = scorePoints(burden, {
     good: 10, warn: 20, ok: 30, direction: "desc",
   });
-
   const liquidityScore = scorePoints(loansOverview.liquidityRatio, {
     good: 70, warn: 50, ok: 30, direction: "asc",
   });
@@ -76,6 +101,23 @@ export async function getHealthScore(): Promise<HealthScore | null> {
     burnScore.points +
     burdenScore.points +
     liquidityScore.points;
+
+  // Delta vs previous month
+  let scoreDelta: number | null = null;
+  if (prevBatch) {
+    const [prevAnalysis, prevMonthSummary] = await Promise.all([
+      getMonthlyAnalysis(prevBatch.month, prevBatch.year),
+      getMonthSummary(prevBatch.month, prevBatch.year),
+    ]);
+    const prevScore = computeNumericScore({
+      savingsRate: prevAnalysis.savingsRate,
+      variableBurnRate: prevAnalysis.variableBurnRate,
+      totalIncome: prevAnalysis.totalIncome,
+      totalObligation: prevMonthSummary.totalObligation,
+      liquidityRatio: loansOverview.liquidityRatio, // point-in-time, same for both
+    });
+    scoreDelta = score - prevScore;
+  }
 
   const tier: HealthScoreTier =
     score >= 85 ? "Excellent" :
@@ -119,5 +161,6 @@ export async function getHealthScore(): Promise<HealthScore | null> {
     tier,
     monthLabel: `${MONTH_NAMES[batch.month - 1]} ${batch.year}`,
     metrics,
+    scoreDelta,
   };
 }

@@ -7,12 +7,14 @@ export type MonthPoint = {
   income: number;
   expenses: number;
   budget: number;
+  net: number; // income - expenses (positive = surplus, negative = deficit)
   savingsRate: number | null;
 };
 
 export type CategoryTrendRow = {
   id: string;
   name: string;
+  budget: number; // monthly budget for this category
   months: (number | null)[]; // spend per month slot, null = no data
 };
 
@@ -77,6 +79,7 @@ export async function getTrends(n = 6): Promise<TrendsData> {
     );
 
     const savingsRate = income > 0 ? ((income - expenses) / income) * 100 : null;
+    const net = income - expenses;
 
     return {
       month: b.month,
@@ -85,6 +88,7 @@ export async function getTrends(n = 6): Promise<TrendsData> {
       income,
       expenses,
       budget,
+      net,
       savingsRate,
     };
   });
@@ -116,6 +120,7 @@ export async function getTrends(n = 6): Promise<TrendsData> {
     .map((c) => ({
       id: c.id,
       name: c.name,
+      budget: c.budgetItems.reduce((s, i) => s + i.amount, 0),
       months: batches.map((b) => {
         const key = `${b.month}-${b.year}`;
         return spendByMonthAndCategory[key]?.[c.id] ?? null;
