@@ -118,10 +118,13 @@ export function AllInstallmentsTable({ installments }: Props) {
                   </TableCell>
                   <TableCell className="px-4 text-right font-mono text-sm text-muted-foreground hidden sm:table-cell">
                     {formatCOP(inst.monthlyAmount)}
+                    {inst.monthlyInterestRate != null && (
+                      <span className="ml-1 text-muted-foreground/50 text-xs">+int</span>
+                    )}
                   </TableCell>
                   <TableCell className="px-4 text-right font-mono text-sm text-muted-foreground hidden md:table-cell">
-                    {inst.annualInterestRate != null
-                      ? `${inst.annualInterestRate}%`
+                    {inst.monthlyInterestRate != null
+                      ? `${inst.monthlyInterestRate}% m.v.`
                       : "—"}
                   </TableCell>
                   <TableCell className="px-4 hidden sm:table-cell">
@@ -130,7 +133,7 @@ export function AllInstallmentsTable({ installments }: Props) {
                     </div>
                   </TableCell>
                   <TableCell className="px-4 text-right font-mono text-xs text-muted-foreground hidden md:table-cell whitespace-nowrap">
-                    {inst.endDate.toLocaleDateString("en-US", {
+                    {inst.endDate.toLocaleDateString("es-CO", {
                       month: "short",
                       year: "2-digit",
                     })}

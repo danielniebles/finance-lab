@@ -10,20 +10,16 @@ export async function createInstallment(data: {
   numInstallments: number;
   startDate: Date;
   notes?: string;
-  annualInterestRate?: number | null;
+  monthlyInterestRate?: number | null;
 }) {
-  const monthlyAmount = computeMonthlyAmount(
-    data.totalAmount,
-    data.numInstallments,
-    data.annualInterestRate,
-  );
+  const monthlyAmount = computeMonthlyAmount(data.totalAmount, data.numInstallments);
   await db.installment.create({
     data: {
       description: data.description,
       totalAmount: data.totalAmount,
       numInstallments: data.numInstallments,
       monthlyAmount,
-      annualInterestRate: data.annualInterestRate ?? null,
+      monthlyInterestRate: data.monthlyInterestRate ?? null,
       startDate: data.startDate,
       notes: data.notes ?? null,
     },
@@ -39,14 +35,10 @@ export async function updateInstallment(
     numInstallments: number;
     startDate: Date;
     notes?: string;
-    annualInterestRate?: number | null;
+    monthlyInterestRate?: number | null;
   }
 ) {
-  const monthlyAmount = computeMonthlyAmount(
-    data.totalAmount,
-    data.numInstallments,
-    data.annualInterestRate,
-  );
+  const monthlyAmount = computeMonthlyAmount(data.totalAmount, data.numInstallments);
   await db.installment.update({
     where: { id },
     data: {
@@ -54,7 +46,7 @@ export async function updateInstallment(
       totalAmount: data.totalAmount,
       numInstallments: data.numInstallments,
       monthlyAmount,
-      annualInterestRate: data.annualInterestRate ?? null,
+      monthlyInterestRate: data.monthlyInterestRate ?? null,
       startDate: data.startDate,
       notes: data.notes ?? null,
     },

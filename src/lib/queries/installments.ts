@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { computeInstallmentDue } from "@/lib/installment-utils";
 
 export type InstallmentStatus = "Active" | "Finished";
 
@@ -8,7 +9,7 @@ export type InstallmentRow = {
   totalAmount: number;
   numInstallments: number;
   monthlyAmount: number;
-  annualInterestRate: number | null;
+  monthlyInterestRate: number | null; // % m.v. (mensual vencido), null = no interest
   startDate: Date;
   endDate: Date; // date of the last payment (computed)
   notes: string | null;
@@ -73,7 +74,7 @@ export async function getAllInstallments(): Promise<InstallmentRow[]> {
         totalAmount: r.totalAmount,
         numInstallments: r.numInstallments,
         monthlyAmount: r.monthlyAmount,
-        annualInterestRate: r.annualInterestRate,
+        monthlyInterestRate: r.monthlyInterestRate,
         startDate: r.startDate,
         endDate,
         notes: r.notes,
@@ -116,7 +117,12 @@ export async function getMonthSummary(
         dueThisMonth.push({
           installment: inst,
           installmentNum: n,
-          amount: inst.monthlyAmount,
+          amount: computeInstallmentDue(
+            inst.totalAmount,
+            inst.numInstallments,
+            n,
+            inst.monthlyInterestRate,
+          ),
           payment: payment
             ? { id: payment.id, paidAt: payment.paidAt }
             : null,

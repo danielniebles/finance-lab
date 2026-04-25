@@ -12,14 +12,18 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { createInstallment, updateInstallment } from "@/lib/actions/installments";
-import { computeMonthlyAmount } from "@/lib/installment-utils";
+import { computeInstallmentDue, eaToMonthly, monthlyToEA } from "@/lib/installment-utils";
+import { cn } from "@/lib/utils";
 import type { InstallmentRow } from "@/lib/queries/installments";
+
+type RateType = "monthly" | "annual_ea";
 
 type FormState = {
   description: string;
   totalAmount: string;
   numInstallments: string;
-  annualInterestRate: string; // "" = no interest
+  interestRate: string; // always the value as displayed (m.v. or EA depending on rateType)
+  rateType: RateType;
   startDate: string; // "YYYY-MM-DD"
   notes: string;
 };
@@ -28,7 +32,8 @@ const EMPTY: FormState = {
   description: "",
   totalAmount: "",
   numInstallments: "1",
-  annualInterestRate: "",
+  interestRate: "",
+  rateType: "monthly",
   startDate: "",
   notes: "",
 };
@@ -42,7 +47,9 @@ function toFormState(row: InstallmentRow): FormState {
     description: row.description,
     totalAmount: String(row.totalAmount),
     numInstallments: String(row.numInstallments),
-    annualInterestRate: row.annualInterestRate != null ? String(row.annualInterestRate) : "",
+    // stored value is always monthly — display as m.v.
+    interestRate: row.monthlyInterestRate != null ? String(row.monthlyInterestRate) : "",
+    rateType: "monthly",
     startDate: `${yyyy}-${mm}-${dd}`,
     notes: row.notes ?? "",
   };
@@ -69,20 +76,42 @@ export function InstallmentForm({
     setForm(editing ? toFormState(editing) : EMPTY);
   }
 
-  function set(field: keyof FormState, value: string) {
+  function set<K extends keyof FormState>(field: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  /** Switch rate type, converting the displayed value so the user doesn't lose context. */
+  function switchRateType(next: RateType) {
+    if (next === form.rateType) return;
+    const current = parseFloat(form.interestRate);
+    let converted = "";
+    if (!isNaN(current) && current > 0) {
+      if (next === "annual_ea") {
+        // monthly → EA
+        converted = monthlyToEA(current).toFixed(2);
+      } else {
+        // EA → monthly
+        converted = (eaToMonthly(current) * 100).toFixed(4);
+      }
+    }
+    setForm((prev) => ({ ...prev, rateType: next, interestRate: converted }));
+  }
+
+  /** Returns the monthly rate (% m.v.) to store, regardless of input mode. */
+  function getMonthlyRate(): number | null {
+    const v = parseFloat(form.interestRate);
+    if (!form.interestRate.trim() || isNaN(v) || v <= 0) return null;
+    if (form.rateType === "monthly") return v;
+    return eaToMonthly(v) * 100;
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const rate = form.annualInterestRate.trim()
-      ? parseFloat(form.annualInterestRate)
-      : null;
     const data = {
       description: form.description.trim(),
       totalAmount: parseFloat(form.totalAmount),
       numInstallments: parseInt(form.numInstallments, 10),
-      annualInterestRate: rate && !isNaN(rate) ? rate : null,
+      monthlyInterestRate: getMonthlyRate(),
       startDate: new Date(form.startDate + "T12:00:00"),
       notes: form.notes.trim() || undefined,
     };
@@ -98,14 +127,17 @@ export function InstallmentForm({
     });
   }
 
-  // Live preview using the same formula as the server
+  // Live preview — always compute using monthly rate
   const totalAmount = parseFloat(form.totalAmount);
   const numInstallments = parseInt(form.numInstallments, 10);
-  const rateInput = form.annualInterestRate.trim() ? parseFloat(form.annualInterestRate) : null;
-  const monthlyPreview =
-    !isNaN(totalAmount) && !isNaN(numInstallments) && numInstallments > 0
-      ? computeMonthlyAmount(totalAmount, numInstallments, rateInput)
-      : null;
+  const monthlyRate = getMonthlyRate();
+  const hasValidInputs = !isNaN(totalAmount) && !isNaN(numInstallments) && numInstallments > 0;
+  const firstInstallment = hasValidInputs
+    ? computeInstallmentDue(totalAmount, numInstallments, 1, monthlyRate)
+    : null;
+  const lastInstallment = hasValidInputs && monthlyRate && numInstallments > 1
+    ? computeInstallmentDue(totalAmount, numInstallments, numInstallments, monthlyRate)
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -151,27 +183,76 @@ export function InstallmentForm({
             </div>
           </div>
 
+          {/* Interest rate with m.v. / EA toggle */}
           <div className="space-y-1.5">
-            <Label htmlFor="annualInterestRate">
-              Annual interest rate %{" "}
-              <span className="text-muted-foreground font-normal">(optional)</span>
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="interestRate">
+                Interest rate{" "}
+                <span className="text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              {/* Type toggle */}
+              <div className="flex rounded-md border border-input overflow-hidden text-xs">
+                <button
+                  type="button"
+                  onClick={() => switchRateType("monthly")}
+                  className={cn(
+                    "px-2.5 py-1 transition-colors",
+                    form.rateType === "monthly"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  % m.v.
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchRateType("annual_ea")}
+                  className={cn(
+                    "px-2.5 py-1 transition-colors border-l border-input",
+                    form.rateType === "annual_ea"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  % EA
+                </button>
+              </div>
+            </div>
             <Input
-              id="annualInterestRate"
+              id="interestRate"
               type="number"
               min={0}
-              step={0.1}
-              value={form.annualInterestRate}
-              onChange={(e) => set("annualInterestRate", e.target.value)}
-              placeholder="e.g. 24.5 — leave blank for simple split"
+              step={0.01}
+              value={form.interestRate}
+              onChange={(e) => set("interestRate", e.target.value)}
+              placeholder={
+                form.rateType === "monthly"
+                  ? "e.g. 1.89  (as shown on statement)"
+                  : "e.g. 25.37  (effective annual)"
+              }
             />
+            {form.rateType === "monthly" && (
+              <p className="text-xs text-muted-foreground/70">
+                Mensual vencido — read directly from your credit card statement.
+              </p>
+            )}
+            {form.rateType === "annual_ea" && (
+              <p className="text-xs text-muted-foreground/70">
+                Efectiva anual — will be converted to monthly for calculation.
+              </p>
+            )}
           </div>
 
-          {monthlyPreview !== null && !isNaN(monthlyPreview) && (
+          {firstInstallment !== null && !isNaN(firstInstallment) && (
             <p className="text-xs text-muted-foreground font-mono">
-              Monthly: ${new Intl.NumberFormat("es-CO").format(monthlyPreview)} COP
-              {rateInput && !isNaN(rateInput) && rateInput > 0 && (
-                <span className="ml-1 text-muted-foreground/60">(amortized at {rateInput}% / yr)</span>
+              {lastInstallment !== null ? (
+                <>
+                  First: ${new Intl.NumberFormat("es-CO").format(firstInstallment)} →{" "}
+                  Last: ${new Intl.NumberFormat("es-CO").format(lastInstallment)} COP
+                  <span className="ml-1 text-muted-foreground/60">(cuota decreciente)</span>
+                </>
+              ) : (
+                <>Monthly: ${new Intl.NumberFormat("es-CO").format(firstInstallment)} COP</>
               )}
             </p>
           )}

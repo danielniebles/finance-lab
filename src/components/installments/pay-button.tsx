@@ -38,7 +38,7 @@ export function PayButton({
       >
         <CheckCircle2 className="size-4" />
         <span className="font-mono text-xs">
-          {paidAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          {paidAt.toLocaleDateString("es-CO", { month: "short", day: "numeric", timeZone: "UTC" })}
         </span>
       </button>
     );

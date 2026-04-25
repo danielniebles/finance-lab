@@ -81,7 +81,7 @@ model Installment {
   totalAmount        Float
   numInstallments    Int
   monthlyAmount      Float                // stored via computeMonthlyAmount()
-  annualInterestRate Float?               // null = no interest (simple split)
+  monthlyInterestRate Float?               // null = no interest; stored as % m.v. (mensual vencido)
   startDate          DateTime             // date of first payment (e.g. 2025-11-10)
   notes              String?
   createdAt          DateTime             @default(now())
