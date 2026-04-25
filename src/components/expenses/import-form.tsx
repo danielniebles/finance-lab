@@ -206,7 +206,7 @@ export function ImportForm() {
                           )}
                         </div>
                         <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
-                          {new Date(f.modifiedTime).toLocaleDateString("en-US", {
+                          {new Date(f.modifiedTime).toLocaleDateString("es-CO", {
                             month: "short", day: "numeric", year: "2-digit",
                           })}
                         </span>

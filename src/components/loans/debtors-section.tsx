@@ -38,7 +38,7 @@ function LoanRow({
         </div>
       </TableCell>
       <TableCell className="px-4 text-muted-foreground text-xs">
-        {new Date(loan.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+        {new Date(loan.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
       </TableCell>
       <TableCell className="px-4 font-mono text-xs text-muted-foreground">
         {formatCOP(loan.amount)}
@@ -256,7 +256,7 @@ export function DebtorsSection({
                   {allPayments.map((p) => (
                     <div key={p.id} className="grid grid-cols-[5rem_6rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 group/row hover:bg-muted/20">
                       <span className="text-xs text-muted-foreground">
-                        {new Date(p.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+                        {new Date(p.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
                       </span>
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: p.accountColor ?? "#888" }} />

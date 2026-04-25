@@ -21,7 +21,7 @@ function periodRangeLabel(month: number, year: number, startDay: number): string
   const start = new Date(year, month - 2, startDay);
   const end = new Date(year, month - 1, startDay - 1);
   const fmt = (d: Date) =>
-    d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    d.toLocaleDateString("es-CO", { month: "short", day: "numeric" });
   return `${fmt(start)} – ${fmt(end)}`;
 }
 

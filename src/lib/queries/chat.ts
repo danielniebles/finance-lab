@@ -37,7 +37,7 @@ export async function getFinancialSnapshot(): Promise<string> {
   const lines: string[] = [];
 
   lines.push(`# Financial Snapshot`);
-  lines.push(`Date: ${now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`);
+  lines.push(`Date: ${now.toLocaleDateString("es-CO", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`);
   lines.push(`Currency: Colombian Peso (COP). All amounts in COP.`);
   lines.push(``);
 
@@ -174,7 +174,7 @@ export async function getFinancialSnapshot(): Promise<string> {
         const ageLabel = age >= 30 ? `${Math.floor(age / 30)} months` : `${age} days`;
         const overdue = loan.expectedBy && new Date(loan.expectedBy) < now ? " ⚠ OVERDUE" : "";
         const expected = loan.expectedBy
-          ? `, expected by ${new Date(loan.expectedBy).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`
+          ? `, expected by ${new Date(loan.expectedBy).toLocaleDateString("es-CO", { month: "short", year: "numeric" })}`
           : "";
         lines.push(`  - ${cop(loan.remaining)} remaining (original ${cop(loan.amount)}, ${pct(loan.amount > 0 ? (loan.paid / loan.amount) * 100 : null, 0)} repaid) via ${loan.accountName}, ${ageLabel} old${expected}${overdue}`);
         if (loan.notes) lines.push(`    Notes: ${loan.notes}`);

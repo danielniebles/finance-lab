@@ -161,7 +161,7 @@ export function PaymentForm({
               {preview.map(({ loan, apply }) => (
                 <div key={loan.id} className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">
-                    {new Date(loan.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    {new Date(loan.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "numeric" })}
                     <span className="text-muted-foreground/50 ml-1">· {loan.accountName}</span>
                   </span>
                   <span className="font-mono text-success">+{formatCOP(apply)}</span>

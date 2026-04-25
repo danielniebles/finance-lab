@@ -148,7 +148,7 @@ export function AccountCard({ account }: { account: AccountWithBalance }) {
               {account.entries.map((entry) => (
                 <div key={entry.id} className="grid grid-cols-[5rem_6.5rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 group/row hover:bg-muted/20">
                   <span className="text-xs text-muted-foreground">
-                    {new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+                    {new Date(entry.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
                   </span>
                   <EntryTypeBadge type={entry.type} />
                   <span className={cn("font-mono text-xs font-medium", entry.amount < 0 ? "text-destructive" : "text-success")}>
