@@ -43,18 +43,28 @@ export function PeriodSelector({
   const isCurrentMonth =
     selectedMonth === current.month && selectedYear === current.year;
 
-  // Find prev/next within the imported months list when available
-  const currentIdx = availableMonths?.findIndex(
-    (m) => m.month === selectedMonth && m.year === selectedYear
-  ) ?? -1;
+  // Find prev/next within the imported months list when available.
+  // When the selected month has no data (not in the list), find the nearest
+  // available months on either side so navigation is never locked.
+  let prevEntry: MonthEntry | null = null;
+  let nextEntry: MonthEntry | null = null;
 
-  const prevEntry = availableMonths && currentIdx > 0
-    ? availableMonths[currentIdx - 1]
-    : null;
-
-  const nextEntry = availableMonths && currentIdx !== -1 && currentIdx < availableMonths.length - 1
-    ? availableMonths[currentIdx + 1]
-    : null;
+  if (availableMonths) {
+    const currentIdx = availableMonths.findIndex(
+      (m) => m.month === selectedMonth && m.year === selectedYear
+    );
+    if (currentIdx >= 0) {
+      prevEntry = currentIdx > 0 ? availableMonths[currentIdx - 1] : null;
+      nextEntry = currentIdx < availableMonths.length - 1 ? availableMonths[currentIdx + 1] : null;
+    } else {
+      // Selected month not in list — find nearest neighbours by ordinal
+      const sel = selectedYear * 12 + selectedMonth;
+      const before = availableMonths.filter((m) => m.year * 12 + m.month < sel);
+      const after  = availableMonths.filter((m) => m.year * 12 + m.month > sel);
+      prevEntry = before.length > 0 ? before[before.length - 1] : null;
+      nextEntry = after.length  > 0 ? after[0] : null;
+    }
+  }
 
   function navigate(entry: MonthEntry) {
     router.push(`/expenses?month=${entry.month}&year=${entry.year}`);
