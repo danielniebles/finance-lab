@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LoansClient } from "./loans-client";
 import { LoanRowActions } from "./loan-row-actions";
-import { deleteLoanPayment } from "@/lib/actions/loans";
+import { deleteLoanPayment, deleteSettledLoans } from "@/lib/actions/loans";
 import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/lib/queries/loans";
 
 // ─── Loan row ─────────────────────────────────────────────────────────────────
@@ -28,6 +28,15 @@ function LoanRow({
   const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
   const ageLabel = ageDays >= 30 ? `${Math.floor(ageDays / 30)}mo` : `${ageDays}d`;
   const isOverdue = loan.isActive && loan.expectedBy && new Date(loan.expectedBy) < new Date();
+
+  // Stale: active loan older than 90 days with no payment in the last 90 days
+  const lastPaymentMs = loan.payments.length > 0
+    ? Math.max(...loan.payments.map((p) => new Date(p.date).getTime()))
+    : null;
+  const daysSincePayment = lastPaymentMs !== null
+    ? Math.floor((Date.now() - lastPaymentMs) / (1000 * 60 * 60 * 24))
+    : ageDays;
+  const isStale = loan.isActive && ageDays > 90 && daysSincePayment > 90;
 
   return (
     <TableRow className="group/loanrow border-border/50">
@@ -56,7 +65,7 @@ function LoanRow({
       <TableCell className={cn("px-4 font-mono text-sm font-medium text-right", loan.isActive ? "text-foreground" : "text-muted-foreground")}>
         {loan.remaining > 0 ? formatCOP(loan.remaining) : "—"}
       </TableCell>
-      <TableCell className="px-4 text-xs text-muted-foreground text-right hidden md:table-cell">
+      <TableCell className={cn("px-4 text-xs text-right hidden md:table-cell", isStale ? "text-warning font-medium" : "text-muted-foreground")}>
         {ageLabel}
       </TableCell>
       <TableCell className="px-4">
@@ -87,13 +96,18 @@ function LoanRow({
 export function DebtorsSection({
   accounts,
   debtors,
+  totalEverLent,
+  totalRecovered,
 }: {
   accounts: AccountWithBalance[];
   debtors: DebtorWithLoans[];
+  totalEverLent: number;
+  totalRecovered: number;
 }) {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [paymentsDebtor, setPaymentsDebtor] = useState<DebtorWithLoans | null>(null);
   const [deletePaymentPending, startDeletePayment] = useTransition();
+  const [clearSettledPending, startClearSettled] = useTransition();
 
   const filteredDebtors = useMemo(() => {
     if (!selectedAccountId) return debtors;
@@ -107,6 +121,8 @@ export function DebtorsSection({
       .filter((d) => d.loans.length > 0);
   }, [debtors, selectedAccountId]);
 
+  const recoveryPct = totalEverLent > 0 ? (totalRecovered / totalEverLent) * 100 : 0;
+
   return (
     <section className="space-y-3">
       {/* Header */}
@@ -116,6 +132,24 @@ export function DebtorsSection({
         </h2>
         <LoansClient accounts={accounts} debtors={debtors} mode="add-debtor" />
       </div>
+
+      {/* Portfolio stats strip */}
+      {debtors.length > 0 && (
+        <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-lg bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
+          <span>
+            <span className="font-medium text-foreground">{formatCOP(totalEverLent)}</span>
+            {" "}total lent
+          </span>
+          <span>
+            <span className="font-medium text-success">{formatCOP(totalRecovered)}</span>
+            {" "}recovered
+          </span>
+          <span>
+            <span className="font-mono font-medium text-foreground">{recoveryPct.toFixed(1)}%</span>
+            {" "}recovery rate
+          </span>
+        </div>
+      )}
 
       {debtors.length === 0 ? (
         <p className="text-sm text-muted-foreground">No debtors yet.</p>
@@ -179,6 +213,22 @@ export function DebtorsSection({
                         <ScrollText className="size-3" />
                         Payments
                       </Button>
+                      {debtor.loans.filter((l) => !l.isActive).length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1 text-xs text-muted-foreground hover:text-destructive"
+                          disabled={clearSettledPending}
+                          onClick={() =>
+                            startClearSettled(async () => {
+                              await deleteSettledLoans(debtor.id);
+                            })
+                          }
+                        >
+                          <Trash className="size-3" />
+                          Clear settled ({debtor.loans.filter((l) => !l.isActive).length})
+                        </Button>
+                      )}
                       {debtor.totalOwed > 0 && (
                         <LoansClient
                           accounts={accounts}

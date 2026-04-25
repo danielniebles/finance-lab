@@ -78,13 +78,25 @@ export function AccountCard({ account }: { account: AccountWithBalance }) {
           </div>
 
           {/* Balance */}
-          <p className={cn("font-mono text-lg font-semibold", isNegative ? "text-destructive" : "text-foreground")}>
-            {formatCOP(account.balance)}
-          </p>
-          {account.loansOut > 0 && (
-            <p className="text-xs text-muted-foreground font-mono">
-              {formatCOP(account.loansOut)}{" "}
-              <span className="font-sans text-muted-foreground/70">in loans</span>
+          {account.loansOut > 0 ? (
+            <div className="space-y-0.5">
+              <p className={cn("font-mono text-lg font-semibold", isNegative ? "text-destructive" : "text-foreground")}>
+                {formatCOP(account.balance + account.loansOut)}
+              </p>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono">
+                <span>
+                  <span className="font-sans text-muted-foreground/70">liquid </span>
+                  {formatCOP(account.balance)}
+                </span>
+                <span>
+                  <span className="font-sans text-muted-foreground/70">lent </span>
+                  {formatCOP(account.loansOut)}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <p className={cn("font-mono text-lg font-semibold", isNegative ? "text-destructive" : "text-foreground")}>
+              {formatCOP(account.balance)}
             </p>
           )}
 

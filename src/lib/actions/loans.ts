@@ -169,3 +169,17 @@ export async function deleteLoanPayment(id: string) {
   await db.loanPayment.delete({ where: { id } });
   revalidatePath(PATH);
 }
+
+export async function deleteSettledLoans(debtorId: string) {
+  const loans = await db.loan.findMany({
+    where: { debtorId },
+    include: { payments: { select: { amount: true } } },
+  });
+  const settledIds = loans
+    .filter((l) => l.payments.reduce((s, p) => s + p.amount, 0) >= l.amount)
+    .map((l) => l.id);
+  if (settledIds.length > 0) {
+    await db.loan.deleteMany({ where: { id: { in: settledIds } } });
+  }
+  revalidatePath(PATH);
+}

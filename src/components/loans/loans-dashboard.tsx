@@ -95,7 +95,12 @@ export async function LoansDashboard() {
       </section>
 
       {/* Debtors */}
-      <DebtorsSection accounts={data.accounts} debtors={data.debtors} />
+      <DebtorsSection
+        accounts={data.accounts}
+        debtors={data.debtors}
+        totalEverLent={data.totalEverLent}
+        totalRecovered={data.totalRecovered}
+      />
     </div>
   );
 }

@@ -44,6 +44,8 @@ export type LoansOverview = {
   inLoans: number;
   totalSavings: number;
   liquidityRatio: number | null;
+  totalEverLent: number;
+  totalRecovered: number;
 };
 
 export async function getLoansOverview(): Promise<LoansOverview> {
@@ -127,6 +129,9 @@ export async function getLoansOverview(): Promise<LoansOverview> {
     return { id: d.id, name: d.name, notes: d.notes, loans, totalOwed, activeLoansCount };
   });
 
+  // Sort debtors: biggest exposure first
+  debtorsWithLoans.sort((a, b) => b.totalOwed - a.totalOwed);
+
   // KPIs
   const available = accountsWithBalance
     .filter((a) => a.includeInAvailable)
@@ -136,5 +141,14 @@ export async function getLoansOverview(): Promise<LoansOverview> {
   const totalSavings = available + inLoans;
   const liquidityRatio = totalSavings > 0 ? (available / totalSavings) * 100 : null;
 
-  return { accounts: accountsWithBalance, debtors: debtorsWithLoans, available, inLoans, totalSavings, liquidityRatio };
+  const totalEverLent = debtorsWithLoans.reduce(
+    (s, d) => s + d.loans.reduce((ls, l) => ls + l.amount, 0),
+    0,
+  );
+  const totalRecovered = debtorsWithLoans.reduce(
+    (s, d) => s + d.loans.reduce((ls, l) => ls + l.paid, 0),
+    0,
+  );
+
+  return { accounts: accountsWithBalance, debtors: debtorsWithLoans, available, inLoans, totalSavings, liquidityRatio, totalEverLent, totalRecovered };
 }
