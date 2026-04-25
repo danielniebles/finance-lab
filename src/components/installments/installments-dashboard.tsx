@@ -1,9 +1,8 @@
-import { getMonthSummary, getAllInstallments } from "@/lib/queries/installments";
+import { getAllInstallments, getMonthSummary } from "@/lib/queries/installments";
 import { formatCOP } from "@/lib/format";
 import { MonthNav } from "./month-nav";
-import { PayButton } from "./pay-button";
-import { InstallmentActions } from "./installment-actions";
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DueThisMonthTable } from "./due-this-month-table";
+import { AllInstallmentsTable } from "./all-installments-table";
 
 function StatCard({
   label,
@@ -33,38 +32,6 @@ function StatCard({
   );
 }
 
-function StatusBadge({ status }: { status: "Active" | "Finished" }) {
-  if (status === "Finished") {
-    return (
-      <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
-        Finished
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
-      Active
-    </span>
-  );
-}
-
-function ProgressBar({ paid, total }: { paid: number; total: number }) {
-  const pct = total > 0 ? Math.min(100, (paid / total) * 100) : 0;
-  return (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 w-20 rounded-full bg-muted overflow-hidden">
-        <div
-          className="h-full rounded-full bg-primary transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="font-mono text-xs text-muted-foreground">
-        {paid}/{total}
-      </span>
-    </div>
-  );
-}
-
 export async function InstallmentsDashboard({
   month,
   year,
@@ -72,10 +39,9 @@ export async function InstallmentsDashboard({
   month: number;
   year: number;
 }) {
-  const [summary, allInstallments] = await Promise.all([
-    getMonthSummary(month, year),
-    getAllInstallments(),
-  ]);
+  // Single DB fetch — summary reuses the same array, no second round-trip
+  const allInstallments = await getAllInstallments();
+  const summary = await getMonthSummary(month, year, allInstallments);
 
   return (
     <div className="space-y-8">
@@ -106,9 +72,8 @@ export async function InstallmentsDashboard({
           highlight={summary.totalDue > 0 ? "bad" : "good"}
         />
         <StatCard
-          label="Active items"
+          label="Active installments"
           value={String(summary.activeCount)}
-          sub="installments"
         />
         <StatCard
           label="Total debt"
@@ -126,113 +91,15 @@ export async function InstallmentsDashboard({
         {summary.dueThisMonth.length === 0 ? (
           <p className="text-sm text-muted-foreground">No installments due this month.</p>
         ) : (
-          <div className="rounded-xl border border-border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/30 hover:bg-muted/30 border-border">
-                  <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground">Item</TableHead>
-                  <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground">Installment</TableHead>
-                  <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Amount</TableHead>
-                  <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {summary.dueThisMonth.map((due) => (
-                  <TableRow key={`${due.installment.id}-${due.installmentNum}`} className="border-border">
-                    <TableCell className="px-4 font-medium">{due.installment.description}</TableCell>
-                    <TableCell className="px-4 text-muted-foreground font-mono text-xs">
-                      {due.installmentNum} of {due.installment.numInstallments}
-                    </TableCell>
-                    <TableCell className="px-4 text-right font-mono">{formatCOP(due.amount)}</TableCell>
-                    <TableCell className="px-4 text-right">
-                      <PayButton
-                        installmentId={due.installment.id}
-                        installmentNum={due.installmentNum}
-                        paymentId={due.payment?.id ?? null}
-                        paidAt={due.payment?.paidAt ?? null}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-              <TableFooter className="border-border">
-                <TableRow className="border-border">
-                  <TableCell colSpan={2} className="px-4 text-xs font-medium text-muted-foreground">
-                    {summary.dueThisMonth.filter((d) => d.payment).length} of{" "}
-                    {summary.dueThisMonth.length} paid
-                  </TableCell>
-                  <TableCell className="px-4 text-right font-mono font-semibold">
-                    {formatCOP(summary.totalObligation)}
-                  </TableCell>
-                  <TableCell />
-                </TableRow>
-              </TableFooter>
-            </Table>
-          </div>
+          <DueThisMonthTable
+            dueThisMonth={summary.dueThisMonth}
+            totalObligation={summary.totalObligation}
+          />
         )}
       </section>
 
       {/* All installments */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            All installments
-          </h2>
-          <InstallmentActions mode="add-button" />
-        </div>
-
-        {allInstallments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No installments yet. Add one above.</p>
-        ) : (
-          <div className="rounded-xl border border-border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/30 hover:bg-muted/30 border-border">
-                  <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground">Item</TableHead>
-                  <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Total</TableHead>
-                  <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Monthly</TableHead>
-                  <TableHead className="px-4 text-center text-xs uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Progress</TableHead>
-                  <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Remaining</TableHead>
-                  <TableHead className="px-4 text-center text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
-                  <TableHead className="px-4" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {allInstallments.map((inst) => (
-                  <TableRow key={inst.id} className="border-border">
-                    <TableCell className="px-4">
-                      <div className="font-medium">{inst.description}</div>
-                      {inst.notes && (
-                        <div className="text-xs text-muted-foreground">{inst.notes}</div>
-                      )}
-                    </TableCell>
-                    <TableCell className="px-4 text-right font-mono text-sm">{formatCOP(inst.totalAmount)}</TableCell>
-                    <TableCell className="px-4 text-right font-mono text-sm text-muted-foreground hidden sm:table-cell">
-                      {formatCOP(inst.monthlyAmount)}
-                    </TableCell>
-                    <TableCell className="px-4 hidden sm:table-cell">
-                      <div className="flex justify-center">
-                        <ProgressBar paid={inst.installmentsPaid} total={inst.numInstallments} />
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4 text-right font-mono text-sm">
-                      {inst.remaining > 0 ? formatCOP(inst.remaining) : "—"}
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <div className="flex justify-center">
-                        <StatusBadge status={inst.status} />
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-4">
-                      <InstallmentActions mode="row-actions" installment={inst} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </section>
+      <AllInstallmentsTable installments={allInstallments} />
     </div>
   );
 }

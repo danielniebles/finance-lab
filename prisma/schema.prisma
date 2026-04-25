@@ -76,15 +76,16 @@ enum BudgetType {
 // ─── Module 2: Installment Tracker ────────────────────────────────────────────
 
 model Installment {
-  id              String               @id @default(cuid())
-  description     String
-  totalAmount     Float
-  numInstallments Int
-  monthlyAmount   Float                // stored = round(totalAmount / numInstallments)
-  startDate       DateTime             // date of first payment (e.g. 2025-11-10)
-  notes           String?
-  createdAt       DateTime             @default(now())
-  payments        InstallmentPayment[]
+  id                 String               @id @default(cuid())
+  description        String
+  totalAmount        Float
+  numInstallments    Int
+  monthlyAmount      Float                // stored via computeMonthlyAmount()
+  annualInterestRate Float?               // null = no interest (simple split)
+  startDate          DateTime             // date of first payment (e.g. 2025-11-10)
+  notes              String?
+  createdAt          DateTime             @default(now())
+  payments           InstallmentPayment[]
 }
 
 model InstallmentPayment {

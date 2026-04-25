@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { computeMonthlyAmount } from "@/lib/installment-utils";
 
 export async function createInstallment(data: {
   description: string;
@@ -9,14 +10,20 @@ export async function createInstallment(data: {
   numInstallments: number;
   startDate: Date;
   notes?: string;
+  annualInterestRate?: number | null;
 }) {
-  const monthlyAmount = Math.round(data.totalAmount / data.numInstallments);
+  const monthlyAmount = computeMonthlyAmount(
+    data.totalAmount,
+    data.numInstallments,
+    data.annualInterestRate,
+  );
   await db.installment.create({
     data: {
       description: data.description,
       totalAmount: data.totalAmount,
       numInstallments: data.numInstallments,
       monthlyAmount,
+      annualInterestRate: data.annualInterestRate ?? null,
       startDate: data.startDate,
       notes: data.notes ?? null,
     },
@@ -32,9 +39,14 @@ export async function updateInstallment(
     numInstallments: number;
     startDate: Date;
     notes?: string;
+    annualInterestRate?: number | null;
   }
 ) {
-  const monthlyAmount = Math.round(data.totalAmount / data.numInstallments);
+  const monthlyAmount = computeMonthlyAmount(
+    data.totalAmount,
+    data.numInstallments,
+    data.annualInterestRate,
+  );
   await db.installment.update({
     where: { id },
     data: {
@@ -42,6 +54,7 @@ export async function updateInstallment(
       totalAmount: data.totalAmount,
       numInstallments: data.numInstallments,
       monthlyAmount,
+      annualInterestRate: data.annualInterestRate ?? null,
       startDate: data.startDate,
       notes: data.notes ?? null,
     },

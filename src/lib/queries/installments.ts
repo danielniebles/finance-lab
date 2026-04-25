@@ -8,7 +8,9 @@ export type InstallmentRow = {
   totalAmount: number;
   numInstallments: number;
   monthlyAmount: number;
+  annualInterestRate: number | null;
   startDate: Date;
+  endDate: Date; // date of the last payment (computed)
   notes: string | null;
   installmentsPaid: number;
   remaining: number;
@@ -58,26 +60,32 @@ export async function getAllInstallments(): Promise<InstallmentRow[]> {
 
   return rows
     .map((r) => {
-    const installmentsPaid = r.payments.length;
-    const remaining = Math.max(0, r.totalAmount - installmentsPaid * r.monthlyAmount);
-    const status: InstallmentStatus = remaining <= 0 ? "Finished" : "Active";
-    return {
-      id: r.id,
-      description: r.description,
-      totalAmount: r.totalAmount,
-      numInstallments: r.numInstallments,
-      monthlyAmount: r.monthlyAmount,
-      startDate: r.startDate,
-      notes: r.notes,
-      installmentsPaid,
-      remaining,
-      status,
-      payments: r.payments.map((p) => ({
-        id: p.id,
-        installmentNum: p.installmentNum,
-        paidAt: p.paidAt,
-      })),
-    };
+      const installmentsPaid = r.payments.length;
+      const remaining = Math.max(0, r.totalAmount - installmentsPaid * r.monthlyAmount);
+      const status: InstallmentStatus = remaining <= 0 ? "Finished" : "Active";
+
+      const endDate = new Date(r.startDate);
+      endDate.setMonth(endDate.getMonth() + r.numInstallments - 1);
+
+      return {
+        id: r.id,
+        description: r.description,
+        totalAmount: r.totalAmount,
+        numInstallments: r.numInstallments,
+        monthlyAmount: r.monthlyAmount,
+        annualInterestRate: r.annualInterestRate,
+        startDate: r.startDate,
+        endDate,
+        notes: r.notes,
+        installmentsPaid,
+        remaining,
+        status,
+        payments: r.payments.map((p) => ({
+          id: p.id,
+          installmentNum: p.installmentNum,
+          paidAt: p.paidAt,
+        })),
+      };
     })
     // Active first, Finished at the bottom
     .sort((a, b) => {
@@ -87,15 +95,21 @@ export async function getAllInstallments(): Promise<InstallmentRow[]> {
     });
 }
 
+/**
+ * Builds the monthly summary.
+ * Pass a pre-fetched `installments` array to avoid a second DB round-trip
+ * when the caller already has it (e.g. the dashboard page).
+ */
 export async function getMonthSummary(
   month: number,
-  year: number
+  year: number,
+  installments?: InstallmentRow[],
 ): Promise<MonthSummary> {
-  const installments = await getAllInstallments();
+  const all = installments ?? await getAllInstallments();
 
   const dueThisMonth: DueThisMonth[] = [];
 
-  for (const inst of installments) {
+  for (const inst of all) {
     for (let n = 1; n <= inst.numInstallments; n++) {
       if (isDueInMonth(inst.startDate, n, month, year)) {
         const payment = inst.payments.find((p) => p.installmentNum === n) ?? null;
@@ -116,8 +130,8 @@ export async function getMonthSummary(
     .filter((d) => d.payment !== null)
     .reduce((s, d) => s + d.amount, 0);
   const totalDue = totalObligation - totalPaid;
-  const activeCount = installments.filter((i) => i.status === "Active").length;
-  const totalRemainingDebt = installments.reduce((s, i) => s + i.remaining, 0);
+  const activeCount = all.filter((i) => i.status === "Active").length;
+  const totalRemainingDebt = all.reduce((s, i) => s + i.remaining, 0);
 
   // Unpaid first, paid at the bottom
   dueThisMonth.sort((a, b) => {

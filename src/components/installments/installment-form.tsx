@@ -12,12 +12,14 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { createInstallment, updateInstallment } from "@/lib/actions/installments";
+import { computeMonthlyAmount } from "@/lib/installment-utils";
 import type { InstallmentRow } from "@/lib/queries/installments";
 
 type FormState = {
   description: string;
   totalAmount: string;
   numInstallments: string;
+  annualInterestRate: string; // "" = no interest
   startDate: string; // "YYYY-MM-DD"
   notes: string;
 };
@@ -26,6 +28,7 @@ const EMPTY: FormState = {
   description: "",
   totalAmount: "",
   numInstallments: "1",
+  annualInterestRate: "",
   startDate: "",
   notes: "",
 };
@@ -39,6 +42,7 @@ function toFormState(row: InstallmentRow): FormState {
     description: row.description,
     totalAmount: String(row.totalAmount),
     numInstallments: String(row.numInstallments),
+    annualInterestRate: row.annualInterestRate != null ? String(row.annualInterestRate) : "",
     startDate: `${yyyy}-${mm}-${dd}`,
     notes: row.notes ?? "",
   };
@@ -71,10 +75,14 @@ export function InstallmentForm({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const rate = form.annualInterestRate.trim()
+      ? parseFloat(form.annualInterestRate)
+      : null;
     const data = {
       description: form.description.trim(),
       totalAmount: parseFloat(form.totalAmount),
       numInstallments: parseInt(form.numInstallments, 10),
+      annualInterestRate: rate && !isNaN(rate) ? rate : null,
       startDate: new Date(form.startDate + "T12:00:00"),
       notes: form.notes.trim() || undefined,
     };
@@ -90,9 +98,13 @@ export function InstallmentForm({
     });
   }
 
+  // Live preview using the same formula as the server
+  const totalAmount = parseFloat(form.totalAmount);
+  const numInstallments = parseInt(form.numInstallments, 10);
+  const rateInput = form.annualInterestRate.trim() ? parseFloat(form.annualInterestRate) : null;
   const monthlyPreview =
-    form.totalAmount && form.numInstallments
-      ? Math.round(parseFloat(form.totalAmount) / parseInt(form.numInstallments, 10))
+    !isNaN(totalAmount) && !isNaN(numInstallments) && numInstallments > 0
+      ? computeMonthlyAmount(totalAmount, numInstallments, rateInput)
       : null;
 
   return (
@@ -139,10 +151,28 @@ export function InstallmentForm({
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <Label htmlFor="annualInterestRate">
+              Annual interest rate %{" "}
+              <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <Input
+              id="annualInterestRate"
+              type="number"
+              min={0}
+              step={0.1}
+              value={form.annualInterestRate}
+              onChange={(e) => set("annualInterestRate", e.target.value)}
+              placeholder="e.g. 24.5 — leave blank for simple split"
+            />
+          </div>
+
           {monthlyPreview !== null && !isNaN(monthlyPreview) && (
             <p className="text-xs text-muted-foreground font-mono">
-              Monthly: $
-              {new Intl.NumberFormat("es-CO").format(monthlyPreview)} COP
+              Monthly: ${new Intl.NumberFormat("es-CO").format(monthlyPreview)} COP
+              {rateInput && !isNaN(rateInput) && rateInput > 0 && (
+                <span className="ml-1 text-muted-foreground/60">(amortized at {rateInput}% / yr)</span>
+              )}
             </p>
           )}
 
