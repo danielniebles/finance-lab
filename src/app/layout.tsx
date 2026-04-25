@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Sora, DM_Sans, JetBrains_Mono } from "next/font/google";
-import { ThemeProvider } from "@/components/theme-provider";
+import { cookies } from "next/headers";
 import "./globals.css";
 
 const sora = Sora({
@@ -29,20 +29,20 @@ export const metadata: Metadata = {
   description: "Personal finance tracker",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const theme = cookieStore.get("theme")?.value === "light" ? "light" : "dark";
+
   return (
     <html
       lang="en"
-      className={`${sora.variable} ${dmSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
-      suppressHydrationWarning
+      className={`${theme} ${sora.variable} ${dmSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="h-full">
-        <ThemeProvider>{children}</ThemeProvider>
-      </body>
+      <body className="h-full">{children}</body>
     </html>
   );
 }

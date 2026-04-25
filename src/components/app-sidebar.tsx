@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useTheme } from "next-themes";
+import { useState, useEffect } from "react";
 import { BarChart3, CreditCard, HandCoins, Settings, ChevronDown, Bot, TrendingUp, Sun, Moon } from "lucide-react";
 import {
   Sidebar,
@@ -40,7 +40,21 @@ const settingsItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { theme, setTheme } = useTheme();
+  const [theme, setThemeState] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    setThemeState(
+      document.documentElement.classList.contains("light") ? "light" : "dark"
+    );
+  }, []);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setThemeState(next);
+    document.documentElement.classList.toggle("dark", next === "dark");
+    document.documentElement.classList.toggle("light", next === "light");
+    document.cookie = `theme=${next};path=/;max-age=31536000;SameSite=Lax`;
+  }
 
   return (
     <Sidebar>
@@ -108,7 +122,7 @@ export function AppSidebar() {
 
       <SidebarFooter className="px-3 py-3">
         <button
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          onClick={toggleTheme}
           className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
         >
           {theme === "dark" ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
