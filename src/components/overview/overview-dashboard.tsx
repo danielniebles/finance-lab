@@ -81,8 +81,7 @@ export async function OverviewDashboard() {
     analysis.savingsRate >= 10 ? "neutral" :
     "bad";
 
-  const unpaid = monthSummary.dueThisMonth.filter((d) => d.payment === null);
-  const paid   = monthSummary.dueThisMonth.filter((d) => d.payment !== null);
+  const paid = monthSummary.dueThisMonth.filter((d) => d.payment !== null);
   const activeDebtors = loans.debtors.filter((d) => d.totalOwed > 0).length;
 
   return (

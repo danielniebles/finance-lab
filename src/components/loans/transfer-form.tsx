@@ -13,6 +13,15 @@ import {
 import { createTransfer } from "@/lib/actions/loans";
 import type { AccountWithBalance } from "@/lib/queries/loans";
 
+function AccountOption({ account }: { account: AccountWithBalance }) {
+  return (
+    <span className="flex items-center gap-2">
+      <span className="size-2.5 rounded-full inline-block" style={{ backgroundColor: account.color ?? "#888" }} />
+      {account.name}
+    </span>
+  );
+}
+
 export function TransferForm({
   open,
   onClose,
@@ -45,15 +54,6 @@ export function TransferForm({
       });
       onClose();
     });
-  }
-
-  function AccountOption({ account }: { account: AccountWithBalance }) {
-    return (
-      <span className="flex items-center gap-2">
-        <span className="size-2.5 rounded-full inline-block" style={{ backgroundColor: account.color ?? "#888" }} />
-        {account.name}
-      </span>
-    );
   }
 
   return (

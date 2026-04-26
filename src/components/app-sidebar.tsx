@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { BarChart3, CreditCard, HandCoins, Settings, ChevronDown, Bot, TrendingUp, Sun, Moon, LayoutDashboard } from "lucide-react";
 import {
   Sidebar,
@@ -41,13 +41,9 @@ const settingsItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const [theme, setThemeState] = useState<"dark" | "light">("dark");
-
-  useEffect(() => {
-    setThemeState(
-      document.documentElement.classList.contains("light") ? "light" : "dark"
-    );
-  }, []);
+  const [theme, setThemeState] = useState<"dark" | "light">(() =>
+    typeof document !== "undefined" && document.documentElement.classList.contains("light") ? "light" : "dark"
+  );
 
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";

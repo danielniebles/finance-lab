@@ -23,8 +23,9 @@ function LoanRow({
   accounts: AccountWithBalance[];
   debtors: DebtorWithLoans[];
 }) {
+  const [now] = useState(Date.now);
   const pct = loan.amount > 0 ? Math.min(100, (loan.paid / loan.amount) * 100) : 0;
-  const ageMs = Date.now() - new Date(loan.date).getTime();
+  const ageMs = now - new Date(loan.date).getTime();
   const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
   const ageLabel = ageDays >= 30 ? `${Math.floor(ageDays / 30)}mo` : `${ageDays}d`;
   const isOverdue = loan.isActive && loan.expectedBy && new Date(loan.expectedBy) < new Date();
@@ -34,7 +35,7 @@ function LoanRow({
     ? Math.max(...loan.payments.map((p) => new Date(p.date).getTime()))
     : null;
   const daysSincePayment = lastPaymentMs !== null
-    ? Math.floor((Date.now() - lastPaymentMs) / (1000 * 60 * 60 * 24))
+    ? Math.floor((now - lastPaymentMs) / (1000 * 60 * 60 * 24))
     : ageDays;
   const isStale = loan.isActive && ageDays > 90 && daysSincePayment > 90;
 
