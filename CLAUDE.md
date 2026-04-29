@@ -11,7 +11,7 @@ Personal finance tracking application for a single user. All amounts in COP (Col
 - **UI**: shadcn/ui (base-nova style) + Tailwind CSS v4
 - **Fonts**: Sora (headings) · DM Sans (body) · JetBrains Mono (numbers)
 - **Theme**: Dark by default (`dark` class on `<html>`)
-- **Hosting**: Local (Docker Compose) → Railway (future)
+- **Hosting**: Local (Docker Compose) + Vercel (frontend) + Supabase (PostgreSQL)
 
 ## shadcn/ui version notes
 
@@ -31,7 +31,6 @@ This project uses the **base-nova** style of shadcn which uses `@base-ui/react` 
 
 ## Environment
 
-- Always run `nvm use node` before any `node`, `npm`, or `npx` command
 - Docker Compose starts Postgres: `docker compose up -d`
 - DB connection: `postgresql://financelab:financelab@localhost:5432/financelab`
 - All DB-querying pages must export `export const dynamic = "force-dynamic"`
@@ -46,8 +45,8 @@ src/
 │   └── (app)/
 │       ├── layout.tsx          # Sidebar shell (SidebarProvider + SidebarInset)
 │       ├── expenses/page.tsx   # Monthly dashboard (import + analysis)
-│       ├── installments/page.tsx  # Stub — Milestone 2
-│       ├── loans/page.tsx         # Stub — Milestone 3
+│       ├── installments/page.tsx  # Installment Tracker
+│       ├── loans/page.tsx         # Loan/Debt Tracker
 │       └── settings/
 │           ├── categories/page.tsx   # AppCategory CRUD
 │           └── mappings/page.tsx     # MoneyLover → AppCategory mappings
@@ -80,11 +79,12 @@ src/
 - `AppCategory` — user-defined simplified categories with FIXED/VARIABLE budget
 - `CategoryMapping` — links MoneyLoverCategory → AppCategory (1:1)
 
-**Module 2 — Installments** (schema only, UI pending)
-- `Installment` — description, totalAmount, numInstallments, installmentsPaid, monthlyAmount
+**Module 2 — Installments**
+- `Installment` — description, totalAmount, numInstallments, monthlyAmount, optional interest rate (German amortization)
+- `InstallmentPayment` — records each paid slot
 
-**Module 3 — Loans** (schema only, UI pending)
-- `SavingsAccount`, `Debtor`, `Loan`, `LoanPayment`
+**Module 3 — Loans**
+- `SavingsAccount`, `AccountEntry`, `Transfer`, `Debtor`, `Loan`, `LoanPayment`
 
 ## MoneyLover import format
 
@@ -107,6 +107,6 @@ The `getMonthlyAnalysis()` query returns:
 ## Milestones
 
 - [x] **Milestone 1** — Expense Tracker (import, category mapping, analysis dashboard)
-- [ ] **Milestone 2** — Installment Tracker (CRUD + month-end obligation summary)
-- [ ] **Milestone 3** — Loan/Debt Tracker (savings accounts, debtors, partial payments)
-- [ ] **Milestone 4** — Polish + Railway deploy
+- [x] **Milestone 2** — Installment Tracker (CRUD + month-end obligation summary)
+- [x] **Milestone 3** — Loan/Debt Tracker (savings accounts, debtors, partial payments)
+- [x] **Milestone 4** — Polish + deploy (Vercel + Supabase)
