@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useTransition } from "react";
-import { ScrollText, Trash } from "lucide-react";
+import { ScrollText, Trash, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCOP } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { LoansClient } from "./loans-client";
 import { LoanRowActions } from "./loan-row-actions";
 import { deleteLoanPayment, deleteSettledLoans } from "@/lib/actions/loans";
 import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/lib/queries/loans";
+import { MASK } from "./privacy";
 
 // ─── Loan row ─────────────────────────────────────────────────────────────────
 
@@ -18,10 +19,12 @@ function LoanRow({
   loan,
   accounts,
   debtors,
+  masked,
 }: {
   loan: LoanWithRemaining;
   accounts: AccountWithBalance[];
   debtors: DebtorWithLoans[];
+  masked?: boolean;
 }) {
   const [now] = useState(Date.now);
   const pct = loan.amount > 0 ? Math.min(100, (loan.paid / loan.amount) * 100) : 0;
@@ -44,27 +47,31 @@ function LoanRow({
       <TableCell className="px-4">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: loan.accountColor ?? "#888" }} />
-          <span className="text-muted-foreground text-xs truncate">{loan.accountName}</span>
+          <span className="text-muted-foreground text-xs truncate">{masked ? MASK : loan.accountName}</span>
         </div>
       </TableCell>
       <TableCell className="px-4 text-muted-foreground text-xs">
         {new Date(loan.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
       </TableCell>
       <TableCell className="px-4 font-mono text-xs text-muted-foreground">
-        {formatCOP(loan.amount)}
+        {masked ? MASK : formatCOP(loan.amount)}
       </TableCell>
       <TableCell className="px-4">
-        <div className="flex items-center gap-2 min-w-[8rem]">
-          <div className="h-1.5 flex-1 rounded-full bg-muted/50 overflow-hidden">
-            <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pct}%` }} />
+        {masked ? (
+          <div className="h-1.5 flex-1 rounded-full bg-muted/30" />
+        ) : (
+          <div className="flex items-center gap-2 min-w-32">
+            <div className="h-1.5 flex-1 rounded-full bg-muted/50 overflow-hidden">
+              <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="font-mono text-xs text-muted-foreground w-8 shrink-0 text-right">
+              {pct.toFixed(0)}%
+            </span>
           </div>
-          <span className="font-mono text-xs text-muted-foreground w-8 shrink-0 text-right">
-            {pct.toFixed(0)}%
-          </span>
-        </div>
+        )}
       </TableCell>
-      <TableCell className={cn("px-4 font-mono text-sm font-medium text-right", loan.isActive ? "text-foreground" : "text-muted-foreground")}>
-        {loan.remaining > 0 ? formatCOP(loan.remaining) : "—"}
+      <TableCell className={cn("px-4 font-mono text-sm font-medium text-right", masked ? "text-muted-foreground" : loan.isActive ? "text-foreground" : "text-muted-foreground")}>
+        {masked ? MASK : (loan.remaining > 0 ? formatCOP(loan.remaining) : "—")}
       </TableCell>
       <TableCell className={cn("px-4 text-xs text-right hidden md:table-cell", isStale ? "text-warning font-medium" : "text-muted-foreground")}>
         {ageLabel}
@@ -84,9 +91,11 @@ function LoanRow({
         {loan.notes ?? "—"}
       </TableCell>
       <TableCell className="px-4 w-14">
-        <div className="flex justify-end opacity-0 group-hover/loanrow:opacity-100 transition-opacity">
-          <LoanRowActions loan={loan} accounts={accounts} debtors={debtors} />
-        </div>
+        {!masked && (
+          <div className="flex justify-end opacity-0 group-hover/loanrow:opacity-100 transition-opacity">
+            <LoanRowActions loan={loan} accounts={accounts} debtors={debtors} />
+          </div>
+        )}
       </TableCell>
     </TableRow>
   );
@@ -99,11 +108,17 @@ export function DebtorsSection({
   debtors,
   totalEverLent,
   totalRecovered,
+  privacyMode,
+  revealedDebtorId,
+  onReveal,
 }: {
   accounts: AccountWithBalance[];
   debtors: DebtorWithLoans[];
   totalEverLent: number;
   totalRecovered: number;
+  privacyMode: boolean;
+  revealedDebtorId: string | null;
+  onReveal: (id: string) => void;
 }) {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [paymentsDebtor, setPaymentsDebtor] = useState<DebtorWithLoans | null>(null);
@@ -138,15 +153,15 @@ export function DebtorsSection({
       {debtors.length > 0 && (
         <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-lg bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
           <span>
-            <span className="font-medium text-foreground">{formatCOP(totalEverLent)}</span>
+            <span className="font-medium text-foreground">{privacyMode ? MASK : formatCOP(totalEverLent)}</span>
             {" "}total lent
           </span>
           <span>
-            <span className="font-medium text-success">{formatCOP(totalRecovered)}</span>
+            <span className="font-medium text-success">{privacyMode ? MASK : formatCOP(totalRecovered)}</span>
             {" "}recovered
           </span>
           <span>
-            <span className="font-mono font-medium text-foreground">{recoveryPct.toFixed(1)}%</span>
+            <span className="font-mono font-medium text-foreground">{privacyMode ? MASK : `${recoveryPct.toFixed(1)}%`}</span>
             {" "}recovery rate
           </span>
         </div>
@@ -198,14 +213,34 @@ export function DebtorsSection({
                     <div className="flex items-center gap-3 min-w-0">
                       <span className="font-medium">{debtor.name}</span>
                       <span className="font-mono text-sm text-muted-foreground whitespace-nowrap">
-                        {formatCOP(debtor.totalOwed)}
+                        {privacyMode && debtor.id !== revealedDebtorId ? MASK : formatCOP(debtor.totalOwed)}
                       </span>
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
                         {debtor.activeLoansCount} active loan{debtor.activeLoansCount !== 1 ? "s" : ""}
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Button
+                      {privacyMode && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={cn(
+                            "h-7 gap-1 text-xs",
+                            revealedDebtorId === debtor.id
+                              ? "text-primary"
+                              : "text-muted-foreground"
+                          )}
+                          onClick={() => onReveal(debtor.id)}
+                          title={revealedDebtorId === debtor.id ? "Hide amounts" : "Show amounts"}
+                        >
+                          {revealedDebtorId === debtor.id
+                            ? <EyeOff className="size-3" />
+                            : <Eye className="size-3" />
+                          }
+                          {revealedDebtorId === debtor.id ? "Hide" : "Show"}
+                        </Button>
+                      )}
+                      {!(privacyMode && debtor.id !== revealedDebtorId) && (<Button
                         variant="ghost"
                         size="sm"
                         className="h-7 gap-1 text-xs text-muted-foreground"
@@ -213,8 +248,8 @@ export function DebtorsSection({
                       >
                         <ScrollText className="size-3" />
                         Payments
-                      </Button>
-                      {debtor.loans.filter((l) => !l.isActive).length > 0 && (
+                      </Button>)}
+                      {!(privacyMode && debtor.id !== revealedDebtorId) && debtor.loans.filter((l) => !l.isActive).length > 0 && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -230,7 +265,7 @@ export function DebtorsSection({
                           Clear settled ({debtor.loans.filter((l) => !l.isActive).length})
                         </Button>
                       )}
-                      {debtor.totalOwed > 0 && (
+                      {!(privacyMode && debtor.id !== revealedDebtorId) && debtor.totalOwed > 0 && (
                         <LoansClient
                           accounts={accounts}
                           debtors={debtors}
@@ -238,12 +273,14 @@ export function DebtorsSection({
                           debtorId={debtor.id}
                         />
                       )}
-                      <LoansClient
-                        accounts={accounts}
-                        debtors={debtors}
-                        mode="add-loan-button"
-                        debtorId={debtor.id}
-                      />
+                      {!(privacyMode && debtor.id !== revealedDebtorId) && (
+                        <LoansClient
+                          accounts={accounts}
+                          debtors={debtors}
+                          mode="add-loan-button"
+                          debtorId={debtor.id}
+                        />
+                      )}
                     </div>
                   </div>
 
@@ -266,7 +303,13 @@ export function DebtorsSection({
                         </TableHeader>
                         <TableBody>
                           {debtor.loans.map((loan) => (
-                            <LoanRow key={loan.id} loan={loan} accounts={accounts} debtors={debtors} />
+                            <LoanRow
+                              key={loan.id}
+                              loan={loan}
+                              accounts={accounts}
+                              debtors={debtors}
+                              masked={privacyMode && debtor.id !== revealedDebtorId}
+                            />
                           ))}
                         </TableBody>
                       </Table>
@@ -283,15 +326,15 @@ export function DebtorsSection({
         const d = paymentsDebtor ? debtors.find((x) => x.id === paymentsDebtor.id) ?? paymentsDebtor : null;
         const allPayments = d
           ? d.loans
-              .flatMap((l) =>
-                l.payments.map((p) => ({
-                  ...p,
-                  accountName: l.accountName,
-                  accountColor: l.accountColor,
-                  loanDate: l.date,
-                }))
-              )
-              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            .flatMap((l) =>
+              l.payments.map((p) => ({
+                ...p,
+                accountName: l.accountName,
+                accountColor: l.accountColor,
+                loanDate: l.date,
+              }))
+            )
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
           : [];
 
         return (

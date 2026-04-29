@@ -12,6 +12,7 @@ import { deleteAccount, deleteEntry } from "@/lib/actions/loans";
 import { AccountForm } from "./account-form";
 import { EntryForm } from "./entry-form";
 import type { AccountWithBalance } from "@/lib/queries/loans";
+import { MASK } from "./privacy";
 
 function AccountTypeBadge({ type }: { type: string }) {
   const map: Record<string, string> = {
@@ -35,7 +36,7 @@ function EntryTypeBadge({ type }: { type: string }) {
   );
 }
 
-export function AccountCard({ account }: { account: AccountWithBalance }) {
+export function AccountCard({ account, masked }: { account: AccountWithBalance; masked?: boolean }) {
   const [editOpen, setEditOpen] = useState(false);
   const [entryOpen, setEntryOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
@@ -79,14 +80,14 @@ export function AccountCard({ account }: { account: AccountWithBalance }) {
 
           {/* Balance */}
           <div className="flex-1">
-            <p className={cn("font-mono text-lg font-semibold", isNegative ? "text-destructive" : "text-foreground")}>
-              {formatCOP(account.balance)}
+            <p className={cn("font-mono text-lg font-semibold", masked ? "text-muted-foreground tracking-widest" : isNegative ? "text-destructive" : "text-foreground")}>
+              {masked ? MASK : formatCOP(account.balance)}
             </p>
             {account.loansOut > 0 && (
               <p className="text-xs text-muted-foreground font-mono mt-0.5">
                 <span className="font-sans text-muted-foreground/70">+ lent </span>
-                {formatCOP(account.loansOut)}
-                <span className="font-sans text-muted-foreground/50"> = {formatCOP(account.balance + account.loansOut)}</span>
+                {masked ? MASK : formatCOP(account.loansOut)}
+                <span className="font-sans text-muted-foreground/50"> = {masked ? MASK : formatCOP(account.balance + account.loansOut)}</span>
               </p>
             )}
           </div>

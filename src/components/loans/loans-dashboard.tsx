@@ -1,10 +1,15 @@
-import { getLoansOverview } from "@/lib/queries/loans";
+"use client";
+
+import { useState } from "react";
+import { Eye, EyeOff, AlertTriangle } from "lucide-react";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { LoansClient } from "./loans-client";
 import { AccountCard } from "./account-card";
 import { DebtorsSection } from "./debtors-section";
+import type { LoansOverview } from "@/lib/queries/loans";
+import { MASK } from "./privacy";
 
 // ─── KPI strip ────────────────────────────────────────────────────────────────
 
@@ -32,9 +37,21 @@ function KpiCard({
 
 // ─── Main dashboard ───────────────────────────────────────────────────────────
 
-export async function LoansDashboard() {
-  const data = await getLoansOverview();
-  const liquidityWarn = data.liquidityRatio !== null && data.liquidityRatio < 10;
+export function LoansDashboard({ data }: { data: LoansOverview }) {
+  const [privacyMode, setPrivacyMode] = useState(false);
+  const [revealedDebtorId, setRevealedDebtorId] = useState<string | null>(null);
+
+  const liquidityWarn = !privacyMode && data.liquidityRatio !== null && data.liquidityRatio < 10;
+  const activeDebtorCount = data.debtors.filter((d) => d.totalOwed > 0).length;
+
+  function handleReveal(id: string) {
+    setRevealedDebtorId((prev) => (prev === id ? null : id));
+  }
+
+  function handlePrivacyToggle() {
+    if (privacyMode) setRevealedDebtorId(null);
+    setPrivacyMode((prev) => !prev);
+  }
 
   return (
     <div className="space-y-8">
@@ -44,31 +61,43 @@ export async function LoansDashboard() {
           <h1 className="font-heading text-2xl font-semibold">Savings & Loans</h1>
           <p className="text-sm text-muted-foreground">Account balances and outstanding loans</p>
         </div>
-        <LoansClient accounts={data.accounts} debtors={data.debtors} mode="action-bar" />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn("gap-1.5", privacyMode && "border-primary/50 text-primary")}
+            onClick={handlePrivacyToggle}
+            title={privacyMode ? "Exit privacy mode" : "Enter privacy mode"}
+          >
+            {privacyMode ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+            Privacy
+          </Button>
+          <LoansClient accounts={data.accounts} debtors={data.debtors} mode="action-bar" />
+        </div>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <KpiCard
           label="Available"
-          value={formatCOP(data.available)}
+          value={privacyMode ? MASK : formatCOP(data.available)}
           sub="liquid accounts"
-          highlight={data.available >= 0 ? "neutral" : "bad"}
+          highlight={privacyMode ? "neutral" : data.available >= 0 ? "neutral" : "bad"}
         />
         <KpiCard
           label="In Loans"
-          value={formatCOP(data.inLoans)}
-          sub={`${data.debtors.filter((d) => d.totalOwed > 0).length} active debtors`}
+          value={privacyMode ? MASK : formatCOP(data.inLoans)}
+          sub={`${activeDebtorCount} active debtor${activeDebtorCount !== 1 ? "s" : ""}`}
         />
         <KpiCard
           label="Total Savings"
-          value={formatCOP(data.totalSavings)}
+          value={privacyMode ? MASK : formatCOP(data.totalSavings)}
           sub="available + in loans"
           highlight="neutral"
         />
         <KpiCard
           label="Liquidity"
-          value={data.liquidityRatio !== null ? `${data.liquidityRatio.toFixed(1)}%` : "—"}
+          value={privacyMode ? MASK : (data.liquidityRatio !== null ? `${data.liquidityRatio.toFixed(1)}%` : "—")}
           sub="available / total"
           highlight={liquidityWarn ? "bad" : "neutral"}
           warn={liquidityWarn}
@@ -88,7 +117,7 @@ export async function LoansDashboard() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {data.accounts.map((a) => (
-              <AccountCard key={a.id} account={a} />
+              <AccountCard key={a.id} account={a} masked={privacyMode} />
             ))}
           </div>
         )}
@@ -100,6 +129,9 @@ export async function LoansDashboard() {
         debtors={data.debtors}
         totalEverLent={data.totalEverLent}
         totalRecovered={data.totalRecovered}
+        privacyMode={privacyMode}
+        revealedDebtorId={revealedDebtorId}
+        onReveal={handleReveal}
       />
     </div>
   );
