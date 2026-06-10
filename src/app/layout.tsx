@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Sora, DM_Sans, JetBrains_Mono } from "next/font/google";
 import { cookies } from "next/headers";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const sora = Sora({
@@ -42,7 +43,10 @@ export default async function RootLayout({
       lang="en"
       className={`${theme} ${sora.variable} ${dmSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="h-full">{children}</body>
+      <body className="h-full">
+        {children}
+        <Toaster richColors position="bottom-right" />
+      </body>
     </html>
   );
 }

@@ -7,14 +7,21 @@ import { deleteInstallment } from "@/lib/actions/installments";
 import { InstallmentForm } from "./installment-form";
 import type { InstallmentRow } from "@/lib/queries/installments";
 
+type FormData = {
+  formCards?: { id: string; name: string; color: string | null }[];
+  formDebtors?: { id: string; name: string }[];
+  formAccounts?: { id: string; name: string }[];
+};
+
 export function InstallmentActions(
   props:
-    | { mode: "add-button" }
-    | { mode: "row-actions"; installment: InstallmentRow }
+    | ({ mode: "add-button" } & FormData)
+    | ({ mode: "row-actions"; installment: InstallmentRow } & FormData)
 ) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<InstallmentRow | null>(null);
   const [deletePending, startDelete] = useTransition();
+  const { formCards = [], formDebtors = [], formAccounts = [] } = props;
 
   function openAdd() {
     setEditing(null);
@@ -40,7 +47,14 @@ export function InstallmentActions(
           <Plus className="size-3.5" />
           Add installment
         </Button>
-        <InstallmentForm open={open} onClose={() => setOpen(false)} editing={null} />
+        <InstallmentForm
+          open={open}
+          onClose={() => setOpen(false)}
+          editing={null}
+          cards={formCards}
+          debtors={formDebtors}
+          accounts={formAccounts}
+        />
       </>
     );
   }
@@ -71,6 +85,9 @@ export function InstallmentActions(
         open={open}
         onClose={() => setOpen(false)}
         editing={editing}
+        cards={formCards}
+        debtors={formDebtors}
+        accounts={formAccounts}
       />
     </>
   );

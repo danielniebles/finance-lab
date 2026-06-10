@@ -13,9 +13,15 @@ import { InstallmentActions } from "./installment-actions";
 import { formatCOP } from "@/lib/format";
 import type { InstallmentRow } from "@/lib/queries/installments";
 
+type FormData = {
+  formCards: { id: string; name: string; color: string | null }[];
+  formDebtors: { id: string; name: string }[];
+  formAccounts: { id: string; name: string }[];
+};
+
 type Props = {
   installments: InstallmentRow[];
-};
+} & Partial<FormData>;
 
 function StatusBadge({ status }: { status: "Active" | "Finished" }) {
   if (status === "Finished") {
@@ -49,7 +55,12 @@ function ProgressBar({ paid, total }: { paid: number; total: number }) {
   );
 }
 
-export function AllInstallmentsTable({ installments }: Props) {
+export function AllInstallmentsTable({
+  installments,
+  formCards = [],
+  formDebtors = [],
+  formAccounts = [],
+}: Props) {
   const [showFinished, setShowFinished] = useState(false);
 
   const finishedCount = installments.filter((i) => i.status === "Finished").length;
@@ -72,7 +83,12 @@ export function AllInstallmentsTable({ installments }: Props) {
               {showFinished ? "Hide finished" : `Show finished (${finishedCount})`}
             </button>
           )}
-          <InstallmentActions mode="add-button" />
+          <InstallmentActions
+            mode="add-button"
+            formCards={formCards}
+            formDebtors={formDebtors}
+            formAccounts={formAccounts}
+          />
         </div>
       </div>
 
@@ -94,6 +110,7 @@ export function AllInstallmentsTable({ installments }: Props) {
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30 border-border">
                 <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground">Item</TableHead>
+                <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Card</TableHead>
                 <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Total</TableHead>
                 <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Monthly</TableHead>
                 <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground hidden md:table-cell">Rate</TableHead>
@@ -111,6 +128,19 @@ export function AllInstallmentsTable({ installments }: Props) {
                     <div className="font-medium">{inst.description}</div>
                     {inst.notes && (
                       <div className="text-xs text-muted-foreground">{inst.notes}</div>
+                    )}
+                  </TableCell>
+                  <TableCell className="px-4 hidden sm:table-cell">
+                    {inst.cardName ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        <span
+                          className="size-2 rounded-full shrink-0"
+                          style={{ backgroundColor: inst.cardColor ?? undefined }}
+                        />
+                        {inst.cardName}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground/50">—</span>
                     )}
                   </TableCell>
                   <TableCell className="px-4 text-right font-mono text-sm">
@@ -147,7 +177,13 @@ export function AllInstallmentsTable({ installments }: Props) {
                     </div>
                   </TableCell>
                   <TableCell className="px-4">
-                    <InstallmentActions mode="row-actions" installment={inst} />
+                    <InstallmentActions
+                      mode="row-actions"
+                      installment={inst}
+                      formCards={formCards}
+                      formDebtors={formDebtors}
+                      formAccounts={formAccounts}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

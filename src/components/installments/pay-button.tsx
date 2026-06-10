@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { CheckCircle2, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { markPayment, unmarkPayment } from "@/lib/actions/installments";
 
 export function PayButton({
@@ -24,7 +25,10 @@ export function PayButton({
       if (isPaid && paymentId) {
         await unmarkPayment(paymentId);
       } else {
-        await markPayment(installmentId, installmentNum, new Date());
+        const result = await markPayment(installmentId, installmentNum, new Date());
+        if (result.loanCreated) {
+          toast.success(`Loan recorded for ${result.debtorName}`);
+        }
       }
     });
   }

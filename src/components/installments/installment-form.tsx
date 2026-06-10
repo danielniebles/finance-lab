@@ -11,6 +11,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 import { createInstallment, updateInstallment } from "@/lib/actions/installments";
 import { computeInstallmentDue, eaToMonthly, monthlyToEA } from "@/lib/installment-utils";
 import { cn } from "@/lib/utils";
@@ -26,6 +32,9 @@ type FormState = {
   rateType: RateType;
   startDate: string; // "YYYY-MM-DD"
   notes: string;
+  cardId: string | null;
+  debtorId: string | null;
+  fundingAccountId: string | null;
 };
 
 const EMPTY: FormState = {
@@ -36,6 +45,9 @@ const EMPTY: FormState = {
   rateType: "monthly",
   startDate: "",
   notes: "",
+  cardId: null,
+  debtorId: null,
+  fundingAccountId: null,
 };
 
 function toFormState(row: InstallmentRow): FormState {
@@ -52,6 +64,9 @@ function toFormState(row: InstallmentRow): FormState {
     rateType: "monthly",
     startDate: `${yyyy}-${mm}-${dd}`,
     notes: row.notes ?? "",
+    cardId: row.cardId,
+    debtorId: row.debtorId,
+    fundingAccountId: row.fundingAccountId,
   };
 }
 
@@ -59,10 +74,16 @@ export function InstallmentForm({
   open,
   onClose,
   editing,
+  cards = [],
+  debtors = [],
+  accounts = [],
 }: {
   open: boolean;
   onClose: () => void;
   editing: InstallmentRow | null;
+  cards?: { id: string; name: string; color: string | null }[];
+  debtors?: { id: string; name: string }[];
+  accounts?: { id: string; name: string }[];
 }) {
   const [form, setForm] = useState<FormState>(() =>
     editing ? toFormState(editing) : EMPTY
@@ -114,6 +135,9 @@ export function InstallmentForm({
       monthlyInterestRate: getMonthlyRate(),
       startDate: new Date(form.startDate + "T12:00:00"),
       notes: form.notes.trim() || undefined,
+      cardId: form.cardId,
+      debtorId: form.debtorId,
+      fundingAccountId: form.fundingAccountId,
     };
     if (!data.description || isNaN(data.totalAmount) || isNaN(data.numInstallments)) return;
 
@@ -276,6 +300,107 @@ export function InstallmentForm({
               onChange={(e) => set("notes", e.target.value)}
               placeholder="Optional notes"
             />
+          </div>
+
+          {/* Optional links */}
+          <div className="border-t border-border pt-4 space-y-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Optional links
+            </p>
+
+            {/* Card picker */}
+            <div className="space-y-1.5">
+              <Label>
+                Credit card{" "}
+                <span className="text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              <Select
+                value={form.cardId ?? ""}
+                onValueChange={(v) => set("cardId", v || null)}
+              >
+                <SelectTrigger className="h-8">
+                  <span className="text-sm">
+                    {form.cardId
+                      ? (cards.find((c) => c.id === form.cardId)?.name ?? "Unknown card")
+                      : "None"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {cards.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Debtor picker */}
+            <div className="space-y-1.5">
+              <Label>
+                For debtor{" "}
+                <span className="text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              <Select
+                value={form.debtorId ?? ""}
+                onValueChange={(v) => {
+                  set("debtorId", v || null);
+                  if (!v) set("fundingAccountId", null);
+                }}
+              >
+                <SelectTrigger className="h-8">
+                  <span className="text-sm">
+                    {form.debtorId
+                      ? (debtors.find((d) => d.id === form.debtorId)?.name ?? "Unknown debtor")
+                      : "None"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {debtors.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Funding account picker — conditional on debtorId */}
+            {form.debtorId && (
+              <div className="space-y-1.5">
+                <Label>
+                  Funding account{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (the account you paid from)
+                  </span>
+                </Label>
+                <Select
+                  value={form.fundingAccountId ?? ""}
+                  onValueChange={(v) => set("fundingAccountId", v || null)}
+                >
+                  <SelectTrigger className="h-8">
+                    <span className="text-sm">
+                      {form.fundingAccountId
+                        ? (accounts.find((a) => a.id === form.fundingAccountId)?.name ?? "Unknown account")
+                        : "None"}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">None</SelectItem>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground/70">
+                  Each cuota paid will create a Loan record under this debtor.
+                </p>
+              </div>
+            )}
           </div>
 
           <DialogFooter>

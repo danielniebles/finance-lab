@@ -1,4 +1,10 @@
 import { InstallmentsDashboard } from "@/components/installments/installments-dashboard";
+import {
+  getAllInstallments,
+  getMonthSummary,
+  getCardSummaries,
+  getInstallmentFormData,
+} from "@/lib/queries/installments";
 
 export const dynamic = "force-dynamic";
 
@@ -12,5 +18,23 @@ export default async function InstallmentsPage({
   const month = params.month ? parseInt(params.month, 10) : now.getMonth() + 1;
   const year = params.year ? parseInt(params.year, 10) : now.getFullYear();
 
-  return <InstallmentsDashboard month={month} year={year} />;
+  const [allInstallments, cards, formData] = await Promise.all([
+    getAllInstallments(),
+    getCardSummaries(month, year),
+    getInstallmentFormData(),
+  ]);
+  const summary = await getMonthSummary(month, year, allInstallments);
+
+  return (
+    <InstallmentsDashboard
+      month={month}
+      year={year}
+      allInstallments={allInstallments}
+      summary={summary}
+      cards={cards}
+      formCards={formData.cards}
+      formDebtors={formData.debtors}
+      formAccounts={formData.accounts}
+    />
+  );
 }

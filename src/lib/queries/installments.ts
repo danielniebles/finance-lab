@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { computeInstallmentDue } from "@/lib/installment-utils";
+import { computeInstallmentDue, computeMonthSummary, isDueInMonth } from "@/lib/installment-utils";
 
 export type InstallmentStatus = "Active" | "Finished";
 
@@ -17,6 +17,13 @@ export type InstallmentRow = {
   remaining: number;
   status: InstallmentStatus;
   payments: { id: string; installmentNum: number; paidAt: Date }[];
+  // credit card / debtor / funding account links
+  cardId: string | null;
+  cardName: string | null;
+  cardColor: string | null;
+  debtorId: string | null;
+  debtorName: string | null;
+  fundingAccountId: string | null;
 };
 
 export type MonthSummary = {
@@ -42,21 +49,15 @@ export function paymentDate(startDate: Date, installmentNum: number): Date {
   return d;
 }
 
-/** Returns true if the nth payment falls in the given month/year. */
-function isDueInMonth(
-  startDate: Date,
-  installmentNum: number,
-  month: number,
-  year: number
-): boolean {
-  const d = paymentDate(startDate, installmentNum);
-  return d.getMonth() + 1 === month && d.getFullYear() === year;
-}
 
 export async function getAllInstallments(): Promise<InstallmentRow[]> {
   const rows = await db.installment.findMany({
     orderBy: { createdAt: "desc" },
-    include: { payments: { orderBy: { installmentNum: "asc" } } },
+    include: {
+      payments: { orderBy: { installmentNum: "asc" } },
+      card: { select: { id: true, name: true, color: true } },
+      debtor: { select: { id: true, name: true } },
+    },
   });
 
   return rows
@@ -86,6 +87,12 @@ export async function getAllInstallments(): Promise<InstallmentRow[]> {
           installmentNum: p.installmentNum,
           paidAt: p.paidAt,
         })),
+        cardId: r.cardId,
+        cardName: r.card?.name ?? null,
+        cardColor: r.card?.color ?? null,
+        debtorId: r.debtorId,
+        debtorName: r.debtor?.name ?? null,
+        fundingAccountId: r.fundingAccountId,
       };
     })
     // Active first, Finished at the bottom
@@ -107,51 +114,98 @@ export async function getMonthSummary(
   installments?: InstallmentRow[],
 ): Promise<MonthSummary> {
   const all = installments ?? await getAllInstallments();
+  return computeMonthSummary(month, year, all);
+}
 
-  const dueThisMonth: DueThisMonth[] = [];
+// ─── Credit Card summaries ────────────────────────────────────────────────────
 
-  for (const inst of all) {
-    for (let n = 1; n <= inst.numInstallments; n++) {
-      if (isDueInMonth(inst.startDate, n, month, year)) {
-        const payment = inst.payments.find((p) => p.installmentNum === n) ?? null;
-        dueThisMonth.push({
-          installment: inst,
-          installmentNum: n,
-          amount: computeInstallmentDue(
-            inst.totalAmount,
-            inst.numInstallments,
-            n,
-            inst.monthlyInterestRate,
-          ),
-          payment: payment
-            ? { id: payment.id, paidAt: payment.paidAt }
-            : null,
-        });
-      }
-    }
-  }
+export type CreditCardSummary = {
+  id: string;
+  name: string;
+  color: string | null;
+  creditLimit: number | null;
+  paymentDueDay: number | null;
+  /** Sum of remaining capital across active installments on this card (ADR-006: never stored). */
+  outstandingDebt: number;
+  /** Sum of computeInstallmentDue(k) for each active installment's slot due in the given month. */
+  monthlyObligation: number;
+  /** Count of active (not fully paid) installments on this card. */
+  installmentCount: number;
+};
 
-  const totalObligation = dueThisMonth.reduce((s, d) => s + d.amount, 0);
-  const totalPaid = dueThisMonth
-    .filter((d) => d.payment !== null)
-    .reduce((s, d) => s + d.amount, 0);
-  const totalDue = totalObligation - totalPaid;
-  const activeCount = all.filter((i) => i.status === "Active").length;
-  const totalRemainingDebt = all.reduce((s, i) => s + i.remaining, 0);
-
-  // Unpaid first, paid at the bottom
-  dueThisMonth.sort((a, b) => {
-    if (a.payment === null && b.payment !== null) return -1;
-    if (a.payment !== null && b.payment === null) return 1;
-    return 0;
+export async function getCardSummaries(
+  month: number,
+  year: number
+): Promise<CreditCardSummary[]> {
+  const cards = await db.creditCard.findMany({
+    orderBy: { name: "asc" },
+    include: {
+      installments: {
+        include: { payments: { orderBy: { installmentNum: "asc" } } },
+      },
+    },
   });
 
-  return {
-    totalObligation,
-    totalPaid,
-    totalDue,
-    activeCount,
-    totalRemainingDebt,
-    dueThisMonth,
-  };
+  return cards.map((card) => {
+    let outstandingDebt = 0;
+    let monthlyObligation = 0;
+    let installmentCount = 0;
+
+    for (const inst of card.installments) {
+      const paidCount = inst.payments.length;
+      const remainingSlots = inst.numInstallments - paidCount;
+      if (remainingSlots <= 0) continue;
+
+      installmentCount += 1;
+      outstandingDebt += inst.monthlyAmount * remainingSlots;
+
+      // Find the slot k that falls in the given month/year
+      for (let k = 1; k <= inst.numInstallments; k++) {
+        if (isDueInMonth(inst.startDate, k, month, year)) {
+          // Only count if this slot is not yet paid
+          const isPaid = inst.payments.some((p) => p.installmentNum === k);
+          if (!isPaid) {
+            monthlyObligation += computeInstallmentDue(
+              inst.totalAmount,
+              inst.numInstallments,
+              k,
+              inst.monthlyInterestRate ?? undefined,
+            );
+          }
+          break;
+        }
+      }
+    }
+
+    return {
+      id: card.id,
+      name: card.name,
+      color: card.color,
+      creditLimit: card.creditLimit,
+      paymentDueDay: card.paymentDueDay,
+      outstandingDebt,
+      monthlyObligation,
+      installmentCount,
+    };
+  });
+}
+
+// ─── Form data helpers ────────────────────────────────────────────────────────
+
+export async function getInstallmentFormData() {
+  const [cards, debtors, accounts] = await Promise.all([
+    db.creditCard.findMany({
+      select: { id: true, name: true, color: true },
+      orderBy: { name: "asc" },
+    }),
+    db.debtor.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    db.savingsAccount.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+  return { cards, debtors, accounts };
 }
