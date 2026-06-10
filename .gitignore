@@ -49,3 +49,4 @@ next-env.d.ts
 # db backups and personal seed data
 /backups
 /prisma/seed*.sql
+.handoff/
