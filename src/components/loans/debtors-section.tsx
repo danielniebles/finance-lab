@@ -290,7 +290,7 @@ export function DebtorsSection({
                       <Table className="table-fixed">
                         <TableHeader>
                           <TableRow className="bg-muted/20 hover:bg-muted/20 border-border/50">
-                            <TableHead className="px-4 h-8 w-[130px] text-xs text-muted-foreground">Account</TableHead>
+                            <TableHead className="px-4 h-8 w-32.5 text-xs text-muted-foreground">Account</TableHead>
                             <TableHead className="px-4 h-8 w-[95px] text-xs text-muted-foreground">Date</TableHead>
                             <TableHead className="px-4 h-8 w-[110px] text-xs text-muted-foreground">Original</TableHead>
                             <TableHead className="px-4 h-8 w-[155px] text-xs text-muted-foreground">Repaid</TableHead>

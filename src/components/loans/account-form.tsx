@@ -11,7 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { createAccount, updateAccount } from "@/lib/actions/loans";
-import { AccountType } from "@prisma/client";
+import { AccountType } from "@/generated/prisma/enums";
 import type { AccountWithBalance } from "@/lib/queries/loans";
 
 const PRESET_COLORS = [
@@ -109,16 +109,19 @@ export function AccountForm({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label>Name</Label>
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Nu" required />
+            <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Bancolombia" required />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Type</Label>
-              <Select value={form.accountType} onValueChange={(v) => v && set("accountType", v as AccountType)}>
+              <Select
+                value={form.accountType}
+                onValueChange={(v) => { if (v) set("accountType", v as AccountType); }}
+              >
                 <SelectTrigger className="h-8">
                   <span className="text-sm">
-                    {form.accountType === "BANK" ? "Bank" : form.accountType === "DIGITAL" ? "Digital Wallet" : "Pension (AFP)"}
+                    {({ BANK: "Bank", DIGITAL: "Digital Wallet", PENSION: "Pension (AFP)" } as Record<string, string>)[form.accountType] ?? form.accountType}
                   </span>
                 </SelectTrigger>
                 <SelectContent>

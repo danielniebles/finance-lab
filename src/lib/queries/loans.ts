@@ -93,7 +93,7 @@ export async function getLoansOverview(): Promise<LoansOverview> {
     return {
       id: acc.id,
       name: acc.name,
-      accountType: acc.accountType,
+      accountType: acc.accountType as "BANK" | "DIGITAL" | "PENSION",
       color: acc.color,
       includeInAvailable: acc.includeInAvailable,
       balance,

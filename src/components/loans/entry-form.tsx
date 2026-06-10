@@ -11,7 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { createEntry } from "@/lib/actions/loans";
-import { EntryType } from "@prisma/client";
+import { EntryType } from "@/generated/prisma/enums";
 import type { AccountWithBalance } from "@/lib/queries/loans";
 
 export function EntryForm({

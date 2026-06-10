@@ -1,7 +1,6 @@
 "use server";
 
 import { db } from "@/lib/db";
-import type { PrismaClient } from "@prisma/client";
 import { parseMoneyLoverBuffer } from "@/lib/parse-moneylover";
 import { revalidatePath } from "next/cache";
 
@@ -17,7 +16,7 @@ export async function importBuffer(buffer: Buffer, filename: string) {
 
   const { transactions, categories, periodStart, periodEnd, month, year } = parsed;
 
-  await db.$transaction(async (tx: Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">) => {
+  await db.$transaction(async (tx) => {
     // Delete existing batch for same month/year (replace strategy)
     await tx.importBatch.deleteMany({ where: { month, year } });
 

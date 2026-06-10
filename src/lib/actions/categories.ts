@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { BudgetType } from "@prisma/client";
+import { BudgetType } from "@/generated/prisma/enums";
 import { revalidatePath } from "next/cache";
 
 export async function createAppCategory(data: { name: string }) {

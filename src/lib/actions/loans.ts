@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { AccountType, EntryType } from "@prisma/client";
+import { AccountType, EntryType } from "@/generated/prisma/enums";
 
 const PATH = "/loans";
 
