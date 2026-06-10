@@ -1,5 +1,6 @@
 generator client {
   provider      = "prisma-client-js"
+  output        = "../src/generated/prisma"
   binaryTargets = ["native", "windows", "linux-musl-openssl-3.0.x", "rhel-openssl-3.0.x"]
 }
 
@@ -75,17 +76,33 @@ enum BudgetType {
 
 // ─── Module 2: Installment Tracker ────────────────────────────────────────────
 
+model CreditCard {
+  id                String        @id @default(cuid())
+  name              String        @unique
+  creditLimit       Float?
+  billingClosingDay Int?
+  paymentDueDay     Int?
+  color             String?
+  installments      Installment[]
+}
+
 model Installment {
-  id                 String               @id @default(cuid())
-  description        String
-  totalAmount        Float
-  numInstallments    Int
-  monthlyAmount      Float                // stored via computeMonthlyAmount()
+  id                  String               @id @default(cuid())
+  description         String
+  totalAmount         Float
+  numInstallments     Int
+  monthlyAmount       Float                // stored via computeMonthlyAmount()
   monthlyInterestRate Float?               // null = no interest; stored as % m.v. (mensual vencido)
-  startDate          DateTime             // date of first payment (e.g. 2025-11-10)
-  notes              String?
-  createdAt          DateTime             @default(now())
-  payments           InstallmentPayment[]
+  startDate           DateTime             // date of first payment (e.g. 2025-11-10)
+  notes               String?
+  createdAt           DateTime             @default(now())
+  payments            InstallmentPayment[]
+  cardId              String?
+  card                CreditCard?          @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  debtorId            String?
+  debtor              Debtor?              @relation(fields: [debtorId], references: [id], onDelete: SetNull)
+  fundingAccountId    String?
+  fundingAccount      SavingsAccount?      @relation("InstallmentFunding", fields: [fundingAccountId], references: [id], onDelete: SetNull)
 }
 
 model InstallmentPayment {
@@ -108,6 +125,7 @@ model SavingsAccount {
   loansGiven         Loan[]
   transfersFrom      Transfer[]     @relation("TransferFrom")
   transfersTo        Transfer[]     @relation("TransferTo")
+  fundedInstallments Installment[]  @relation("InstallmentFunding")
 }
 
 enum AccountType {
@@ -143,10 +161,11 @@ model Transfer {
 }
 
 model Debtor {
-  id    String  @id @default(cuid())
-  name  String  @unique
-  notes String?
-  loans Loan[]
+  id           String        @id @default(cuid())
+  name         String        @unique
+  notes        String?
+  loans        Loan[]
+  installments Installment[]
 }
 
 model Loan {
