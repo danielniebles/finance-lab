@@ -4,6 +4,7 @@ WORKDIR /app
 
 # Install dependencies first (cached layer)
 COPY package*.json ./
+COPY prisma/schema.prisma ./prisma/
 RUN npm ci
 
 EXPOSE 3000

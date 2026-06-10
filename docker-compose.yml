@@ -22,6 +22,7 @@ services:
       - "3000:3000"
     environment:
       DATABASE_URL: postgresql://financelab:financelab@db:5432/financelab
+      DIRECT_URL: postgresql://financelab:financelab@db:5432/financelab
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       FINANCIAL_MONTH_START_DAY: ${FINANCIAL_MONTH_START_DAY:-1}
       CHOKIDAR_USEPOLLING: "true"
