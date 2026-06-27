@@ -1,7 +1,7 @@
 "use client";
 
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
-import { formatCOP } from "@/lib/format";
+import { formatCOP, formatShort } from "@/lib/format";
 import { paletteColor } from "@/lib/chart-colors";
 
 const TOOLTIP_STYLE = {
@@ -41,26 +41,24 @@ function buildSlices(data: { name: string; spent: number }[]): Slice[] {
 export function ExpenseDonut({
   categories,
   totalExpenses,
-  savingsRate,
 }: {
   categories: { name: string; spent: number }[];
   totalExpenses: number;
-  savingsRate: number | null;
 }) {
   const slices = buildSlices(categories);
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* Donut — centred, full width */}
-      <div className="relative mx-auto w-full max-w-[220px]">
-        <ResponsiveContainer width="100%" height={220}>
+    <div className="flex flex-row items-start gap-6">
+      {/* Donut — fixed size, shrink-0 */}
+      <div className="relative shrink-0 w-44 h-44">
+        <ResponsiveContainer width="100%" height={176}>
           <PieChart>
             <Pie
               data={slices}
               cx="50%"
               cy="50%"
-              innerRadius={68}
-              outerRadius={100}
+              innerRadius={54}
+              outerRadius={80}
               paddingAngle={2}
               dataKey="value"
               stroke="none"
@@ -81,42 +79,40 @@ export function ExpenseDonut({
           </PieChart>
         </ResponsiveContainer>
 
-        {/* Center: savings rate % — compact enough unlike COP amounts */}
+        {/* Center: Total Spent */}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          {savingsRate !== null ? (
-            <>
-              <span className="font-mono text-2xl font-bold leading-none tabular-nums">
-                {savingsRate.toFixed(0)}%
-              </span>
-              <span className="mt-1 text-xs text-muted-foreground uppercase tracking-wider">
-                saved
-              </span>
-            </>
-          ) : (
-            <span className="text-sm text-muted-foreground">—</span>
-          )}
+          <span className="font-mono text-lg font-bold leading-none tabular-nums">
+            {formatShort(totalExpenses)}
+          </span>
+          <span className="mt-1 text-xs text-muted-foreground uppercase tracking-wider">
+            total spent
+          </span>
         </div>
       </div>
 
-      {/* Legend — two-column grid */}
-      <div className="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-x-6">
+      {/* Legend — two-row per item, right side */}
+      <div className="grid grid-cols-2 gap-x-6 gap-y-3 flex-1 min-w-0">
         {slices.map((slice) => {
           const pct = totalExpenses > 0 ? (slice.value / totalExpenses) * 100 : 0;
           return (
-            <div key={slice.name} className="flex items-center gap-2.5 min-w-0">
-              <span
-                className="size-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: slice.color }}
-              />
-              <span className="flex-1 truncate text-sm text-muted-foreground">
-                {slice.name}
-              </span>
-              <span className="font-mono text-sm tabular-nums text-foreground shrink-0">
-                {formatCOP(slice.value)}
-              </span>
-              <span className="w-9 text-right font-mono text-xs tabular-nums text-muted-foreground shrink-0">
-                {pct.toFixed(0)}%
-              </span>
+            <div key={slice.name} className="space-y-0.5 min-w-0">
+              <div className="flex items-center gap-2">
+                <span
+                  className="size-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: slice.color }}
+                />
+                <span className="truncate text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                  {slice.name}
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between pl-4">
+                <span className="font-mono text-sm tabular-nums text-foreground">
+                  {formatCOP(slice.value)}
+                </span>
+                <span className="font-mono text-xs tabular-nums text-muted-foreground ml-2">
+                  {pct.toFixed(0)}%
+                </span>
+              </div>
             </div>
           );
         })}
