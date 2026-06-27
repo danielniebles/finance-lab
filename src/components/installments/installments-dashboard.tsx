@@ -140,7 +140,7 @@ export function InstallmentsDashboard({
             </Button>
           </div>
           {cards.length > 0 && (
-            <div className="flex gap-3 overflow-x-auto pb-1">
+            <div className="flex gap-3 overflow-x-auto py-1 -my-1 px-1">
               {cards.map((c) => (
                 <CreditCardTile
                   key={c.id}
