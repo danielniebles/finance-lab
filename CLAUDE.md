@@ -24,7 +24,7 @@ This project uses the **base-nova** style of shadcn which uses `@base-ui/react` 
 
 - Generated client output: `src/generated/prisma/`
 - Import `PrismaClient` from `@/generated/prisma/client`
-- Import enums (e.g. `BudgetType`) from `@/generated/prisma/enums`
+- Import enums (e.g. `BudgetType`) from `@/generated/prisma` (not the `/enums` subpath — webpack can't resolve it through the generated package's exports map)
 - After schema changes: `nvm use node && npx prisma migrate dev --name <name>`
 - After generate-only: `nvm use node && npx prisma generate`
 - Client singleton in `src/lib/db.ts`
