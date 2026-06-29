@@ -86,13 +86,25 @@ while (true) {
 
 ---
 
-### Credit Cards + Installment–Loan bridge (high value, medium-large effort)
+### Credit Cards + Installment–Loan bridge (high value, medium-large effort) — partially implemented
 
 **Mental model (important):**
 - **Loans module** = liquidity tracker. Savings accounts + money owed TO Daniel by debtors. Credit cards must NOT appear here — they are bank debt, not a savings vehicle.
 - **Installments module** = obligations tracker. What Daniel owes the bank, month by month, card by card.
 
-**Feature 1 — Credit card management in Installments**
+**Feature 1 — Credit card management in Installments** ✅ DONE
+
+Implemented: `CreditCard` model (`prisma/schema.prisma`), `Installment` new FKs (`cardId`, `debtorId`, `fundingAccountId`), `CreditCardTile` + `CreditCardManager` components, per-card filter in `InstallmentsDashboard` (now a `"use client"` component), `getCardSummaries()` query, CreditCard CRUD server actions (`createCard`, `updateCard`, `deleteCard`). See ADR-013 for the `prisma.config.ts` directUrl fix required to run the migration.
+
+**Feature 2 — Auto-create Loan records when paying a debtor-linked installment**
+
+⬜ Still pending. The `markPayment` action already auto-creates a `Loan` record when both `debtorId` and `fundingAccountId` are set — the bridge logic is in place. What remains is full end-to-end validation and any UI feedback (toast showing which debtor received the auto-loan).
+
+---
+
+**Original feature spec below (for reference):**
+
+**Feature 1 — Credit card management in Installments (original spec)**
 
 New `CreditCard` model (lives in the Installments domain):
 ```prisma

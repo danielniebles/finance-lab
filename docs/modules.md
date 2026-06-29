@@ -21,19 +21,19 @@ src/
       chat/route.ts         — Streaming AI advisor endpoint (POST)
   components/
     app-sidebar.tsx         — Sidebar nav + theme toggle
-    overview/               — OverviewDashboard, ExpenseDonut
+    overview/               — OverviewDashboard (BudgetBarsPanel, TopUnplannedPanel), ExpenseDonut
     expenses/               — ImportForm, AnalysisDashboard, CategoryBreakdownTable, PeriodSelector
     trends/                 — TrendsDashboard (Recharts)
-    installments/           — InstallmentsDashboard, InstallmentForm, PayButton, MonthNav, AllInstallmentsTable
+    installments/           — InstallmentsDashboard (client), InstallmentForm, PayButton, MonthNav, AllInstallmentsTable, InstallmentActions, CreditCardTile, CreditCardManager
     loans/                  — LoansDashboard, AccountCard, DebtorForm, LoanForm, PaymentForm, EntryForm, AccountForm, TransferForm, LoansClient, LoanRowActions
     settings/               — CategoryList, MappingList
     chat/                   — FloatingChat, ChatProvider, ChatMessages, ChatInput
     ui/                     — shadcn/ui base-nova primitives
   lib/
     db.ts                   — Prisma client singleton
-    format.ts               — formatCOP(), MONTH_NAMES
+    format.ts               — formatCOP(), formatShort(), MONTH_NAMES
     utils.ts                — cn() (clsx + tailwind-merge)
-    installment-utils.ts    — computeMonthlyAmount(), computeInstallmentDue(), rate converters
+    installment-utils.ts    — computeMonthlyAmount(), computeInstallmentDue(), isDueInMonth(), computeMonthSummary(), rate converters
     parse-moneylover.ts     — XLSX → Transaction[] parser
     queries/
       expenses.ts           — getMonthlyAnalysis(), getImportBatches(), getUnmappedCategories()
@@ -59,8 +59,8 @@ src/
 ## Module breakdown
 
 ### `src/app/(app)/overview`
-**Responsibility:** Home dashboard. Aggregates data from all three modules into a single-page health summary.
-**Key files:** `overview/page.tsx` → `components/overview/overview-dashboard.tsx`, `components/overview/expense-donut.tsx`
+**Responsibility:** Home dashboard. Aggregates data from all three modules into a single-page health summary. Uses an asymmetric 7/5 grid layout with a `BudgetBarsPanel` (variable/fixed burn rates + savings rate bars) and `TopUnplannedPanel` (top unplanned spending). Installments split into Upcoming/Paid columns. Loans section shows a Liquidity Health panel.
+**Key files:** `overview/page.tsx` → `components/overview/overview-dashboard.tsx` (contains `BudgetBarsPanel`, `TopUnplannedPanel` as module-private components), `components/overview/expense-donut.tsx` (horizontal layout, Total Spent center label, two-row legend)
 **Dependencies:** `getMonthlyAnalysis`, `getMonthSummary`, `getLoansOverview`, `getHealthScore`
 **Exports:** `OverviewPage` (route), `OverviewDashboard` (async Server Component), `ExpenseDonut` (Recharts pie chart)
 
@@ -83,9 +83,9 @@ src/
 ---
 
 ### `src/app/(app)/installments`
-**Responsibility:** Tracks deferred purchases split into monthly payments. Shows a monthly obligation summary (total due, paid, remaining), lists all active and finished installments, and allows marking payments.
-**Key files:** `installments/page.tsx`, `components/installments/installments-dashboard.tsx`, `installment-form.tsx`, `pay-button.tsx`, `month-nav.tsx`, `all-installments-table.tsx`
-**Dependencies:** `getAllInstallments`, `getMonthSummary`, `computeInstallmentDue`
+**Responsibility:** Tracks deferred purchases split into monthly payments. Shows a Credit Overview section (credit card tiles + KPI band), a monthly obligation summary (total due, paid, remaining), lists all active and finished installments, and allows marking payments. Supports per-card filtering client-side.
+**Key files:** `installments/page.tsx`, `components/installments/installments-dashboard.tsx` (client component), `installment-form.tsx`, `installment-actions.tsx`, `pay-button.tsx`, `month-nav.tsx`, `all-installments-table.tsx`, `credit-card-tile.tsx`, `credit-card-manager.tsx`
+**Dependencies:** `getAllInstallments`, `getMonthSummary`, `getCardSummaries`, `computeInstallmentDue`, `computeMonthSummary`, CreditCard CRUD actions
 **Exports:** `InstallmentsPage` (route)
 
 ---
@@ -118,7 +118,7 @@ src/
 **Responsibility:** All read-only database queries. Pure async functions returning typed data. Called directly inside Server Components.
 **Key files:**
 - `expenses.ts` — `getMonthlyAnalysis()`: full budget/actual/severity breakdown for one month; `getImportBatches()`, `getUnmappedCategories()`
-- `installments.ts` — `getAllInstallments()`: status-enriched list; `getMonthSummary()`: obligations for a given month
+- `installments.ts` — `getAllInstallments()`: status-enriched list; `getMonthSummary()`: obligations for a given month; `getCardSummaries(month, year)`: per-card outstanding debt + monthly obligation; `getInstallmentFormData()`: cards/debtors/accounts for form pickers
 - `loans.ts` — `getLoansOverview()`: accounts with computed balances, debtors with computed loan remainders, portfolio KPIs
 - `trends.ts` — `getTrends(n)`: per-month income/expense/budget/savings-rate + per-category spend across n months
 - `health-score.ts` — `getHealthScore()`: composite 0–100 score with month-over-month delta
@@ -132,17 +132,19 @@ src/
 - `import.ts` — `importMoneyLoverFile()` / `importBuffer()`: parse XLSX → upsert categories → replace batch → insert transactions
 - `drive.ts` — `listDriveFiles()` / `importFromDrive()`: Google Drive service account integration
 - `categories.ts` — AppCategory and BudgetItem create/update/delete
-- `installments.ts` — Installment and InstallmentPayment create/update/delete/pay
+- `installments.ts` — Installment CRUD (`createInstallment`, `updateInstallment`, `deleteInstallment`); payment actions (`markPayment` — auto-creates a Loan record when debtorId + fundingAccountId are set, `unmarkPayment`); CreditCard CRUD (`createCard`, `updateCard`, `deleteCard`)
 - `loans.ts` — SavingsAccount, AccountEntry, Transfer, Debtor, Loan, LoanPayment CRUD
 - `chat.ts` — `saveMessage()`: persist a single ChatMessage row
 
 ---
 
 ### `src/lib/installment-utils.ts`
-**Responsibility:** Pure math for German amortization. Safe to import in any context (server, client, test).
+**Responsibility:** Pure math for German amortization and month filtering. Safe to import in any context (server, client, test).
 **Key exports:**
 - `computeMonthlyAmount(total, n)` — capital per payment (P/n)
 - `computeInstallmentDue(total, n, k, rate?)` — total due for the kth payment with optional interest
+- `isDueInMonth(startDate, installmentNum, month, year)` — true if payment slot n falls in the given month/year
+- `computeMonthSummary(month, year, installments)` — synchronous client-safe recompute of `MonthSummary` from a pre-fetched array (used for client-side card filtering)
 - `eaToMonthly(ea)` / `monthlyToEA(monthly)` — interest rate conversions
 
 ---

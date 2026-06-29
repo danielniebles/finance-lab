@@ -83,6 +83,22 @@ A single row from a MoneyLover XLSX export. Positive amount = income; negative =
 
 ---
 
+### CreditCard
+A bank credit card belonging to the user. Lives in the Installments module — not the Loans module (see concepts.md for the module boundary). Tracks outstanding debt and monthly obligations across linked installments.
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key |
+| name | String (unique) | e.g. "Nu", "Rappi", "Falabella" |
+| creditLimit | Float? | Optional credit limit (COP) |
+| billingClosingDay | Int? | Day of month the billing cycle closes (e.g. 28) |
+| paymentDueDay | Int? | Day of month payment is due (e.g. 10) |
+| color | String? | Hex color for UI tile |
+
+**Relations:** has many `Installment`
+
+---
+
 ### Installment
 A deferred purchase split across N monthly payments using German (cuota decreciente) amortization.
 
@@ -97,8 +113,11 @@ A deferred purchase split across N monthly payments using German (cuota decrecie
 | startDate | DateTime | Date of first payment |
 | notes | String? | Optional notes |
 | createdAt | DateTime | Record creation time |
+| cardId | String? | FK → CreditCard (optional — which card was used) |
+| debtorId | String? | FK → Debtor (optional — who this was bought for) |
+| fundingAccountId | String? | FK → SavingsAccount via "InstallmentFunding" relation (only meaningful when debtorId is set — the savings account that disbursed cash for each cuota) |
 
-**Relations:** has many `InstallmentPayment`
+**Relations:** has many `InstallmentPayment`; belongs to optional `CreditCard`; belongs to optional `Debtor`; belongs to optional `SavingsAccount` (funding)
 
 ---
 
@@ -125,7 +144,7 @@ A personal savings or investment account. Balance is computed from entries + tra
 | color | String? | Hex color for UI |
 | includeInAvailable | Boolean | Whether to count toward liquid available |
 
-**Relations:** has many `AccountEntry`; has many `Loan` (as lender); has many `Transfer` (from/to)
+**Relations:** has many `AccountEntry`; has many `Loan` (as lender); has many `Transfer` (from/to); has many `Installment` via "InstallmentFunding" (savings accounts that fund debtor-linked installments)
 
 ---
 
@@ -166,7 +185,7 @@ A named person who owes money to the user.
 | name | String (unique) | Debtor's name |
 | notes | String? | Optional notes |
 
-**Relations:** has many `Loan`
+**Relations:** has many `Loan`; has many `Installment` (installments bought on behalf of this debtor)
 
 ---
 

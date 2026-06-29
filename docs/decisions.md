@@ -97,3 +97,11 @@
 **Decision:** The active theme (`dark` or `light`) is stored in a plain cookie (`theme=dark`) set by the sidebar toggle button. The root layout reads the cookie server-side and adds the appropriate class to `<html>`. `next-themes` is listed as a dependency but is not used for this mechanism.
 
 **Why:** Cookie-based persistence means the correct theme class is present on the server-rendered HTML, eliminating the flash-of-wrong-theme that client-side `localStorage` approaches produce. The sidebar footer button updates both the DOM class and the cookie synchronously.
+
+---
+
+## ADR-013 — prisma.config.ts must mirror directUrl from schema.prisma
+
+**Decision:** `prisma.config.ts` (project root) must always include `directUrl: env("DIRECT_URL")` in its datasource block, mirroring the same field in `prisma/schema.prisma`.
+
+**Why:** When `prisma.config.ts` is present, Prisma uses it as the authoritative datasource configuration and silently ignores the `datasource db` block in `schema.prisma`. This means a `directUrl` defined only in `schema.prisma` has no effect when `prisma.config.ts` exists. Without `directUrl`, all database connections — including `prisma migrate deploy` DDL statements — are routed through the pgbouncer pooler (port 6543). pgbouncer does not support DDL in transaction mode, so migrations hang indefinitely. Fix: always keep `directUrl` in both files. If `prisma.config.ts` is ever removed, the `schema.prisma` entry still applies.

@@ -21,7 +21,13 @@ A category is FIXED when all its budget items are fixed-cost (rent, subscription
 Health of a category relative to its budget for a given month. Four tiers: OK, Issue, Critical, Unplanned. Logic lives in `src/lib/queries/expenses.ts:classifyCategory`.
 
 **Installment**
-A deferred-payment purchase split across N months (e.g. a phone on 12-cuotas). Uses German amortization (cuota decreciente): fixed capital per payment plus decreasing interest on the outstanding balance. The `monthlyAmount` stored in the DB is always the capital portion (P/n); the actual due amount for payment k is computed at read-time via `computeInstallmentDue`.
+A deferred-payment purchase split across N months (e.g. a phone on 12-cuotas). Uses German amortization (cuota decreciente): fixed capital per payment plus decreasing interest on the outstanding balance. The `monthlyAmount` stored in the DB is always the capital portion (P/n); the actual due amount for payment k is computed at read-time via `computeInstallmentDue`. An installment may be optionally linked to a `CreditCard` (which card was charged), a `Debtor` (if bought on behalf of someone else), and a `SavingsAccount` (the account that disbursed the cash when debtorId is set).
+
+**CreditCard**
+A bank credit card belonging to the user. Lives in the **Installments module** — not the Loans module. Credit cards are an *obligations* concept (what Daniel owes the bank, month by month, card by card), not a *liquidity* concept. Tracking a credit card here means the Installments dashboard can show total outstanding debt and monthly obligation per card. `CreditCard` records are never represented as `SavingsAccount` entries — the two domains must not be mixed.
+
+**Installments vs Loans module boundary**
+The Loans module is a *liquidity tracker*: savings accounts Daniel controls + money owed **to** Daniel by debtors. The Installments module is an *obligations tracker*: what Daniel owes the bank, month by month. This boundary is intentional. A `Debtor` record may appear in both modules (formal cash loans via Loans, credit-funded purchases via Installments) because a debtor is a person, not a module concept.
 
 **Savings account**
 A personal savings or investment account the user controls. Balance is derived from a ledger of `AccountEntry` records (INITIAL + ADJUSTMENTs) plus transfer flows. Loans given reduce the available balance.
