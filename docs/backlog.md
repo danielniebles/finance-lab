@@ -21,63 +21,19 @@ The trends page reads a `?period` search param (3, 6, or 12) but the `TrendsDash
 
 ## Future improvements
 
-### AI Advisor — upgrade to tool use (high value, medium effort)
+### AI Advisor + Vaults — Vaults in Health Score (low effort, medium value)
 
-**Problem:** The current advisor calls `getFinancialSnapshot()` on every message and injects a static plain-text report (last 3 months of expenses + loans + installments) as the system prompt. Claude can only reason over what's in that pre-baked blob — it can't drill into individual transactions, query months outside the 3-month window, or ask for more granular data. Every message also pays the full ~2000-token system prompt cost regardless of how simple the question is.
-
-**Proposed solution:** Replace the static snapshot with Anthropic tool use. The system prompt becomes minimal (role + current date + currency). Claude calls tools on demand, fetching only the data the question requires.
-
-**Tools to define** (map directly to existing query functions):
-
-| Tool name | Maps to | What it unlocks |
-|---|---|---|
-| `get_available_months()` | `getImportBatches()` | Claude knows what data exists before asking |
-| `get_monthly_analysis(month, year)` | `getMonthlyAnalysis()` in `queries/expenses.ts` | Full category breakdown for any month, not just last 3 |
-| `get_transactions(month, year, category?)` | raw Prisma query on `Transaction` | Individual transactions, searchable by note/category |
-| `get_trends(n)` | `getTrends()` in `queries/trends.ts` | Multi-month patterns |
-| `get_installments()` | `getAllInstallments()` in `queries/installments.ts` | Full installment state |
-| `get_loans()` | `getLoansOverview()` in `queries/loans.ts` | Savings + loans |
-| `get_overview()` | `getFinancialSnapshot()` in `queries/chat.ts` | High-level briefing (optional, Claude calls when needed) |
-
-**Primary file to change:** `src/app/api/chat/route.ts`
-
-Current streaming loop (simple):
-```ts
-for await (const chunk of stream) {
-  if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-    fullResponse += chunk.delta.text;
-    controller.enqueue(encoder.encode(chunk.delta.text));
-  }
-}
-```
-
-New loop must handle the tool-use cycle — Claude emits a `tool_use` block, execution pauses, server runs the tool, injects a `tool_result` message, stream resumes:
-```ts
-// pseudo-code
-while (true) {
-  const response = await anthropic.messages.create({ tools, messages, ... });
-  if (response.stop_reason === "tool_use") {
-    const toolUseBlocks = response.content.filter(b => b.type === "tool_use");
-    const toolResults = await Promise.all(toolUseBlocks.map(executeTool));
-    messages.push({ role: "assistant", content: response.content });
-    messages.push({ role: "user", content: toolResults }); // tool_result blocks
-    // continue loop
-  } else {
-    // stop_reason === "end_turn" — stream the text content to client
-    break;
-  }
-}
-```
-
-**Streaming concern:** Tool execution interrupts the text stream. The client sees a brief pause while a tool runs (typically a Prisma query, ~10–50ms). This is acceptable for a chat UI but requires switching from `anthropic.messages.stream()` to `anthropic.messages.create()` for the tool-use turns, then streaming only the final text response. Alternatively, use streaming throughout and handle `content_block_start` events with `type: "tool_use"`.
-
-**Model consideration:** Switch from `claude-haiku-4-5-20251001` to Sonnet for this feature. Haiku supports tool use but Sonnet is significantly better at deciding when and what to call. Cost delta is negligible for a personal app with low message volume.
-
-**Prompt caching note:** Once tool use is in place, the minimal system prompt is cheap and stable — prompt caching becomes less critical than it is today. But if the `get_overview()` tool result is large and called frequently, caching its output at the tool-result level could help.
+The `getHealthScore()` metric uses four pillars (Savings Rate, Variable Burn Rate, Installment Burden, Liquidity Ratio). Vault obligations could add a fifth pillar: **Vault Funding Rate** = mandatory vault contributions made / mandatory vault obligations due × 100. Not yet implemented — Health Score still uses only the original four.
 
 ---
 
-- **Prompt caching:** The AI advisor sends a fresh `getFinancialSnapshot()` string as the system prompt on every message. Since the snapshot is identical within a session, adding `cache_control: { type: "ephemeral" }` on the system prompt block would reduce Claude API costs by up to 90% for the repeated prefix.
+### AI Advisor + Vaults — Global vault obligations banner (low effort)
+
+`VaultDueBanner` is currently mounted only on `/overview`. It could also appear on `/vaults` when the user is looking at their vaults page and still has obligations. Minor duplication — one mount point vs. two.
+
+---
+
+- **Prompt caching:** The AI advisor sends context and history on every call. Adding `cache_control: { type: "ephemeral" }` on stable system prompt blocks could reduce Claude API costs for the repeated prefix across turns.
 - **Category mapping UI:** Currently, unmapped MoneyLover categories are shown as a count with a link to the mappings settings page. An inline mapping shortcut on the expenses dashboard would speed up the post-import workflow.
 - **Import from Drive — auto-detect latest:** The Drive integration lists files and requires manual selection. An "import latest" button that automatically picks the most-recently-modified file would reduce clicks.
 - **Installment interest rate display:** The installment form accepts a monthly interest rate but the dashboard does not prominently display the total interest cost over the installment's life. Showing `total interest = sum(interest_k for k in 1..n)` would help the user evaluate purchases.

@@ -38,8 +38,27 @@ Money lent by the user to a named `Debtor`, sourced from one of their savings ac
 **Health Score**
 A composite 0–100 score computed from four equally-weighted metrics (25 points each): Savings Rate, Variable Burn Rate, Installment Burden, and Liquidity Ratio. Tiers: Excellent (≥85), Good (≥65), Fair (≥45), At Risk (<45).
 
+**Vault**
+A named, goal-based savings pocket. Distinct from `SavingsAccount` — vault balances are earmarked, not liquid (ADR-014). Two shapes: `FIXED_DEADLINE` (target amount + target date; auto re-spreads required contribution on shortfall) and `OPEN_ENDED` (no deadline, optional aspirational target). Two kinds: `MANDATORY` (must-fund, e.g. taxes) and `LEISURE` (wants, e.g. a trip). Balance is always computed from `VaultEntry` records — never stored (ADR-006).
+
+**VaultEntry**
+A ledger record for a vault. Positive amount = contribution, negative = withdrawal. The vault balance is `sum(entries.amount)`.
+
+**Vault status**
+Computed monthly for each vault:
+| Status | Condition |
+|---|---|
+| Met | balance ≥ targetAmount |
+| On track | contributedThisMonth ≥ requiredThisMonth |
+| Behind | contributedThisMonth < requiredThisMonth, targetDate not past |
+| Overdue | targetDate is past and balance < targetAmount |
+| Open | OPEN_ENDED vault |
+
+**Agent**
+The in-app AI advisor, backed by `claude-sonnet-4-6` via the Anthropic SDK. Supersedes the old static-snapshot advisor (ADR-015). Uses a tool-use loop: the model calls read tools to fetch live data and proposal tools to surface action cards. Proposal tools never mutate — the user must click Approve on an action card to trigger the real server action. The agent is module-context-aware: pages pass `{ route, module, focus, entityId }` context so questions like "how am I doing this month?" resolve against the current view. Full spec in `docs/agent.md`.
+
 **Financial snapshot**
-A plain-text summary of the user's finances injected into every AI advisor request as the system prompt. Generated server-side from live DB data at `src/lib/queries/chat.ts:getFinancialSnapshot`.
+A plain-text summary of the user's finances, now used as the body of the `get_overview` read tool (rather than injected as the system prompt on every message). Generated server-side from live DB data at `src/lib/queries/chat.ts:getFinancialSnapshot`.
 
 ## Glossary
 | Term | Meaning |

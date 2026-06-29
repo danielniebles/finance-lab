@@ -220,6 +220,40 @@ A partial or full repayment of a Loan.
 
 ---
 
+### Vault
+A named goal-based savings pocket. Isolated from the SavingsAccount/liquidity model (ADR-014). Balance is computed — never stored (ADR-006).
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key |
+| name | String (unique) | e.g. "Emergency Fund", "Trip to Japan" |
+| kind | VaultKind enum | MANDATORY or LEISURE |
+| goalType | VaultGoalType enum | FIXED_DEADLINE or OPEN_ENDED |
+| targetAmount | Float? | Required when goalType = FIXED_DEADLINE |
+| targetDate | DateTime? | Required when goalType = FIXED_DEADLINE |
+| color | String? | Hex color for UI tile accent strip |
+| notes | String? | Optional notes |
+| archivedAt | DateTime? | Set when goal met or abandoned; record is kept for history |
+| createdAt | DateTime | Record creation time |
+
+**Relations:** has many `VaultEntry`
+
+---
+
+### VaultEntry
+Ledger entry for a vault. Positive = contribution, negative = withdrawal.
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key |
+| vaultId | String | FK → Vault (cascade delete) |
+| amount | Float | Signed amount in COP |
+| date | DateTime | Entry date (defaults to now) |
+| notes | String? | Optional notes |
+| createdAt | DateTime | Record creation time |
+
+---
+
 ### ChatMessage
 Persisted conversation history for the AI advisor. Up to 20 recent messages are sent to Claude on each request.
 
@@ -237,3 +271,5 @@ Persisted conversation history for the AI advisor. Up to 20 recent messages are 
 | BudgetType | FIXED, VARIABLE |
 | AccountType | BANK, DIGITAL, PENSION |
 | EntryType | INITIAL, ADJUSTMENT |
+| VaultKind | MANDATORY, LEISURE |
+| VaultGoalType | FIXED_DEADLINE, OPEN_ENDED |

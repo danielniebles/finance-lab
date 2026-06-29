@@ -105,3 +105,19 @@
 **Decision:** `prisma.config.ts` (project root) must always include `directUrl: env("DIRECT_URL")` in its datasource block, mirroring the same field in `prisma/schema.prisma`.
 
 **Why:** When `prisma.config.ts` is present, Prisma uses it as the authoritative datasource configuration and silently ignores the `datasource db` block in `schema.prisma`. This means a `directUrl` defined only in `schema.prisma` has no effect when `prisma.config.ts` exists. Without `directUrl`, all database connections — including `prisma migrate deploy` DDL statements — are routed through the pgbouncer pooler (port 6543). pgbouncer does not support DDL in transaction mode, so migrations hang indefinitely. Fix: always keep `directUrl` in both files. If `prisma.config.ts` is ever removed, the `schema.prisma` entry still applies.
+
+---
+
+## ADR-014 — Vaults are a standalone ledger (not liquidity)
+
+**Decision:** The Vaults module maintains its own `Vault` / `VaultEntry` ledger. Vault balances are never added to `SavingsAccount` balances, never factored into the Liquidity Ratio KPI, and never represented as `AccountEntry` records. Vault balance = `sum(VaultEntry.amount)` — computed, never stored (ADR-006 applies).
+
+**Why:** Vaults are earmarked goal pockets, not liquid capital. Including vault balances in the liquidity view would inflate available funds and understate loan exposure. Keeping the ledgers separate means the Loans module accurately reflects deployable liquidity and the Health Score's Liquidity Ratio remains meaningful. The trade-off is that "total savings" across all vehicles requires an explicit cross-module sum, but that is a future dashboard concern.
+
+---
+
+## ADR-015 — Agent upgrade: tool use + propose-then-confirm (supersedes ADR-009)
+
+**Decision:** The AI advisor (`src/app/api/chat/route.ts`) was rewritten from a static-snapshot streamer to a tool-use loop. Model upgraded to `claude-sonnet-4-6`. The system prompt is minimal (role, date, currency, current module context). On each turn the model calls read tools to fetch exactly the data the question needs, and proposal tools to surface action cards. Proposal tools never mutate — they emit a `{"type":"proposal"}` NDJSON event. Mutation only happens when the user clicks Approve on an action card, which calls the pre-validated server action directly from the client. Transport changed from `text/plain` streaming to NDJSON (`application/x-ndjson`), one JSON object per line.
+
+**Why:** The old advisor could only reason over a pre-baked ~2000-token snapshot injected on every message. The tool-use approach lets the model fetch only what it needs (cheaper per-call) and reason over live, granular data (individual transactions, any historical month, vault obligations). The propose-then-confirm gate means a misbehaving or hallucinating model can propose a bad action but can never silently mutate data. The existing server actions (which carry all validation) remain the only write path. `docs/agent.md` is the canonical spec for tool definitions and domain rules.

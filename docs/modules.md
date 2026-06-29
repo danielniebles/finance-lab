@@ -13,12 +13,13 @@ src/
       trends/page.tsx       — Multi-month income/expense/category charts
       installments/page.tsx — Installment CRUD + monthly due summary
       loans/page.tsx        — Savings accounts + debtor/loan management
+      vaults/page.tsx       — Goal-based savings pockets (CRUD + obligations)
       chat/page.tsx         — Full-screen AI advisor chat
       settings/
         categories/page.tsx — AppCategory + BudgetItem CRUD
         mappings/page.tsx   — MoneyLoverCategory → AppCategory mapping
     api/
-      chat/route.ts         — Streaming AI advisor endpoint (POST)
+      chat/route.ts         — NDJSON tool-use loop (read + proposal tools)
   components/
     app-sidebar.tsx         — Sidebar nav + theme toggle
     overview/               — OverviewDashboard (BudgetBarsPanel, TopUnplannedPanel), ExpenseDonut
@@ -26,14 +27,16 @@ src/
     trends/                 — TrendsDashboard (Recharts)
     installments/           — InstallmentsDashboard (client), InstallmentForm, PayButton, MonthNav, AllInstallmentsTable, InstallmentActions, CreditCardTile, CreditCardManager
     loans/                  — LoansDashboard, AccountCard, DebtorForm, LoanForm, PaymentForm, EntryForm, AccountForm, TransferForm, LoansClient, LoanRowActions
+    vaults/                 — VaultsDashboard (client), VaultTile, VaultForm, EntryForm, VaultLedger, VaultDueBanner
     settings/               — CategoryList, MappingList
-    chat/                   — FloatingChat, ChatProvider, ChatMessages, ChatInput
+    chat/                   — FloatingChat, ChatProvider, ChatMessages, ChatInput, ActionCard
     ui/                     — shadcn/ui base-nova primitives
   lib/
     db.ts                   — Prisma client singleton
     format.ts               — formatCOP(), formatShort(), MONTH_NAMES
     utils.ts                — cn() (clsx + tailwind-merge)
     installment-utils.ts    — computeMonthlyAmount(), computeInstallmentDue(), isDueInMonth(), computeMonthSummary(), rate converters
+    vault-utils.ts          — computeVaultMetrics(), classifyVault(), monthsLeft() — pure math, client-safe
     parse-moneylover.ts     — XLSX → Transaction[] parser
     queries/
       expenses.ts           — getMonthlyAnalysis(), getImportBatches(), getUnmappedCategories()
@@ -42,6 +45,7 @@ src/
       trends.ts             — getTrends()
       health-score.ts       — getHealthScore()
       chat.ts               — getFinancialSnapshot()
+      vaults.ts             — getVaults(), getVaultObligations()
     actions/
       import.ts             — importMoneyLoverFile(), importBuffer()
       drive.ts              — listDriveFiles(), importFromDrive()
@@ -50,6 +54,7 @@ src/
       installments.ts       — Installment + InstallmentPayment CRUD actions
       loans.ts              — SavingsAccount, Debtor, Loan, LoanPayment, Transfer CRUD actions
       chat.ts               — saveMessage()
+      vaults.ts             — createVault(), updateVault(), archiveVault(), addVaultEntry(), deleteVaultEntry()
   generated/
     prisma/                 — Prisma-generated client (do not edit manually)
   hooks/
@@ -59,9 +64,9 @@ src/
 ## Module breakdown
 
 ### `src/app/(app)/overview`
-**Responsibility:** Home dashboard. Aggregates data from all three modules into a single-page health summary. Uses an asymmetric 7/5 grid layout with a `BudgetBarsPanel` (variable/fixed burn rates + savings rate bars) and `TopUnplannedPanel` (top unplanned spending). Installments split into Upcoming/Paid columns. Loans section shows a Liquidity Health panel.
+**Responsibility:** Home dashboard. Aggregates data from all modules into a single-page health summary. Uses an asymmetric 7/5 grid layout with a `BudgetBarsPanel` (variable/fixed burn rates + savings rate bars) and `TopUnplannedPanel` (top unplanned spending). Installments split into Upcoming/Paid columns. Loans section shows a Liquidity Health panel. Mounts `VaultDueBanner` at the top when vault obligations are still needed this month.
 **Key files:** `overview/page.tsx` → `components/overview/overview-dashboard.tsx` (contains `BudgetBarsPanel`, `TopUnplannedPanel` as module-private components), `components/overview/expense-donut.tsx` (horizontal layout, Total Spent center label, two-row legend)
-**Dependencies:** `getMonthlyAnalysis`, `getMonthSummary`, `getLoansOverview`, `getHealthScore`
+**Dependencies:** `getMonthlyAnalysis`, `getMonthSummary`, `getLoansOverview`, `getHealthScore`, `getVaultObligations`
 **Exports:** `OverviewPage` (route), `OverviewDashboard` (async Server Component), `ExpenseDonut` (Recharts pie chart)
 
 ---
@@ -98,11 +103,20 @@ src/
 
 ---
 
+### `src/app/(app)/vaults`
+**Responsibility:** Goal-based savings pockets. Shows a KPI band (total balance, mandatory still-needed, leisure still-needed) and a tile grid — one tile per vault with SVG progress ring, status badge, kind chip, and balance/target/required-this-month figures. Supports full CRUD (create, edit, archive) and a ledger sheet per vault for contributions and withdrawals. The "Ask agent" button on `VaultDueBanner` opens the chat pre-scoped to the relevant vault.
+**Key files:** `vaults/page.tsx`, `components/vaults/vaults-dashboard.tsx` (client), `vault-tile.tsx`, `vault-form.tsx`, `entry-form.tsx`, `vault-ledger.tsx`, `vault-due-banner.tsx`
+**Dependencies:** `getVaults`, `getVaultObligations`, `createVault`, `updateVault`, `archiveVault`, `addVaultEntry`, `deleteVaultEntry`
+**Exports:** `VaultsPage` (route), `VaultDueBanner` (also mounted in overview)
+
+---
+
 ### `src/app/(app)/chat`
-**Responsibility:** Full-screen AI advisor backed by Claude Haiku. Conversation history is persisted in the `ChatMessage` table. Each message injects a live financial snapshot as the system prompt.
-**Key files:** `chat/page.tsx`, `components/chat/chat-provider.tsx`, `chat-messages.tsx`, `chat-input.tsx`, `floating-chat.tsx`, `src/app/api/chat/route.ts`
-**Dependencies:** `getFinancialSnapshot`, `saveMessage`, Anthropic SDK (streaming)
-**Exports:** `ChatPage` (route), `FloatingChat` (accessible from any page via the app layout)
+**Responsibility:** Full-screen AI advisor backed by `claude-sonnet-4-6`. Uses a tool-use loop (9 read tools + 5 proposal tools). Conversation history is persisted in `ChatMessage`. The floating chat panel is available on every page, module-context-aware. Proposal tools surface action cards (`ActionCard`) that the user must approve before mutations occur (ADR-015).
+**Key files:** `chat/page.tsx`, `components/chat/chat-provider.tsx` (NDJSON streaming + proposal state), `chat-messages.tsx`, `chat-input.tsx`, `floating-chat.tsx`, `action-card.tsx`, `src/app/api/chat/route.ts`
+**Dependencies:** `getFinancialSnapshot`, `getHealthScore`, `getMonthlyAnalysis`, `getTrends`, `getAllInstallments`, `getLoansOverview`, `getVaults`, `getVaultObligations`, vault write actions, Anthropic SDK
+**Exports:** `ChatPage` (route), `FloatingChat` (accessible from any page via the app layout), `ActionCard` (renders proposal events inline in the chat stream)
+**Transport:** `application/x-ndjson` — one JSON object per line: `{"type":"text","delta":"..."}` or `{"type":"proposal","action":"...","params":{...},"label":"..."}`
 
 ---
 
@@ -122,7 +136,8 @@ src/
 - `loans.ts` — `getLoansOverview()`: accounts with computed balances, debtors with computed loan remainders, portfolio KPIs
 - `trends.ts` — `getTrends(n)`: per-month income/expense/budget/savings-rate + per-category spend across n months
 - `health-score.ts` — `getHealthScore()`: composite 0–100 score with month-over-month delta
-- `chat.ts` — `getFinancialSnapshot()`: plain-text financial summary for the AI system prompt
+- `chat.ts` — `getFinancialSnapshot()`: plain-text financial summary (used by the `get_overview` agent tool)
+- `vaults.ts` — `getVaults()`: all active vaults with computed `VaultWithMetrics` (balance, remaining, progress %, status, contributedThisMonth); `getVaultObligations(month, year)`: per-vault required/contributed/stillNeeded totals
 
 ---
 
@@ -135,6 +150,7 @@ src/
 - `installments.ts` — Installment CRUD (`createInstallment`, `updateInstallment`, `deleteInstallment`); payment actions (`markPayment` — auto-creates a Loan record when debtorId + fundingAccountId are set, `unmarkPayment`); CreditCard CRUD (`createCard`, `updateCard`, `deleteCard`)
 - `loans.ts` — SavingsAccount, AccountEntry, Transfer, Debtor, Loan, LoanPayment CRUD
 - `chat.ts` — `saveMessage()`: persist a single ChatMessage row
+- `vaults.ts` — `createVault()`, `updateVault()`, `archiveVault()` (sets archivedAt), `addVaultEntry()` (rejects withdrawal driving balance < 0), `deleteVaultEntry()`; all revalidate `/vaults` and `/overview`
 
 ---
 
@@ -146,6 +162,16 @@ src/
 - `isDueInMonth(startDate, installmentNum, month, year)` — true if payment slot n falls in the given month/year
 - `computeMonthSummary(month, year, installments)` — synchronous client-safe recompute of `MonthSummary` from a pre-fetched array (used for client-side card filtering)
 - `eaToMonthly(ea)` / `monthlyToEA(monthly)` — interest rate conversions
+
+---
+
+### `src/lib/vault-utils.ts`
+**Responsibility:** Pure math for vault metrics and status classification. Client-safe — no Prisma imports.
+**Key exports:**
+- `VaultStatus` — `"Met" | "On track" | "Behind" | "Overdue" | "Open"`
+- `computeVaultMetrics(vault, balance, month, year)` — returns `{ balance, remaining, monthsLeft, requiredThisMonth, progressPct }`
+- `classifyVault(vault, balance, contributedThisMonth, month, year)` — returns `VaultStatus`
+- `monthsLeft(targetDate, month, year)` — integer months until deadline from the given reference month
 
 ---
 
