@@ -191,6 +191,42 @@ model LoanPayment {
   notes   String?
 }
 
+// ─── Module 4: Vaults ─────────────────────────────────────────────────────────
+
+enum VaultKind {
+  MANDATORY
+  LEISURE
+}
+
+enum VaultGoalType {
+  FIXED_DEADLINE
+  OPEN_ENDED
+}
+
+model Vault {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  kind         VaultKind     @default(LEISURE)
+  goalType     VaultGoalType @default(FIXED_DEADLINE)
+  targetAmount Float?        // required when goalType = FIXED_DEADLINE
+  targetDate   DateTime?     // required when goalType = FIXED_DEADLINE
+  color        String?
+  notes        String?
+  archivedAt   DateTime?     // set when goal met/abandoned; keeps history
+  createdAt    DateTime      @default(now())
+  entries      VaultEntry[]
+}
+
+model VaultEntry {
+  id        String   @id @default(cuid())
+  vaultId   String
+  vault     Vault    @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+  amount    Float    // positive = contribution, negative = withdrawal
+  date      DateTime @default(now())
+  notes     String?
+  createdAt DateTime @default(now())
+}
+
 // ─── Milestone 5 — AI Advisor ─────────────────────────────────────────────────
 
 model ChatMessage {

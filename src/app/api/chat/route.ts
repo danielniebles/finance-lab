@@ -1,79 +1,522 @@
-// ⚠️  Phase 4 — tokens are spent from here on.
-// Model: claude-haiku-4-5 (cheapest, ~$0.004/message at typical usage)
-
 import Anthropic from "@anthropic-ai/sdk";
+import type { MessageParam, ToolResultBlockParam, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { saveMessage } from "@/lib/actions/chat";
 import { getFinancialSnapshot } from "@/lib/queries/chat";
+import { getHealthScore } from "@/lib/queries/health-score";
+import { getImportBatches, getMonthlyAnalysis } from "@/lib/queries/expenses";
+import { getTrends } from "@/lib/queries/trends";
+import { getAllInstallments, getMonthSummary } from "@/lib/queries/installments";
+import { getLoansOverview } from "@/lib/queries/loans";
+import { getVaults, getVaultObligations } from "@/lib/queries/vaults";
+import type { ChatModuleContext } from "@/components/chat/chat-provider";
 
 const anthropic = new Anthropic();
 
-const SYSTEM_PROMPT_PREFIX = `You are a personal financial advisor embedded in a finance tracking app.
-The user is a single person living in Colombia. All amounts are in Colombian Pesos (COP).
-You have access to their real financial data below — use it to give specific, grounded advice.
-Be concise and direct. Avoid generic disclaimers.
-Respond in the same language the user writes in (Spanish or English).
-When recommending whether to make a purchase, factor in their current savings rate, variable burn rate, and available liquidity.`;
+// ─── Tool definitions ─────────────────────────────────────────────────────────
 
-export async function POST(req: Request) {
-  const { content } = await req.json() as { content: string };
+const READ_TOOLS = new Set([
+  "get_overview",
+  "get_available_months",
+  "get_monthly_analysis",
+  "get_transactions",
+  "get_trends",
+  "get_installments",
+  "get_loans",
+  "get_vaults",
+  "get_vault_obligations",
+]);
 
-  // Persist user message and fetch context in parallel
-  const [, snapshot, history] = await Promise.all([
+const PROPOSAL_TOOLS = new Set([
+  "propose_create_vault",
+  "propose_update_vault",
+  "propose_vault_contribution",
+  "propose_vault_withdrawal",
+  "propose_archive_vault",
+]);
+
+const TOOLS: Anthropic.Tool[] = [
+  // ── Read tools ──
+  {
+    name: "get_overview",
+    description:
+      "Get a high-level financial briefing across all modules: expenses, savings, installments, loans, and vaults. Call this first when the user asks a general question about their finances.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_available_months",
+    description: "Get the list of months that have imported expense data.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_monthly_analysis",
+    description:
+      "Get the full budget/actual/severity breakdown for a specific month. Use this when the user asks about a particular month's expenses.",
+    input_schema: {
+      type: "object",
+      properties: {
+        month: { type: "number", description: "Month number (1–12)" },
+        year: { type: "number", description: "4-digit year" },
+      },
+      required: ["month", "year"],
+    },
+  },
+  {
+    name: "get_transactions",
+    description:
+      "Get individual transactions for a month, optionally filtered by category name.",
+    input_schema: {
+      type: "object",
+      properties: {
+        month: { type: "number", description: "Month number (1–12)" },
+        year: { type: "number", description: "4-digit year" },
+        category: {
+          type: "string",
+          description: "Optional: filter by app category name (case-insensitive partial match)",
+        },
+      },
+      required: ["month", "year"],
+    },
+  },
+  {
+    name: "get_trends",
+    description:
+      "Get multi-month income/expense/savings-rate trend data. Defaults to last 6 months.",
+    input_schema: {
+      type: "object",
+      properties: {
+        n: {
+          type: "number",
+          description: "Number of months to look back (default 6, max 12)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_installments",
+    description:
+      "Get all installments (active and finished) plus the current month obligation summary.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_loans",
+    description:
+      "Get savings accounts, debtors, active loans, and liquidity KPIs.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_vaults",
+    description:
+      "Get all active vaults with their computed balance, progress, required-this-month, and status.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_vault_obligations",
+    description:
+      "Get per-vault required/contributed/still-needed amounts for a specific month.",
+    input_schema: {
+      type: "object",
+      properties: {
+        month: { type: "number", description: "Month number (1–12)" },
+        year: { type: "number", description: "4-digit year" },
+      },
+      required: ["month", "year"],
+    },
+  },
+
+  // ── Proposal tools ──
+  {
+    name: "propose_create_vault",
+    description:
+      "Propose creating a new vault. Emits an action card for the user to approve — does NOT mutate data.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Vault name" },
+        kind: {
+          type: "string",
+          enum: ["MANDATORY", "LEISURE"],
+          description: "Vault kind",
+        },
+        goalType: {
+          type: "string",
+          enum: ["FIXED_DEADLINE", "OPEN_ENDED"],
+          description: "Vault goal type",
+        },
+        targetAmount: {
+          type: "number",
+          description: "Required for FIXED_DEADLINE — target amount in COP",
+        },
+        targetDate: {
+          type: "string",
+          description:
+            "Required for FIXED_DEADLINE — ISO date string (YYYY-MM-DD)",
+        },
+      },
+      required: ["name", "goalType"],
+    },
+  },
+  {
+    name: "propose_update_vault",
+    description:
+      "Propose updating an existing vault's fields. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        vaultId: { type: "string", description: "Vault ID to update" },
+        name: { type: "string" },
+        kind: { type: "string", enum: ["MANDATORY", "LEISURE"] },
+        goalType: { type: "string", enum: ["FIXED_DEADLINE", "OPEN_ENDED"] },
+        targetAmount: { type: "number" },
+        targetDate: { type: "string" },
+        color: { type: "string" },
+        notes: { type: "string" },
+      },
+      required: ["vaultId"],
+    },
+  },
+  {
+    name: "propose_vault_contribution",
+    description:
+      "Propose adding a contribution (positive entry) to a vault. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        vaultId: { type: "string", description: "Vault ID" },
+        amount: {
+          type: "number",
+          description: "Contribution amount in COP (positive)",
+        },
+        date: {
+          type: "string",
+          description: "Optional ISO date (YYYY-MM-DD), defaults to today",
+        },
+        notes: { type: "string", description: "Optional notes" },
+      },
+      required: ["vaultId", "amount"],
+    },
+  },
+  {
+    name: "propose_vault_withdrawal",
+    description:
+      "Propose a withdrawal (negative entry) from a vault. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        vaultId: { type: "string", description: "Vault ID" },
+        amount: {
+          type: "number",
+          description: "Withdrawal amount in COP (positive — will be negated)",
+        },
+        date: {
+          type: "string",
+          description: "Optional ISO date (YYYY-MM-DD)",
+        },
+        notes: { type: "string", description: "Optional notes" },
+      },
+      required: ["vaultId", "amount"],
+    },
+  },
+  {
+    name: "propose_archive_vault",
+    description:
+      "Propose archiving a vault (met goal or abandoned). Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        vaultId: { type: "string", description: "Vault ID to archive" },
+      },
+      required: ["vaultId"],
+    },
+  },
+];
+
+// ─── Read tool executor ───────────────────────────────────────────────────────
+
+async function runReadTool(
+  name: string,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  switch (name) {
+    case "get_overview": {
+      const [snapshot, healthScore] = await Promise.all([
+        getFinancialSnapshot(),
+        getHealthScore(),
+      ]);
+      return { snapshot, healthScore };
+    }
+    case "get_available_months": {
+      return getImportBatches();
+    }
+    case "get_monthly_analysis": {
+      const month = Number(input.month);
+      const year = Number(input.year);
+      return getMonthlyAnalysis(month, year);
+    }
+    case "get_transactions": {
+      const month = Number(input.month);
+      const year = Number(input.year);
+      const category = input.category as string | undefined;
+
+      const batch = await db.importBatch.findFirst({
+        where: { month, year },
+      });
+      if (!batch) return { transactions: [] };
+
+      const rows = await db.transaction.findMany({
+        where: {
+          batchId: batch.id,
+          ...(category
+            ? {
+                moneyLoverCategory: {
+                  mapping: {
+                    appCategory: {
+                      name: { contains: category, mode: "insensitive" },
+                    },
+                  },
+                },
+              }
+            : {}),
+        },
+        include: {
+          moneyLoverCategory: {
+            include: { mapping: { include: { appCategory: true } } },
+          },
+        },
+        orderBy: { date: "asc" },
+        take: 200,
+      });
+
+      return {
+        transactions: rows.map((t) => ({
+          id: t.id,
+          date: t.date,
+          amount: t.amount,
+          category: t.moneyLoverCategory.name,
+          appCategory:
+            t.moneyLoverCategory.mapping?.appCategory?.name ?? null,
+          note: t.note,
+          wallet: t.wallet,
+        })),
+      };
+    }
+    case "get_trends": {
+      const n = input.n ? Math.min(Number(input.n), 12) : 6;
+      return getTrends(n);
+    }
+    case "get_installments": {
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
+      const [installments, monthSummary] = await Promise.all([
+        getAllInstallments(),
+        getMonthSummary(month, year),
+      ]);
+      return { installments, monthSummary };
+    }
+    case "get_loans": {
+      return getLoansOverview();
+    }
+    case "get_vaults": {
+      return getVaults();
+    }
+    case "get_vault_obligations": {
+      const month = Number(input.month);
+      const year = Number(input.year);
+      return getVaultObligations(month, year);
+    }
+    default:
+      return { error: `Unknown read tool: ${name}` };
+  }
+}
+
+// ─── Proposal label builder ───────────────────────────────────────────────────
+
+function describeProposal(
+  name: string,
+  input: Record<string, unknown>,
+): string {
+  const fmt = (v: unknown) =>
+    typeof v === "number"
+      ? `$${new Intl.NumberFormat("es-CO").format(Math.round(v))} COP`
+      : String(v ?? "");
+
+  switch (name) {
+    case "propose_create_vault":
+      return `Create vault: ${input.name ?? "?"}`;
+    case "propose_update_vault":
+      return `Update vault ${input.vaultId}`;
+    case "propose_vault_contribution":
+      return `Contribute ${fmt(input.amount)} to vault ${input.vaultId}`;
+    case "propose_vault_withdrawal":
+      return `Withdraw ${fmt(input.amount)} from vault ${input.vaultId}`;
+    case "propose_archive_vault":
+      return `Archive vault ${input.vaultId}`;
+    default:
+      return name;
+  }
+}
+
+// ─── Route handler ────────────────────────────────────────────────────────────
+
+export async function POST(req: NextRequest) {
+  const body = (await req.json()) as {
+    content: string;
+    context?: ChatModuleContext;
+  };
+  const { content, context } = body;
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-CO", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  // Build context line for system prompt
+  let contextLine = "";
+  if (context?.module) {
+    const focusPart = context.focus
+      ? ` (month ${context.focus.month}/${context.focus.year})`
+      : "";
+    const entityPart = context.entityId ? `, entity: ${context.entityId}` : "";
+    contextLine = `\nThe user is currently viewing: ${context.module}${focusPart}${entityPart}.`;
+  } else if (context?.route) {
+    contextLine = `\nThe user is currently viewing: ${context.route}.`;
+  }
+
+  const systemPrompt =
+    `You are a personal financial operator for a single user in Colombia. All amounts in COP. Today is ${dateStr}.
+
+You have live access to the user's financial data via tools. Read before you answer. Never estimate when a tool can tell you.
+
+Propose, never act: for any change to the user's data, call a proposal tool. A proposal surfaces an action card for the user to approve. You cannot mutate data directly.
+
+One proposal per card. State your reasoning before proposing.
+
+Say "drafted for your approval," never "done."${contextLine}
+
+Respond in the language the user writes in (Spanish or English).`;
+
+  // Persist user message and fetch history in parallel
+  const [, historyRows] = await Promise.all([
     saveMessage("user", content),
-    getFinancialSnapshot(),
-    db.chatMessage.findMany({
-      orderBy: { createdAt: "asc" },
-      // Last 20 messages — enough context without blowing up token count
-      // The user message we just saved is included since saveMessage ran first
-    }).then((rows) => rows.slice(-20)),
+    db.chatMessage.findMany({ orderBy: { createdAt: "asc" } }),
   ]);
 
-  const systemPrompt = `${SYSTEM_PROMPT_PREFIX}\n\n${snapshot}`;
+  const history = historyRows.slice(-20);
 
-  // Build message array for Claude from DB history
-  // History already includes the user message we just saved
-  const messages = history.map((m) => ({
+  // Build initial messages — history already includes the just-saved user message
+  const messages: MessageParam[] = history.map((m) => ({
     role: m.role as "user" | "assistant",
     content: m.content,
   }));
 
-  // Stream from Claude
-  const stream = anthropic.messages.stream({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 1024,
-    system: systemPrompt,
-    messages,
-  });
-
-  // Forward each text chunk to the client while accumulating the full response
   const encoder = new TextEncoder();
-  let fullResponse = "";
 
   const readable = new ReadableStream({
     async start(controller) {
+      const write = (obj: unknown) => {
+        controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+      };
+
       try {
-        for await (const chunk of stream) {
-          if (
-            chunk.type === "content_block_delta" &&
-            chunk.delta.type === "text_delta"
-          ) {
-            const text = chunk.delta.text;
-            fullResponse += text;
-            controller.enqueue(encoder.encode(text));
+        let fullText = "";
+
+        // Tool-use loop
+        while (true) {
+          const res = await anthropic.messages.create({
+            model: "claude-sonnet-4-6",
+            max_tokens: 4096,
+            system: systemPrompt,
+            tools: TOOLS,
+            messages,
+          });
+
+          if (res.stop_reason === "tool_use") {
+            const toolResults: ToolResultBlockParam[] = [];
+
+            for (const block of res.content) {
+              if (block.type !== "tool_use") continue;
+              const toolBlock = block as ToolUseBlock;
+              const toolInput = toolBlock.input as Record<string, unknown>;
+
+              if (READ_TOOLS.has(toolBlock.name)) {
+                try {
+                  const data = await runReadTool(toolBlock.name, toolInput);
+                  toolResults.push({
+                    type: "tool_result",
+                    tool_use_id: toolBlock.id,
+                    content: JSON.stringify(data),
+                  });
+                } catch (err) {
+                  toolResults.push({
+                    type: "tool_result",
+                    tool_use_id: toolBlock.id,
+                    content: `Error executing tool: ${err instanceof Error ? err.message : String(err)}`,
+                    is_error: true,
+                  });
+                }
+              } else if (PROPOSAL_TOOLS.has(toolBlock.name)) {
+                const label = describeProposal(toolBlock.name, toolInput);
+                write({
+                  type: "proposal",
+                  action: toolBlock.name,
+                  params: toolInput,
+                  label,
+                });
+                toolResults.push({
+                  type: "tool_result",
+                  tool_use_id: toolBlock.id,
+                  content: "Proposal surfaced to the user for approval.",
+                });
+              } else {
+                toolResults.push({
+                  type: "tool_result",
+                  tool_use_id: toolBlock.id,
+                  content: `Unknown tool: ${toolBlock.name}`,
+                  is_error: true,
+                });
+              }
+            }
+
+            messages.push({ role: "assistant", content: res.content });
+            messages.push({ role: "user", content: toolResults });
+            continue;
           }
+
+          // end_turn — emit text blocks as NDJSON deltas
+          for (const block of res.content) {
+            if (block.type === "text") {
+              fullText += block.text;
+              write({ type: "text", delta: block.text });
+            }
+          }
+
+          // Persist assistant response
+          if (fullText) {
+            await saveMessage("assistant", fullText);
+          }
+
+          break;
         }
-        // Persist the complete assistant message once streaming finishes
-        await saveMessage("assistant", fullResponse);
+
         controller.close();
       } catch (err) {
-        // Propagate error to the client so the stream closes and isLoading resets
-        controller.error(err);
+        write({
+          type: "text",
+          delta: "Something went wrong. Please try again.",
+        });
+        controller.close();
+        console.error("[chat/route]", err);
       }
     },
   });
 
   return new Response(readable, {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8" },
   });
 }

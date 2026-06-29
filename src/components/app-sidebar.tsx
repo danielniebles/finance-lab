@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BarChart3, CreditCard, HandCoins, Settings, ChevronDown, Bot, TrendingUp, Sun, Moon, LayoutDashboard } from "lucide-react";
+import { BarChart3, CreditCard, HandCoins, PiggyBank, Settings, ChevronDown, Bot, TrendingUp, Sun, Moon, LayoutDashboard } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -31,6 +31,7 @@ const navItems = [
   { title: "Trends", href: "/trends", icon: TrendingUp },
   { title: "Installments", href: "/installments", icon: CreditCard },
   { title: "Loans", href: "/loans", icon: HandCoins },
+  { title: "Vaults", href: "/vaults", icon: PiggyBank },
   { title: "Advisor", href: "/chat", icon: Bot },
 ];
 

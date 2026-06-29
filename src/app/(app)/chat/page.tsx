@@ -7,7 +7,7 @@ import { ChatMessages } from "@/components/chat/chat-messages";
 import { ChatInput } from "@/components/chat/chat-input";
 
 export default function ChatPage() {
-  const { messages, isLoading, sendMessage, clearHistory } = useChat();
+  const { items, messages, isLoading, sendMessage, clearHistory } = useChat();
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
@@ -30,7 +30,7 @@ export default function ChatPage() {
         )}
       </div>
 
-      <ChatMessages messages={messages} isLoading={isLoading} />
+      <ChatMessages items={items} isLoading={isLoading} />
       <div className="px-4 pb-4">
         <div className="rounded-xl border border-border bg-card max-w-3xl mx-auto">
           <ChatInput onSend={sendMessage} disabled={isLoading} />
