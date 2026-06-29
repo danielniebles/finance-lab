@@ -22,6 +22,8 @@ function statusBadgeClasses(status: VaultStatus): string {
       return "text-destructive bg-destructive/10";
     case "Open":
       return "text-muted-foreground bg-muted";
+    case "Underfunded":
+      return "text-warning bg-warning/10";
   }
 }
 
@@ -30,6 +32,7 @@ function stillNeededColor(status: VaultStatus): string {
     case "Overdue":
       return "text-destructive";
     case "Behind":
+    case "Underfunded":
       return "text-warning";
     default:
       return "text-foreground";
@@ -52,7 +55,7 @@ export function VaultDueBanner({ obligations, month, year }: Props) {
   if (obligations.totalStillNeeded === 0) return null;
 
   const urgentVaults = obligations.vaults.filter(
-    (v) => v.stillNeeded > 0 && (v.status === "Behind" || v.status === "Overdue"),
+    (v) => v.stillNeeded > 0 && (v.status === "Behind" || v.status === "Overdue" || v.status === "Underfunded"),
   );
 
   return (

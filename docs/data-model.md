@@ -228,7 +228,7 @@ A named goal-based savings pocket. Isolated from the SavingsAccount/liquidity mo
 | id | String (cuid) | Primary key |
 | name | String (unique) | e.g. "Emergency Fund", "Trip to Japan" |
 | kind | VaultKind enum | MANDATORY or LEISURE |
-| goalType | VaultGoalType enum | FIXED_DEADLINE or OPEN_ENDED |
+| goalType | VaultGoalType enum | FIXED_DEADLINE, OPEN_ENDED, or RECURRING |
 | targetAmount | Float? | Required when goalType = FIXED_DEADLINE |
 | targetDate | DateTime? | Required when goalType = FIXED_DEADLINE |
 | color | String? | Hex color for UI tile accent strip |
@@ -236,7 +236,42 @@ A named goal-based savings pocket. Isolated from the SavingsAccount/liquidity mo
 | archivedAt | DateTime? | Set when goal met or abandoned; record is kept for history |
 | createdAt | DateTime | Record creation time |
 
-**Relations:** has many `VaultEntry`
+**Relations:** has many `VaultEntry`; has many `RecurringExpense` (via `"VaultRecurring"` relation name)
+
+---
+
+### RecurringExpense
+A non-monthly cost the user expects to pay on a recurring cadence. Source of truth for due dates and set-aside math.
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key |
+| name | String | e.g. "Tecnomecánica", "Car insurance" |
+| estimatedAmount | Float | Expected cost in COP |
+| cadenceMonths | Int | Recurrence interval (1=monthly, 6=semiannual, 12=annual) |
+| nextDueDate | DateTime | When the next payment falls due |
+| category | String? | Free label (e.g. "Vehicle", "Taxes") |
+| fundingVaultId | String? | FK → Vault (optional; the RECURRING vault that holds the money) |
+| active | Boolean | Default true; set false to deactivate without deleting |
+| notes | String? | Optional notes |
+| createdAt | DateTime | Record creation time |
+
+**Relations:** belongs to `Vault` (optional, via `"VaultRecurring"`); has many `RecurringExpensePayment`
+
+---
+
+### RecurringExpensePayment
+Ledger of paid cycles. Created atomically with the vault withdrawal in `payRecurringExpense`.
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key |
+| recurringExpenseId | String | FK → RecurringExpense (cascade delete) |
+| amount | Float | Actual amount paid (may differ from estimate) |
+| dueDate | DateTime | The cycle this payment satisfied (the previous `nextDueDate`) |
+| paidAt | DateTime | When the payment was recorded |
+| vaultEntryId | String? | FK to the VaultEntry withdrawal, if paid from a vault |
+| notes | String? | Optional notes |
 
 ---
 
@@ -272,4 +307,4 @@ Persisted conversation history for the AI advisor. Up to 20 recent messages are 
 | AccountType | BANK, DIGITAL, PENSION |
 | EntryType | INITIAL, ADJUSTMENT |
 | VaultKind | MANDATORY, LEISURE |
-| VaultGoalType | FIXED_DEADLINE, OPEN_ENDED |
+| VaultGoalType | FIXED_DEADLINE, OPEN_ENDED, RECURRING |

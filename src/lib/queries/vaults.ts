@@ -5,6 +5,7 @@ import {
   computeVaultMetrics,
   VaultStatus,
 } from "@/lib/vault-utils";
+import { monthlySetAside } from "@/lib/recurring-utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,7 @@ export async function getVaults(
     orderBy: { createdAt: "asc" },
     include: {
       entries: { orderBy: { date: "desc" } },
+      recurringExpenses: { where: { active: true } },
     },
   });
 
@@ -86,18 +88,29 @@ export async function getVaults(
     const contributedThisMonth = sumEntriesInMonth(r.entries, month, year);
 
     const vaultShape = {
-      goalType: r.goalType as "FIXED_DEADLINE" | "OPEN_ENDED",
+      goalType: r.goalType as "FIXED_DEADLINE" | "OPEN_ENDED" | "RECURRING",
       targetAmount: r.targetAmount,
       targetDate: r.targetDate,
     };
 
-    const metrics = computeVaultMetrics(vaultShape, balance, month, year);
+    // For RECURRING vaults, requiredThisMonth = sum of set-asides from linked active expenses
+    const recurringRequired =
+      r.goalType === "RECURRING"
+        ? r.recurringExpenses.reduce(
+            (sum, item) =>
+              sum + monthlySetAside(item.estimatedAmount, item.nextDueDate, month, year),
+            0,
+          )
+        : undefined;
+
+    const metrics = computeVaultMetrics(vaultShape, balance, month, year, recurringRequired);
     const status = classifyVault(
       vaultShape,
       balance,
       contributedThisMonth,
       month,
       year,
+      recurringRequired,
     );
 
     return {
@@ -161,11 +174,12 @@ export async function getVaultObligations(
   const rows = await db.vault.findMany({
     where: {
       archivedAt: null,
-      goalType: "FIXED_DEADLINE",
+      goalType: { in: ["FIXED_DEADLINE", "RECURRING"] },
     },
     orderBy: { createdAt: "asc" },
     include: {
       entries: true,
+      recurringExpenses: { where: { active: true } },
     },
   });
 
@@ -174,18 +188,28 @@ export async function getVaultObligations(
     const contributedThisMonth = sumEntriesInMonth(r.entries, month, year);
 
     const vaultShape = {
-      goalType: r.goalType as "FIXED_DEADLINE" | "OPEN_ENDED",
+      goalType: r.goalType as "FIXED_DEADLINE" | "OPEN_ENDED" | "RECURRING",
       targetAmount: r.targetAmount,
       targetDate: r.targetDate,
     };
 
-    const metrics = computeVaultMetrics(vaultShape, balance, month, year);
+    const recurringRequired =
+      r.goalType === "RECURRING"
+        ? r.recurringExpenses.reduce(
+            (sum, item) =>
+              sum + monthlySetAside(item.estimatedAmount, item.nextDueDate, month, year),
+            0,
+          )
+        : undefined;
+
+    const metrics = computeVaultMetrics(vaultShape, balance, month, year, recurringRequired);
     const status = classifyVault(
       vaultShape,
       balance,
       contributedThisMonth,
       month,
       year,
+      recurringRequired,
     );
 
     const stillNeeded = Math.max(

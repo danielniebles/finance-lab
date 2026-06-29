@@ -10,7 +10,9 @@ import { VaultDueBanner } from "./vault-due-banner";
 import { VaultForm } from "./vault-form";
 import { EntryForm } from "./entry-form";
 import { VaultLedger } from "./vault-ledger";
+import { RecurringList } from "./recurring-list";
 import type { VaultWithMetrics, VaultObligations } from "@/lib/queries/vaults";
+import type { getRecurringExpenses } from "@/lib/queries/recurring";
 
 // ─── StatInline — mirrors installments-dashboard pattern ─────────────────────
 
@@ -62,13 +64,15 @@ type LedgerState = {
 type Props = {
   vaults: VaultWithMetrics[];
   obligations: VaultObligations;
+  recurringData: Awaited<ReturnType<typeof getRecurringExpenses>>;
+  recurringVaults: VaultWithMetrics[];
   month: number;
   year: number;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function VaultsDashboard({ vaults, obligations, month, year }: Props) {
+export function VaultsDashboard({ vaults, obligations, recurringData, recurringVaults, month, year }: Props) {
   // Vault form dialog
   const [vaultFormOpen, setVaultFormOpen] = useState(false);
   const [vaultFormMode, setVaultFormMode] = useState<"create" | "edit">("create");
@@ -214,8 +218,13 @@ export function VaultsDashboard({ vaults, obligations, month, year }: Props) {
         </section>
       )}
 
-      {/* Vault form dialog */}
+      {/* Recurring expenses list */}
+      <RecurringList recurringData={recurringData} recurringVaults={recurringVaults} />
+
+      {/* Vault form dialog — key forces remount on every open so useState initializer
+          always sees the current vault (base-nova doesn't call onOpenChange on external open) */}
       <VaultForm
+        key={`${vaultFormOpen ? "open" : "closed"}-${editingVault?.id ?? "create"}`}
         open={vaultFormOpen}
         mode={vaultFormMode}
         vault={editingVault}

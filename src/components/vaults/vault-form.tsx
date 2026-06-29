@@ -83,13 +83,11 @@ export function VaultForm({ open, mode, vault, onClose }: Props) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  // Reset form when dialog opens
+  // Called only when base-nova internally closes the dialog (Escape / backdrop).
+  // External open is handled by the parent via the `key` prop (remounts the component).
   function handleOpenChange(isOpen: boolean) {
     if (!isOpen) {
       handleClose();
-    } else {
-      setForm(mode === "edit" && vault ? toFormState(vault) : EMPTY_FORM);
-      setError(null);
     }
   }
 
@@ -256,7 +254,27 @@ export function VaultForm({ open, mode, vault, onClose }: Props) {
               >
                 Open-ended
               </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={form.goalType === "RECURRING"}
+                disabled={pending}
+                className={cn(
+                  "flex-1 h-8 rounded-lg text-sm font-medium transition-colors",
+                  form.goalType === "RECURRING"
+                    ? "bg-primary/10 text-primary ring-1 ring-primary/30"
+                    : "bg-muted/40 text-muted-foreground hover:bg-muted/70",
+                )}
+                onClick={() => setField("goalType", "RECURRING")}
+              >
+                Sinking fund
+              </button>
             </div>
+            {form.goalType === "RECURRING" && (
+              <p className="text-xs text-muted-foreground pt-0.5">
+                This vault is funded by linked recurring expenses. Set-aside is computed automatically.
+              </p>
+            )}
           </div>
 
           {/* FIXED_DEADLINE fields */}

@@ -27,7 +27,7 @@ src/
     trends/                 — TrendsDashboard (Recharts)
     installments/           — InstallmentsDashboard (client), InstallmentForm, PayButton, MonthNav, AllInstallmentsTable, InstallmentActions, CreditCardTile, CreditCardManager
     loans/                  — LoansDashboard, AccountCard, DebtorForm, LoanForm, PaymentForm, EntryForm, AccountForm, TransferForm, LoansClient, LoanRowActions
-    vaults/                 — VaultsDashboard (client), VaultTile, VaultForm, EntryForm, VaultLedger, VaultDueBanner
+    vaults/                 — VaultsDashboard (client), VaultTile, VaultForm, EntryForm, VaultLedger, VaultDueBanner, RecurringList, RecurringExpenseForm
     settings/               — CategoryList, MappingList
     chat/                   — FloatingChat, ChatProvider, ChatMessages, ChatInput, ActionCard
     ui/                     — shadcn/ui base-nova primitives
@@ -45,7 +45,8 @@ src/
       trends.ts             — getTrends()
       health-score.ts       — getHealthScore()
       chat.ts               — getFinancialSnapshot()
-      vaults.ts             — getVaults(), getVaultObligations()
+      vaults.ts             — getVaults() (branches on goalType: RECURRING uses summed set-asides), getVaultObligations()
+      recurring.ts          — getRecurringExpenses(month, year): items with set-aside + status
     actions/
       import.ts             — importMoneyLoverFile(), importBuffer()
       drive.ts              — listDriveFiles(), importFromDrive()
@@ -55,6 +56,7 @@ src/
       loans.ts              — SavingsAccount, Debtor, Loan, LoanPayment, Transfer CRUD actions
       chat.ts               — saveMessage()
       vaults.ts             — createVault(), updateVault(), archiveVault(), addVaultEntry(), deleteVaultEntry()
+      recurring.ts          — createRecurringExpense(), updateRecurringExpense(), deleteRecurringExpense(), payRecurringExpense() (atomic via prisma.$transaction)
   generated/
     prisma/                 — Prisma-generated client (do not edit manually)
   hooks/
@@ -168,10 +170,20 @@ src/
 ### `src/lib/vault-utils.ts`
 **Responsibility:** Pure math for vault metrics and status classification. Client-safe — no Prisma imports.
 **Key exports:**
-- `VaultStatus` — `"Met" | "On track" | "Behind" | "Overdue" | "Open"`
-- `computeVaultMetrics(vault, balance, month, year)` — returns `{ balance, remaining, monthsLeft, requiredThisMonth, progressPct }`
-- `classifyVault(vault, balance, contributedThisMonth, month, year)` — returns `VaultStatus`
+- `VaultStatus` — `"Met" | "On track" | "Behind" | "Overdue" | "Open" | "Underfunded"`
+- `computeVaultMetrics(vault, balance, month, year, recurringRequired?)` — returns `{ balance, remaining, monthsLeft, requiredThisMonth, progressPct }`. For RECURRING vaults, pass `recurringRequired` (sum of set-asides from linked expenses).
+- `classifyVault(vault, balance, contributedThisMonth, month, year, requiredThisMonth?)` — returns `VaultStatus`. RECURRING: `Underfunded` when behind, `On track` otherwise.
 - `monthsLeft(targetDate, month, year)` — integer months until deadline from the given reference month
+
+---
+
+### `src/lib/recurring-utils.ts`
+**Responsibility:** Pure math for the Recurring Expenses module. Client-safe — no Prisma imports.
+**Key exports:**
+- `monthsUntilDue(nextDueDate, month, year)` — whole months from (month,year) to dueDate, min 1
+- `monthlySetAside(estimatedAmount, nextDueDate, month, year)` — `estimatedAmount / monthsUntilDue`
+- `isDueInMonth(nextDueDate, month, year)` — true if nextDueDate falls within the given month
+- `rollCycle(nextDueDate, cadenceMonths)` — new Date advanced by cadenceMonths; used after payment
 
 ---
 

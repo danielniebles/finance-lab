@@ -1,11 +1,11 @@
 // Pure math utilities for the Vaults module — client-safe, no DB imports.
 // Mirror of installment-utils.ts pattern.
 
-export type VaultStatus = "Met" | "On track" | "Behind" | "Overdue" | "Open";
+export type VaultStatus = "Met" | "On track" | "Behind" | "Overdue" | "Open" | "Underfunded";
 
 /** Minimal vault shape needed by the math functions (avoids importing Prisma types here). */
 export type VaultShape = {
-  goalType: "FIXED_DEADLINE" | "OPEN_ENDED";
+  goalType: "FIXED_DEADLINE" | "OPEN_ENDED" | "RECURRING";
   targetAmount?: number | null;
   targetDate?: Date | null;
 };
@@ -34,21 +34,25 @@ export function monthsLeft(
 
 export type VaultMetrics = {
   balance: number;
-  remaining: number;         // FIXED_DEADLINE only, else 0
-  monthsLeft: number;        // FIXED_DEADLINE only, else 0
-  requiredThisMonth: number; // FIXED_DEADLINE only, else 0
-  progressPct: number | null; // balance / targetAmount * 100, null for OPEN_ENDED without target
+  remaining: number;          // FIXED_DEADLINE only, else 0
+  monthsLeft: number;         // FIXED_DEADLINE only, else 0
+  requiredThisMonth: number;  // FIXED_DEADLINE: remaining/monthsLeft; RECURRING: passed in; OPEN_ENDED: 0
+  progressPct: number | null; // balance / targetAmount * 100; null for OPEN_ENDED without target and RECURRING
 };
 
 /**
  * Computes derived metrics for a vault given its current balance and the
  * reporting month/year.  Pure — no DB access.
+ *
+ * For RECURRING vaults, requiredThisMonth must be passed in by the caller
+ * (computed from linked recurring expenses). Pass 0 if unknown.
  */
 export function computeVaultMetrics(
   vault: VaultShape,
   balance: number,
   month: number,
   year: number,
+  recurringRequired?: number,
 ): VaultMetrics {
   if (vault.goalType === "OPEN_ENDED") {
     const progressPct =
@@ -61,6 +65,16 @@ export function computeVaultMetrics(
       monthsLeft: 0,
       requiredThisMonth: 0,
       progressPct,
+    };
+  }
+
+  if (vault.goalType === "RECURRING") {
+    return {
+      balance,
+      remaining: 0,
+      monthsLeft: 0,
+      requiredThisMonth: recurringRequired ?? 0,
+      progressPct: null,
     };
   }
 
@@ -86,11 +100,14 @@ export function computeVaultMetrics(
 /**
  * Classifies a vault's status for the given month/year.
  * Rules from docs/agent.md §5:
- *   Met     — balance >= targetAmount
- *   Overdue — targetDate is past and balance < targetAmount
- *   Behind  — contributedThisMonth < requiredThisMonth and targetDate not past
- *   On track — otherwise (FIXED_DEADLINE)
- *   Open    — OPEN_ENDED
+ *   Met          — balance >= targetAmount (FIXED_DEADLINE)
+ *   Overdue      — targetDate is past and balance < targetAmount
+ *   Behind       — contributedThisMonth < requiredThisMonth and targetDate not past
+ *   On track     — otherwise (FIXED_DEADLINE)
+ *   Open         — OPEN_ENDED
+ *   Underfunded  — RECURRING: contributedThisMonth < requiredThisMonth
+ *
+ * For RECURRING vaults, pass requiredThisMonth computed from linked expenses.
  */
 export function classifyVault(
   vault: VaultShape,
@@ -98,8 +115,14 @@ export function classifyVault(
   contributedThisMonth: number,
   month: number,
   year: number,
+  requiredThisMonth?: number,
 ): VaultStatus {
   if (vault.goalType === "OPEN_ENDED") return "Open";
+
+  if (vault.goalType === "RECURRING") {
+    const required = requiredThisMonth ?? 0;
+    return contributedThisMonth < required ? "Underfunded" : "On track";
+  }
 
   const target = vault.targetAmount ?? 0;
 

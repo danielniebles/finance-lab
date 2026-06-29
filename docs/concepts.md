@@ -39,7 +39,7 @@ Money lent by the user to a named `Debtor`, sourced from one of their savings ac
 A composite 0–100 score computed from four equally-weighted metrics (25 points each): Savings Rate, Variable Burn Rate, Installment Burden, and Liquidity Ratio. Tiers: Excellent (≥85), Good (≥65), Fair (≥45), At Risk (<45).
 
 **Vault**
-A named, goal-based savings pocket. Distinct from `SavingsAccount` — vault balances are earmarked, not liquid (ADR-014). Two shapes: `FIXED_DEADLINE` (target amount + target date; auto re-spreads required contribution on shortfall) and `OPEN_ENDED` (no deadline, optional aspirational target). Two kinds: `MANDATORY` (must-fund, e.g. taxes) and `LEISURE` (wants, e.g. a trip). Balance is always computed from `VaultEntry` records — never stored (ADR-006).
+A named, goal-based savings pocket. Distinct from `SavingsAccount` — vault balances are earmarked, not liquid (ADR-014). Three shapes: `FIXED_DEADLINE` (target amount + target date; auto re-spreads required contribution on shortfall), `OPEN_ENDED` (no deadline, optional aspirational target), and `RECURRING` (sinking fund; `requiredThisMonth` = sum of set-asides from linked recurring expenses). Two kinds: `MANDATORY` (must-fund, e.g. taxes) and `LEISURE` (wants, e.g. a trip). Balance is always computed from `VaultEntry` records — never stored (ADR-006).
 
 **VaultEntry**
 A ledger record for a vault. Positive amount = contribution, negative = withdrawal. The vault balance is `sum(entries.amount)`.
@@ -48,11 +48,21 @@ A ledger record for a vault. Positive amount = contribution, negative = withdraw
 Computed monthly for each vault:
 | Status | Condition |
 |---|---|
-| Met | balance ≥ targetAmount |
+| Met | balance ≥ targetAmount (FIXED_DEADLINE) |
 | On track | contributedThisMonth ≥ requiredThisMonth |
-| Behind | contributedThisMonth < requiredThisMonth, targetDate not past |
-| Overdue | targetDate is past and balance < targetAmount |
+| Behind | contributedThisMonth < requiredThisMonth, targetDate not past (FIXED_DEADLINE) |
+| Overdue | targetDate is past and balance < targetAmount (FIXED_DEADLINE) |
 | Open | OPEN_ENDED vault |
+| Underfunded | contributedThisMonth < requiredThisMonth (RECURRING vault) |
+
+**Recurring expense**
+A non-monthly cost you know is coming (taxes, oil change, car inspection, insurance). Fields: `name`, `estimatedAmount`, `cadenceMonths` (1/3/6/12/custom), `nextDueDate`, optional `category` label, optional `fundingVaultId`. The source of truth for when bills land. Monthly set-aside = `estimatedAmount / monthsUntilDue` (re-spread: falling behind one month silently raises the next month's requirement). On payment the cycle rolls: `nextDueDate += cadenceMonths`.
+
+**Sinking-fund vault**
+A vault with `goalType = RECURRING`. Its `requiredThisMonth` is the sum of set-asides from all linked `RecurringExpense` records — not a single deadline split. You fund it monthly; when an item is due you pay from the vault (a negative `VaultEntry`), not from savings. See ADR-017.
+
+**Set-aside**
+`estimatedAmount / monthsUntilDue` — the amount you should put into the sinking fund this month to be on pace for a specific recurring expense. Re-computed fresh each month; no stored balance needed (ADR-006).
 
 **Agent**
 The in-app AI advisor, backed by `claude-sonnet-4-6` via the Anthropic SDK. Supersedes the old static-snapshot advisor (ADR-015). Uses a tool-use loop: the model calls read tools to fetch live data and proposal tools to surface action cards. Proposal tools never mutate — the user must click Approve on an action card to trigger the real server action. The agent is module-context-aware: pages pass `{ route, module, focus, entityId }` context so questions like "how am I doing this month?" resolve against the current view. Full spec in `docs/agent.md`.
@@ -74,6 +84,9 @@ A plain-text summary of the user's finances, now used as the body of the `get_ov
 | CategoryMapping | Link from a MoneyLoverCategory to an AppCategory (1:1) |
 | BudgetItem | A single line within an AppCategory budget (name, amount, FIXED or VARIABLE) |
 | burn rate | Variable actual spend as a % of variable budget |
+| sinking fund | A RECURRING vault that accumulates monthly set-asides to cover non-monthly bills |
+| set-aside | estimatedAmount / monthsUntilDue — the monthly contribution pace for one recurring expense |
+| cadence | Recurrence interval in months (cadenceMonths). 1 = monthly, 6 = semiannual, 12 = annual |
 | savings rate | (income − expenses) / income × 100 |
 | liquidity ratio | liquid available / (liquid available + loans out) × 100 |
 | installment burden | monthly installment obligation / income × 100 |

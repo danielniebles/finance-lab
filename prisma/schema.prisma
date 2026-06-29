@@ -201,20 +201,22 @@ enum VaultKind {
 enum VaultGoalType {
   FIXED_DEADLINE
   OPEN_ENDED
+  RECURRING
 }
 
 model Vault {
-  id           String        @id @default(cuid())
-  name         String        @unique
-  kind         VaultKind     @default(LEISURE)
-  goalType     VaultGoalType @default(FIXED_DEADLINE)
-  targetAmount Float?        // required when goalType = FIXED_DEADLINE
-  targetDate   DateTime?     // required when goalType = FIXED_DEADLINE
-  color        String?
-  notes        String?
-  archivedAt   DateTime?     // set when goal met/abandoned; keeps history
-  createdAt    DateTime      @default(now())
-  entries      VaultEntry[]
+  id                String              @id @default(cuid())
+  name              String              @unique
+  kind              VaultKind           @default(LEISURE)
+  goalType          VaultGoalType       @default(FIXED_DEADLINE)
+  targetAmount      Float?              // required when goalType = FIXED_DEADLINE
+  targetDate        DateTime?           // required when goalType = FIXED_DEADLINE
+  color             String?
+  notes             String?
+  archivedAt        DateTime?           // set when goal met/abandoned; keeps history
+  createdAt         DateTime            @default(now())
+  entries           VaultEntry[]
+  recurringExpenses RecurringExpense[]  @relation("VaultRecurring")
 }
 
 model VaultEntry {
@@ -225,6 +227,34 @@ model VaultEntry {
   date      DateTime @default(now())
   notes     String?
   createdAt DateTime @default(now())
+}
+
+// ─── Module 5: Recurring Expenses ────────────────────────────────────────────
+
+model RecurringExpense {
+  id             String                    @id @default(cuid())
+  name           String
+  estimatedAmount Float
+  cadenceMonths  Int
+  nextDueDate    DateTime
+  category       String?
+  fundingVaultId String?
+  fundingVault   Vault?                    @relation("VaultRecurring", fields: [fundingVaultId], references: [id], onDelete: SetNull)
+  active         Boolean                   @default(true)
+  notes          String?
+  createdAt      DateTime                  @default(now())
+  payments       RecurringExpensePayment[]
+}
+
+model RecurringExpensePayment {
+  id                 String           @id @default(cuid())
+  recurringExpenseId String
+  recurringExpense   RecurringExpense @relation(fields: [recurringExpenseId], references: [id], onDelete: Cascade)
+  amount             Float
+  dueDate            DateTime
+  paidAt             DateTime         @default(now())
+  vaultEntryId       String?
+  notes              String?
 }
 
 // ─── Milestone 5 — AI Advisor ─────────────────────────────────────────────────

@@ -90,8 +90,9 @@ Tools come in two classes. **Read tools** execute immediately and return data.
 | `get_trends(n)` | `getTrends(n)` | Multi-month income/expense/savings-rate patterns |
 | `get_installments()` | `getAllInstallments()` | Active + finished installments, monthly obligation |
 | `get_loans()` | `getLoansOverview()` | Savings accounts, debtors, liquidity KPIs |
-| `get_vaults()` | `getVaults()` | All vaults with computed balance + progress |
+| `get_vaults()` | `getVaults()` | All vaults with computed balance + progress. A RECURRING vault's `requiredThisMonth` reflects the sum of set-asides from its linked recurring expenses. |
 | `get_vault_obligations(month, year)` | `getVaultObligations()` | Per-vault required / contributed / still-needed this month |
+| `get_recurring_expenses(month, year)` | `getRecurringExpenses()` | All active recurring expenses with computed set-aside amounts and status |
 
 ### 4.2 Proposal tools (return an action card; never mutate)
 
@@ -102,8 +103,10 @@ Tools come in two classes. **Read tools** execute immediately and return data.
 | `propose_vault_contribution(vaultId, amount, date?, notes?)` | `addVaultEntry()` (positive) | The flagship action behind "save X this month" |
 | `propose_vault_withdrawal(vaultId, amount, date?, notes?)` | `addVaultEntry()` (negative) | Spending from / raiding a vault |
 | `propose_archive_vault(vaultId)` | `archiveVault()` | Close a met or abandoned goal without deleting history |
+| `propose_create_recurring_expense(name, estimatedAmount, cadenceMonths, nextDueDate, category?, fundingVaultId?)` | `createRecurringExpense()` | Register a new recurring bill in the calendar |
+| `propose_pay_recurring(id, amount, fromVaultId?)` | `payRecurringExpense()` | Record a payment and roll the cycle forward; optionally withdraws from the linked sinking-fund vault |
 
-> **v1 write scope is intentionally limited to the Vaults module.** Read tools span every
+> **v1 write scope covers Vaults + Recurring Expenses.** Read tools span every
 > module so the agent can reason holistically (e.g. "your Trip vault needs 200k but your
 > variable burn rate is 130% this month — fund less"), but the only things it can *change*
 > in v1 are vaults. Expand deliberately (§6).
@@ -152,6 +155,33 @@ so.)
 in the app. The agent *complements* it: from the banner the user can open the chat
 pre-seeded with that vault's context and say "draft it," and the agent responds with a
 `propose_vault_contribution` card. The banner is the alarm; the agent is the hands.
+
+---
+
+---
+
+## 5b. Domain rules: Recurring Expenses + Sinking Funds
+
+A **recurring expense** is a non-monthly cost the user knows is coming: taxes, oil change, car inspection, insurance. The key fields are `estimatedAmount`, `cadenceMonths`, and `nextDueDate`.
+
+**Set-aside math:** `monthlySetAside = estimatedAmount / monthsUntilDue`. `monthsUntilDue` is always at least 1 — if the item is due this month, the full estimated amount is the set-aside. This is the re-spread principle: falling behind one month silently raises next month's requirement; no debt is created.
+
+**Cycle roll:** On payment, `nextDueDate` advances by `cadenceMonths` via `rollCycle()`. The actual paid amount can differ from the estimate (user adjusts at pay time).
+
+**Sinking-fund vault (goalType = RECURRING):** A vault that accumulates monthly set-asides for a basket of recurring expenses linked via `fundingVaultId`. Its `requiredThisMonth` is `sum(monthlySetAside(item))` over all active linked expenses. The agent should:
+- Use `get_recurring_expenses` to see upcoming bills and set-asides.
+- Use `get_vault_obligations` to see if the sinking fund is on pace (`On track`) or `Underfunded`.
+- When the user mentions a bill they pay periodically, propose `propose_create_recurring_expense`.
+- When the user says they paid a recurring bill, propose `propose_pay_recurring` — always read `get_recurring_expenses` first to get the correct `id` and suggest using the linked vault as `fromVaultId` if one exists.
+- Quote the actual set-aside figure when answering "how much should I put in the Car fund this month?"
+
+**Status tiers for recurring expenses:**
+| Status | Condition |
+|---|---|
+| Funded | fundingVaultId set and vault balance ≥ estimatedAmount |
+| DueSoon | nextDueDate falls within the current month |
+| Overdue | nextDueDate is in the past |
+| Underfunded | has a funding vault but vault balance < estimatedAmount, or no vault |
 
 ---
 

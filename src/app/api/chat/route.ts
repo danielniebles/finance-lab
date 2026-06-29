@@ -10,6 +10,7 @@ import { getTrends } from "@/lib/queries/trends";
 import { getAllInstallments, getMonthSummary } from "@/lib/queries/installments";
 import { getLoansOverview } from "@/lib/queries/loans";
 import { getVaults, getVaultObligations } from "@/lib/queries/vaults";
+import { getRecurringExpenses } from "@/lib/queries/recurring";
 import type { ChatModuleContext } from "@/components/chat/chat-provider";
 
 const anthropic = new Anthropic();
@@ -26,6 +27,7 @@ const READ_TOOLS = new Set([
   "get_loans",
   "get_vaults",
   "get_vault_obligations",
+  "get_recurring_expenses",
 ]);
 
 const PROPOSAL_TOOLS = new Set([
@@ -34,6 +36,8 @@ const PROPOSAL_TOOLS = new Set([
   "propose_vault_contribution",
   "propose_vault_withdrawal",
   "propose_archive_vault",
+  "propose_create_recurring_expense",
+  "propose_pay_recurring",
 ]);
 
 const TOOLS: Anthropic.Tool[] = [
@@ -142,7 +146,7 @@ const TOOLS: Anthropic.Tool[] = [
         },
         goalType: {
           type: "string",
-          enum: ["FIXED_DEADLINE", "OPEN_ENDED"],
+          enum: ["FIXED_DEADLINE", "OPEN_ENDED", "RECURRING"],
           description: "Vault goal type",
         },
         targetAmount: {
@@ -229,6 +233,61 @@ const TOOLS: Anthropic.Tool[] = [
         vaultId: { type: "string", description: "Vault ID to archive" },
       },
       required: ["vaultId"],
+    },
+  },
+
+  // ── Recurring expense tools ──
+  {
+    name: "get_recurring_expenses",
+    description:
+      "Get all active recurring expenses with computed set-aside amounts and status for a given month. Use this when the user asks about upcoming bills, what they need to save this month, or recurring obligations.",
+    input_schema: {
+      type: "object",
+      properties: {
+        month: { type: "number", description: "Month number (1-12)" },
+        year: { type: "number", description: "4-digit year" },
+      },
+      required: ["month", "year"],
+    },
+  },
+  {
+    name: "propose_create_recurring_expense",
+    description:
+      "Propose registering a new recurring expense. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        estimatedAmount: { type: "number", description: "Estimated amount in COP" },
+        cadenceMonths: {
+          type: "number",
+          description: "Recurrence in months (1=monthly, 6=semiannual, 12=annual)",
+        },
+        nextDueDate: { type: "string", description: "Next due date (YYYY-MM-DD)" },
+        category: { type: "string" },
+        fundingVaultId: {
+          type: "string",
+          description: "ID of a RECURRING vault to link",
+        },
+      },
+      required: ["name", "estimatedAmount", "cadenceMonths", "nextDueDate"],
+    },
+  },
+  {
+    name: "propose_pay_recurring",
+    description:
+      "Propose recording a payment for a recurring expense and rolling its cycle forward. Optionally withdraws from a linked vault. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "RecurringExpense ID" },
+        amount: { type: "number", description: "Actual amount paid in COP" },
+        fromVaultId: {
+          type: "string",
+          description: "Vault ID to withdraw from (optional)",
+        },
+      },
+      required: ["id", "amount"],
     },
   },
 ];
@@ -327,6 +386,11 @@ async function runReadTool(
       const year = Number(input.year);
       return getVaultObligations(month, year);
     }
+    case "get_recurring_expenses": {
+      const month = Number(input.month);
+      const year = Number(input.year);
+      return getRecurringExpenses(month, year);
+    }
     default:
       return { error: `Unknown read tool: ${name}` };
   }
@@ -354,6 +418,10 @@ function describeProposal(
       return `Withdraw ${fmt(input.amount)} from vault ${input.vaultId}`;
     case "propose_archive_vault":
       return `Archive vault ${input.vaultId}`;
+    case "propose_create_recurring_expense":
+      return `Add recurring expense: ${input.name ?? "?"}, ${fmt(input.estimatedAmount)} every ${input.cadenceMonths}mo`;
+    case "propose_pay_recurring":
+      return `Pay recurring expense ${input.id}: ${fmt(input.amount)}${input.fromVaultId ? ` from vault ${input.fromVaultId}` : ""}`;
     default:
       return name;
   }
@@ -397,7 +465,9 @@ Propose, never act: for any change to the user's data, call a proposal tool. A p
 
 One proposal per card. State your reasoning before proposing.
 
-Say "drafted for your approval," never "done."${contextLine}
+Say "drafted for your approval," never "done."
+
+Vaults come in three types: FIXED_DEADLINE (saving toward a goal by a date), OPEN_ENDED (no deadline), and RECURRING (sinking fund for non-monthly costs). A RECURRING vault's requiredThisMonth reflects the sum of set-asides from its linked recurring expenses.${contextLine}
 
 Respond in the language the user writes in (Spanish or English).`;
 

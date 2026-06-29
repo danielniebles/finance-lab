@@ -10,6 +10,7 @@ import {
   addVaultEntry,
   archiveVault,
 } from "@/lib/actions/vaults";
+import { createRecurringExpense, payRecurringExpense } from "@/lib/actions/recurring";
 import { useChat } from "./chat-provider";
 import type { ProposalEvent } from "./chat-provider";
 import type { VaultKind, VaultGoalType } from "@/generated/prisma";
@@ -79,6 +80,24 @@ async function executeProposal(
       await archiveVault(params.vaultId as string);
       break;
     }
+    case "propose_create_recurring_expense": {
+      await createRecurringExpense({
+        name: params.name as string,
+        estimatedAmount: Number(params.estimatedAmount),
+        cadenceMonths: Number(params.cadenceMonths),
+        nextDueDate: new Date(params.nextDueDate as string),
+        category: params.category as string | undefined ?? null,
+        fundingVaultId: params.fundingVaultId as string | undefined ?? null,
+      });
+      break;
+    }
+    case "propose_pay_recurring": {
+      await payRecurringExpense(params.id as string, {
+        amount: Number(params.amount),
+        fromVaultId: params.fromVaultId as string | undefined,
+      });
+      break;
+    }
     default:
       throw new Error(`No handler for action: ${action}`);
   }
@@ -145,9 +164,9 @@ export function ActionCard({ proposal }: Props) {
     updateProposal(proposal.id, false);
   }
 
-  // Params to display (skip vaultId as it's internal)
+  // Params to display (skip internal IDs)
   const displayParams = Object.entries(proposal.params).filter(
-    ([k]) => k !== "vaultId",
+    ([k]) => k !== "vaultId" && k !== "id",
   );
 
   return (

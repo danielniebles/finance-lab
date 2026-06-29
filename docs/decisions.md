@@ -112,7 +112,26 @@
 
 **Decision:** The Vaults module maintains its own `Vault` / `VaultEntry` ledger. Vault balances are never added to `SavingsAccount` balances, never factored into the Liquidity Ratio KPI, and never represented as `AccountEntry` records. Vault balance = `sum(VaultEntry.amount)` — computed, never stored (ADR-006 applies).
 
-**Why:** Vaults are earmarked goal pockets, not liquid capital. Including vault balances in the liquidity view would inflate available funds and understate loan exposure. Keeping the ledgers separate means the Loans module accurately reflects deployable liquidity and the Health Score's Liquidity Ratio remains meaningful. The trade-off is that "total savings" across all vehicles requires an explicit cross-module sum, but that is a future dashboard concern.
+**Why:** Vaults are earmarked goal pockets, not liquid capital. Including vault balances in the liquidity view would inflate
+ available funds and understate loan exposure. Keeping the ledgers separate means the Loans module accurately reflects deployable liquidity and the Health Score's Liquidity Ratio remains meaningful. The trade-off is that "total savings" across all vehicles requires an explicit cross-module sum, but that is a future dashboard concern.
+
+---
+
+## ADR-016 — Plan layer beside Actuals
+
+**Decision:** Finance Lab adopts a two-layer model: **Actuals** (imported transactions, computed balances, severity — the record of what happened) and **Plan** (expected non-monthly outflows and, in future phases, expected inflows). The app's reconciliation job is comparing the two: given what's coming, what must be set aside this month, and where will you actually land? Plan inputs are material (above a meaningful threshold relative to income) and non-monthly by design — small noisy spending stays absorbed by the variable budget. Setup effort scales to stakes.
+
+**Why:** The existing monthly budget can only represent costs that are smooth and monthly. Every recurring pain (annual taxes, semiannual insurance, birthday gifts) shares one root cause: there is no model of the future that isn't monthly. The Plan layer fixes this without changing the import habit.
+
+**Re-spread is the default for shortfalls:** `requiredThisMonth = remaining / periodsLeft` is always recomputed from the current balance and next due date. Falling behind one month silently raises the next month's requirement — no auto-debt, no auto-raid of savings. See `docs/financial-model.md` for the full north-star model.
+
+---
+
+## ADR-017 — Recurring expense registry feeds a RECURRING vault
+
+**Decision:** `VaultGoalType` gains a third value `RECURRING`. A `RECURRING` vault's `requiredThisMonth` is `sum(monthlySetAside(item))` over its linked `RecurringExpense` records — not a deadline split. The vault holds the money; the registry (`RecurringExpense` + `RecurringExpensePayment`) is the calendar. On payment, `nextDueDate` advances by `cadenceMonths` via `rollCycle()` inside a `prisma.$transaction`. The withdrawal from the vault is an ordinary `VaultEntry` with a negative amount, reusing the existing vault ledger. Balances are never stored (ADR-006 applies).
+
+**Why:** Keeping sinking-fund money as a vault reuses the entire vault ledger, banner, status classification, and agent surface. A separate account or balance column would create a second source of truth. The `RECURRING` vault shape is the minimal addition that unblocks the non-monthly planning use case without blurring the Loans/Vaults boundary (ADR-014).
 
 ---
 
