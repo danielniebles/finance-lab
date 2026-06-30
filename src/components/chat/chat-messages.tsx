@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { ActionCard } from "./action-card";
 import type { ChatItem, Message, ProposalEvent } from "./chat-provider";
@@ -70,6 +71,7 @@ export function ChatMessages({
               {msg.content ? (
                 msg.role === "assistant" ? (
                   <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
                     components={{
                       p: ({ children }) => (
                         <p className="mb-2 last:mb-0">{children}</p>
@@ -106,6 +108,23 @@ export function ChatMessages({
                         </code>
                       ),
                       hr: () => <hr className="my-2 border-white/10" />,
+                      table: ({ children }) => (
+                        <div className="overflow-x-auto my-2">
+                          <table className="w-full text-xs border-collapse">
+                            {children}
+                          </table>
+                        </div>
+                      ),
+                      th: ({ children }) => (
+                        <th className="border border-border/40 px-2 py-1 text-left font-semibold bg-muted/30 font-mono tabular-nums whitespace-nowrap">
+                          {children}
+                        </th>
+                      ),
+                      td: ({ children }) => (
+                        <td className="border border-border/40 px-2 py-1 font-mono tabular-nums whitespace-nowrap">
+                          {children}
+                        </td>
+                      ),
                     }}
                   >
                     {msg.content}

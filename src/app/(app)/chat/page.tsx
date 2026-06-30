@@ -30,7 +30,9 @@ export default function ChatPage() {
         )}
       </div>
 
-      <ChatMessages items={items} isLoading={isLoading} />
+      <div className="flex-1 overflow-hidden flex flex-col max-w-3xl w-full mx-auto">
+        <ChatMessages items={items} isLoading={isLoading} />
+      </div>
       <div className="px-4 pb-4">
         <div className="rounded-xl border border-border bg-card max-w-3xl mx-auto">
           <ChatInput onSend={sendMessage} disabled={isLoading} />

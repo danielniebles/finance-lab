@@ -1,6 +1,6 @@
 # Modules
 
-> Last updated: 2026-06-29
+> Last updated: 2026-06-30
 
 ## Project structure
 ```
@@ -40,6 +40,7 @@ src/
     installment-utils.ts    — computeMonthlyAmount(), computeInstallmentDue(), isDueInMonth(), computeMonthSummary(), rate converters
     vault-utils.ts          — computeVaultMetrics(), classifyVault(), monthsLeft() — pure math, client-safe
     forecast-utils.ts       — pure math for the forecasting module; predictCategoryLanding (recency-weighted mean, MIN_MONTHS guard), projectSavingsRate. Mirrors vault-utils.ts pattern.
+    forecast-utils.test.ts  — Vitest unit tests for forecast-utils (12 tests: prediction, null/thin-data cases, projectSavingsRate edge cases). Run with `npm test`.
     parse-moneylover.ts     — XLSX → Transaction[] parser
     queries/
       expenses.ts           — getMonthlyAnalysis(), getImportBatches(), getUnmappedCategories()
@@ -119,7 +120,7 @@ src/
 
 ### `src/app/(app)/chat`
 **Responsibility:** Full-screen AI advisor backed by `claude-sonnet-4-6`. Uses a tool-use loop (9 read tools + 5 proposal tools). Conversation history is persisted in `ChatMessage`. The floating chat panel is available on every page, module-context-aware. Proposal tools surface action cards (`ActionCard`) that the user must approve before mutations occur (ADR-015).
-**Key files:** `chat/page.tsx`, `components/chat/chat-provider.tsx` (NDJSON streaming + proposal state), `chat-messages.tsx`, `chat-input.tsx`, `floating-chat.tsx`, `action-card.tsx`, `src/app/api/chat/route.ts`
+**Key files:** `chat/page.tsx` (messages area constrained to `max-w-3xl` for mobile-friendly width), `components/chat/chat-provider.tsx` (NDJSON streaming + proposal state), `chat-messages.tsx` (renders assistant messages as Markdown via `remark-gfm` with custom table/code/paragraph styles), `chat-input.tsx`, `floating-chat.tsx`, `action-card.tsx`, `src/app/api/chat/route.ts` (orphaned-user-message guard — strips trailing consecutive user messages on history load to prevent Anthropic 400 errors; saves an assistant error message in the outer catch to prevent the loop-on-failure bug; structured error logging)
 **Dependencies:** `getFinancialSnapshot`, `getHealthScore`, `getMonthlyAnalysis`, `getTrends`, `getAllInstallments`, `getLoansOverview`, `getVaults`, `getVaultObligations`, vault write actions, Anthropic SDK
 **Exports:** `ChatPage` (route), `FloatingChat` (accessible from any page via the app layout), `ActionCard` (renders proposal events inline in the chat stream)
 **Transport:** `application/x-ndjson` — one JSON object per line: `{"type":"text","delta":"..."}` or `{"type":"proposal","action":"...","params":{...},"label":"..."}`

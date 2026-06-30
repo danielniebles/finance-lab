@@ -60,8 +60,8 @@ Everything below is either a Plan input, an Actuals reading, or a reconciliation
 | Loans | Liquidity: savings accounts + money owed to you | shipped |
 | **Vaults** | Earmarked savings with a purpose | shipped |
 | Overview + Agent | Health Score + propose-then-confirm agent | shipped |
-| **Recurring expenses** | Plan: calendar of non-monthly costs | **planned (Phase A)** |
-| **Sinking-fund vaults** | Money for the recurring calendar | **planned (Phase A)** |
+| **Recurring expenses** | Plan: calendar of non-monthly costs | **shipped (Phase A)** |
+| **Sinking-fund vaults** | Money for the recurring calendar | **shipped (Phase A)** |
 | **Income plan** | Plan: expected salary + primas + allocation rules | **planned (Phase B)** |
 | **Forecasting** | Reconciliation: projected landing + early warning | **shipped (Phase C)** |
 | **Liquidity-aware advice** | Reconciliation: loan exposure + emergency buffer | **planned (Phase D)** |
@@ -192,7 +192,7 @@ shipped foundation.
 - **Phase A — Recurring expenses + sinking-fund vault** (#3, #5). Highest pain, lowest cost
   (reuses vault infra). Detailed handoff: `.handoff/recurring-sinking-funds/HANDOFF.md`. *(shipped)*
 - **Vault-funding revision** — optional account-sourced contributions (4.6). Prerequisite for
-  Phase B. Handoff: `.handoff/vault-funding-revision/HANDOFF.md`.
+  Phase B. Handoff: `.handoff/vault-funding-revision/HANDOFF.md`. *(shipped)*
 - **Phase B — Income events + allocation rules** (#4). Handoff: `.handoff/income-allocation/HANDOFF.md`.
 - **Phase C — Forecasting + projection** (#2). *(shipped)*
 - **Phase D — Liquidity-aware advice + Emergency vault integration** (lending/emergencies).
@@ -203,7 +203,7 @@ Each phase ends by registering its agent tools and updating `agent.md` §4 + the
 
 ## 8. ADR bookkeeping
 
-`docs/decisions.md` records through **ADR-017** (vaults backfill + Phase A landed). Continue:
+`docs/decisions.md` records through **ADR-021** (vault funding revision + account-sourced contributions). Continue:
 
 - **ADR-014** — Vaults are a standalone ledger (not liquidity). *(recorded)*
 - **ADR-015** — Agent upgrade: tool use + propose-then-confirm (supersedes ADR-009). *(recorded)*
@@ -211,8 +211,8 @@ Each phase ends by registering its agent tools and updating `agent.md` §4 + the
 - **ADR-017** — Recurring expense registry feeds a `RECURRING` vault shape. *(recorded)*
 - **ADR-018** — Income events + percentage allocation rules; receipt reconciled against Savings
   entries (not MoneyLover); account-sourced allocations. *(Phase B)*
-- **ADR-019** — Forecasting from trend history (likely-landing range). *(Phase C)*
+- **ADR-019** — Forecasting from trend history (likely-landing range). *(recorded)*
 - **ADR-020** — Soft inflows: loans recoverable-but-illiquid; Emergency vault as buffer. *(Phase D)*
 - **ADR-021** — Vault funding: optional `sourceAccountId`; sourced money leaves *available* and is
   shown as a **separate `inVaults` figure** (not in `totalSavings`, so Health Score is untouched).
-  Amends ADR-014. *(prerequisite for B)*
+  Amends ADR-014. *(recorded)*

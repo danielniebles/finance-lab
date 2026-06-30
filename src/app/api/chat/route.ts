@@ -515,7 +515,22 @@ Respond in the language the user writes in (Spanish or English).`;
     db.chatMessage.findMany({ orderBy: { createdAt: "asc" } }),
   ]);
 
-  const history = historyRows.slice(-20);
+  let history = historyRows.slice(-20);
+
+  // Guard against orphaned consecutive user messages from previous error turns.
+  // The last user message is the one we just saved (the current turn) — keep it,
+  // strip any older consecutive user messages directly before it.
+  let trailingUsers = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].role === "user") trailingUsers++;
+    else break;
+  }
+  if (trailingUsers > 1) {
+    history = [
+      ...history.slice(0, history.length - trailingUsers),
+      history[history.length - 1], // keep the current (most recent) user message
+    ];
+  }
 
   // Build initial messages — history already includes the just-saved user message
   const messages: MessageParam[] = history.map((m) => ({
@@ -530,6 +545,8 @@ Respond in the language the user writes in (Spanish or English).`;
       const write = (obj: unknown) => {
         controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
       };
+
+      let lastTool: string | null = null;
 
       try {
         let fullText = "";
@@ -553,6 +570,7 @@ Respond in the language the user writes in (Spanish or English).`;
               const toolInput = toolBlock.input as Record<string, unknown>;
 
               if (READ_TOOLS.has(toolBlock.name)) {
+                lastTool = toolBlock.name;
                 try {
                   const data = await runReadTool(toolBlock.name, toolInput);
                   toolResults.push({
@@ -569,6 +587,7 @@ Respond in the language the user writes in (Spanish or English).`;
                   });
                 }
               } else if (PROPOSAL_TOOLS.has(toolBlock.name)) {
+                lastTool = toolBlock.name;
                 const label = describeProposal(toolBlock.name, toolInput);
                 write({
                   type: "proposal",
@@ -614,12 +633,16 @@ Respond in the language the user writes in (Spanish or English).`;
 
         controller.close();
       } catch (err) {
-        write({
-          type: "text",
-          delta: "Something went wrong. Please try again.",
-        });
+        const errorMsg = "Something went wrong. Please try again.";
+        write({ type: "text", delta: errorMsg });
+        // Keep message history valid — always save an assistant turn after every user turn
+        await saveMessage("assistant", errorMsg).catch(() => {});
         controller.close();
-        console.error("[chat/route]", err);
+        console.error("[chat/route] outer catch:", {
+          error: err instanceof Error ? { message: err.message, name: err.name } : String(err),
+          historyLength: history.length,
+          lastTool,
+        });
       }
     },
   });
