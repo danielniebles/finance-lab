@@ -143,6 +143,18 @@
 
 ---
 
+## ADR-019 — Forecasting from trend history (Phase C)
+
+**Decision:** `getForecast(month, year)` reads the last 6 import batches via `getTrends`, feeds per-category spend history into `predictCategoryLanding` (recency-weighted mean ± 1 std), and projects a month-end savings rate. One read tool (`get_forecast`) surfaces this to the agent. No schema change, no proposal tool.
+
+**Why:** Landing lower than expected (pain #2) can be addressed purely from existing import history — no new import habit, no mid-month workflow. The forecast is historical: it does not read current-month actuals. Mid-month pacing (reading a partial import to compute spend-so-far) requires an in-progress flag on ImportBatch (ADR-005 extension) and is explicitly deferred to the backlog.
+
+**Thin data:** When fewer than 3 months of history exist, `dataSufficiency = "thin"` and the UI/agent stays quiet — no fabricated numbers.
+
+**Income source:** Phase B (getIncomePlan) not yet shipped; expectedIncome falls back to trailing income average from getTrends.
+
+---
+
 ## ADR-021 — Vault funding: optional account source (amends ADR-014)
 
 **Decision:** A `VaultEntry` may now carry an optional `sourceAccountId` (FK → `SavingsAccount`). Sourced entries reduce that account's computed `available` balance — the money moves out of the savings pool and into the vault. Sourced vault money is tracked in a new `inVaults` figure reported by `getLoansOverview()`. `inVaults` is displayed as a standalone "Earmarked in vaults" figure and is NEVER rolled into `totalSavings`. The formulas `totalSavings = available + inLoans` and `liquidityRatio = available / totalSavings` are unchanged; the Health Score (ADR-011) is untouched. `netWorth = totalSavings + inVaults` is the conserved quantity (shown as an informational line). Unsourced contributions remain notional earmarks and are unchanged from ADR-014. Existing entries get `sourceAccountId = null` (backward compatible, no backfill).

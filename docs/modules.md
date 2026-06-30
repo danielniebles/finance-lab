@@ -24,7 +24,7 @@ src/
       chat/route.ts         — NDJSON tool-use loop (read + proposal tools)
   components/
     app-sidebar.tsx         — Sidebar nav + theme toggle
-    overview/               — OverviewDashboard (BudgetBarsPanel, TopUnplannedPanel), ExpenseDonut
+    overview/               — OverviewDashboard (BudgetBarsPanel, TopUnplannedPanel), ExpenseDonut, ForecastPanel
     expenses/               — ImportForm, AnalysisDashboard, CategoryBreakdownTable, PeriodSelector
     trends/                 — TrendsDashboard (Recharts)
     installments/           — InstallmentsDashboard (client), InstallmentForm, PayButton, MonthNav, AllInstallmentsTable, InstallmentActions, CreditCardTile, CreditCardManager
@@ -39,6 +39,7 @@ src/
     utils.ts                — cn() (clsx + tailwind-merge)
     installment-utils.ts    — computeMonthlyAmount(), computeInstallmentDue(), isDueInMonth(), computeMonthSummary(), rate converters
     vault-utils.ts          — computeVaultMetrics(), classifyVault(), monthsLeft() — pure math, client-safe
+    forecast-utils.ts       — pure math for the forecasting module; predictCategoryLanding (recency-weighted mean, MIN_MONTHS guard), projectSavingsRate. Mirrors vault-utils.ts pattern.
     parse-moneylover.ts     — XLSX → Transaction[] parser
     queries/
       expenses.ts           — getMonthlyAnalysis(), getImportBatches(), getUnmappedCategories()
@@ -70,9 +71,9 @@ src/
 
 ### `src/app/(app)/overview`
 **Responsibility:** Home dashboard. Aggregates data from all modules into a single-page health summary. Uses an asymmetric 7/5 grid layout with a `BudgetBarsPanel` (variable/fixed burn rates + savings rate bars) and `TopUnplannedPanel` (top unplanned spending). Installments split into Upcoming/Paid columns. Loans section shows a Liquidity Health panel. Mounts `VaultDueBanner` at the top when vault obligations are still needed this month.
-**Key files:** `overview/page.tsx` → `components/overview/overview-dashboard.tsx` (contains `BudgetBarsPanel`, `TopUnplannedPanel` as module-private components), `components/overview/expense-donut.tsx` (horizontal layout, Total Spent center label, two-row legend)
-**Dependencies:** `getMonthlyAnalysis`, `getMonthSummary`, `getLoansOverview`, `getHealthScore`, `getVaultObligations`
-**Exports:** `OverviewPage` (route), `OverviewDashboard` (async Server Component), `ExpenseDonut` (Recharts pie chart)
+**Key files:** `overview/page.tsx` → `components/overview/overview-dashboard.tsx` (contains `BudgetBarsPanel`, `TopUnplannedPanel` as module-private components), `components/overview/expense-donut.tsx` (horizontal layout, Total Spent center label, two-row legend), `components/overview/forecast-panel.tsx` (server component; shows projected savings rate, vsTarget delta, and top overspend drivers; renders a quiet thin-data state when < 3 months of history)
+**Dependencies:** `getMonthlyAnalysis`, `getMonthSummary`, `getLoansOverview`, `getHealthScore`, `getVaultObligations`, `getForecast`
+**Exports:** `OverviewPage` (route), `OverviewDashboard` (async Server Component), `ExpenseDonut` (Recharts pie chart), `ForecastPanel` (async Server Component)
 
 ---
 
@@ -144,6 +145,7 @@ src/
 - `health-score.ts` — `getHealthScore()`: composite 0–100 score with month-over-month delta
 - `chat.ts` — `getFinancialSnapshot()`: plain-text financial summary (used by the `get_overview` agent tool)
 - `vaults.ts` — `getVaults()`: all active vaults with computed `VaultWithMetrics` (balance, remaining, progress %, status, contributedThisMonth). `VaultEntryRow` now includes `sourceAccountId` and `sourceAccountName`; entries include the `sourceAccount` relation. `getVaultObligations(month, year)`: per-vault required/contributed/stillNeeded totals.
+- `forecast.ts` — `getForecast(month, year)`: historical projection using trend history + budget structure. Reuses `getTrends` + `getMonthlyAnalysis`. No new DB shape. Returns `ForecastResult` with per-category predictions, projected savings rate, vsTarget/vsLastMonth deltas, overspend drivers, and `dataSufficiency` flag.
 
 ---
 

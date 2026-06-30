@@ -11,6 +11,7 @@ import { getAllInstallments, getMonthSummary } from "@/lib/queries/installments"
 import { getLoansOverview } from "@/lib/queries/loans";
 import { getVaults, getVaultObligations } from "@/lib/queries/vaults";
 import { getRecurringExpenses } from "@/lib/queries/recurring";
+import { getForecast } from "@/lib/queries/forecast";
 import type { ChatModuleContext } from "@/components/chat/chat-provider";
 
 const anthropic = new Anthropic();
@@ -28,6 +29,7 @@ const READ_TOOLS = new Set([
   "get_vaults",
   "get_vault_obligations",
   "get_recurring_expenses",
+  "get_forecast",
 ]);
 
 const PROPOSAL_TOOLS = new Set([
@@ -259,6 +261,19 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "get_forecast",
+    description:
+      "Get a historical forecast for a given month: projected savings rate, per-category landing ranges, and top overspend drivers. Based on past import data only — labels outputs as projections, returns insufficient history if < 3 months of data.",
+    input_schema: {
+      type: "object",
+      properties: {
+        month: { type: "number", description: "Month number (1–12)" },
+        year: { type: "number", description: "4-digit year" },
+      },
+      required: ["month", "year"],
+    },
+  },
+  {
     name: "propose_create_recurring_expense",
     description:
       "Propose registering a new recurring expense. Emits an action card — does NOT mutate.",
@@ -399,6 +414,11 @@ async function runReadTool(
       const year = Number(input.year);
       return getRecurringExpenses(month, year);
     }
+    case "get_forecast": {
+      const month = Number(input.month);
+      const year = Number(input.year);
+      return getForecast(month, year);
+    }
     default:
       return { error: `Unknown read tool: ${name}` };
   }
@@ -482,6 +502,10 @@ Say "drafted for your approval," never "done."
 Vaults come in three types: FIXED_DEADLINE (saving toward a goal by a date), OPEN_ENDED (no deadline), and RECURRING (sinking fund for non-monthly costs). A RECURRING vault's requiredThisMonth reflects the sum of set-asides from its linked recurring expenses.
 
 A vault contribution may optionally name a source savings account (sourceAccountId). Sourced contributions move real money out of that account's available balance into the vault — use propose_vault_contribution with sourceAccountId when the user says "move X from [account] into [vault]". Unsourced contributions are notional earmarks that don't affect account balances.${contextLine}
+
+When the user asks whether they will hit their savings target this month, call get_forecast for the current month and year. Report the projected savings rate and the top categories pushing it down. Always label the output as a projection from historical data, not a guarantee.
+When proposing vault contributions, check get_forecast first. If projectedSavingsRate is below the savingsRateTarget and vsTarget < 0, temper the advice: note that the user is projected to land below target and suggest funding vaults lighter this month.
+When dataSufficiency is "thin", stay quiet — acknowledge the projection isn't reliable yet.
 
 Respond in the language the user writes in (Spanish or English).`;
 

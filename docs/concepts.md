@@ -72,6 +72,12 @@ A vault with `goalType = RECURRING`. Its `requiredThisMonth` is the sum of set-a
 **Set-aside**
 `estimatedAmount / monthsUntilDue` — the amount you should put into the sinking fund this month to be on pace for a specific recurring expense. Re-computed fresh each month; no stored balance needed (ADR-006).
 
+**Forecast / landing range**
+A historical projection of where a variable spending category will land by month end. Computed from the last 6 import batches using a recency-weighted mean ± 1 standard deviation. Returns null when fewer than 3 months of history exist (MIN_MONTHS guard). Not a guarantee — labeled as a projection in the UI.
+
+**Projected savings rate**
+`(expectedIncome − fixedBudget − predictedVariableTotal) / expectedIncome × 100`. Uses the trailing income average from trend history as the income source (Phase B income plan not yet shipped). Shown with a vs-target delta (pp vs the 20% goal) and a vs-last-month delta.
+
 **Agent**
 The in-app AI advisor, backed by `claude-sonnet-4-6` via the Anthropic SDK. Supersedes the old static-snapshot advisor (ADR-015). Uses a tool-use loop: the model calls read tools to fetch live data and proposal tools to surface action cards. Proposal tools never mutate — the user must click Approve on an action card to trigger the real server action. The agent is module-context-aware: pages pass `{ route, module, focus, entityId }` context so questions like "how am I doing this month?" resolve against the current view. Full spec in `docs/agent.md`.
 
@@ -95,6 +101,8 @@ A plain-text summary of the user's finances, now used as the body of the `get_ov
 | sinking fund | A RECURRING vault that accumulates monthly set-asides to cover non-monthly bills |
 | set-aside | estimatedAmount / monthsUntilDue — the monthly contribution pace for one recurring expense |
 | cadence | Recurrence interval in months (cadenceMonths). 1 = monthly, 6 = semiannual, 12 = annual |
+| projection | a historical forecast output labeled as "from history, not a guarantee" |
+| thin data | fewer than MIN_MONTHS (3) months of import history; causes the forecast panel to suppress output and show a quiet placeholder |
 | savings rate | (income − expenses) / income × 100 |
 | liquidity ratio | liquid available / (liquid available + loans out) × 100 |
 | installment burden | monthly installment obligation / income × 100 |

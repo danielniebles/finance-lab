@@ -93,6 +93,7 @@ Tools come in two classes. **Read tools** execute immediately and return data.
 | `get_vaults()` | `getVaults()` | All vaults with computed balance + progress. A RECURRING vault's `requiredThisMonth` reflects the sum of set-asides from its linked recurring expenses. |
 | `get_vault_obligations(month, year)` | `getVaultObligations()` | Per-vault required / contributed / still-needed this month |
 | `get_recurring_expenses(month, year)` | `getRecurringExpenses()` | All active recurring expenses with computed set-aside amounts and status |
+| `get_forecast(month, year)` | `getForecast()` | Projected savings rate + per-category landing ranges from trend history (historical only) |
 
 ### 4.2 Proposal tools (return an action card; never mutate)
 
@@ -191,6 +192,21 @@ A **recurring expense** is a non-monthly cost the user knows is coming: taxes, o
 | DueSoon | nextDueDate falls within the current month |
 | Overdue | nextDueDate is in the past |
 | Underfunded | has a funding vault but vault balance < estimatedAmount, or no vault |
+
+---
+
+---
+
+## 5c. Domain rules: Forecasting
+
+The forecast is **historical-only** — it reads past import batches (last 6 months) and predicts where variable categories will land at month-end. It does **not** read current-month actuals (there are none until an import happens).
+
+**Key rules:**
+
+- **Ranges, not point certainties.** Each category produces a `{ expected, low, high, confidence }` band (±1 std dev). The agent should quote a range, not a single number, and say "projected" not "will be."
+- **Quiet on thin data.** When `dataSufficiency === "thin"` (fewer than 3 months of history), the agent acknowledges the projection isn't reliable yet. It should NOT fabricate numbers or confidence.
+- **Temper vault-funding advice when below target.** If `projectedSavingsRate` is below `savingsRateTarget` and `vsTarget < 0`, the agent should note the shortfall and suggest funding vaults lighter this month rather than pushing the user into further deficit.
+- **Income fallback.** Phase B (`getIncomePlan`) is not yet shipped. `expectedIncome` is the trailing income average from `getTrends`. When income has been highly variable, the agent should acknowledge uncertainty on that dimension too.
 
 ---
 

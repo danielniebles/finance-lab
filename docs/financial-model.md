@@ -63,7 +63,7 @@ Everything below is either a Plan input, an Actuals reading, or a reconciliation
 | **Recurring expenses** | Plan: calendar of non-monthly costs | **planned (Phase A)** |
 | **Sinking-fund vaults** | Money for the recurring calendar | **planned (Phase A)** |
 | **Income plan** | Plan: expected salary + primas + allocation rules | **planned (Phase B)** |
-| **Forecasting** | Reconciliation: projected landing + early warning | **planned (Phase C)** |
+| **Forecasting** | Reconciliation: projected landing + early warning | **shipped (Phase C)** |
 | **Liquidity-aware advice** | Reconciliation: loan exposure + emergency buffer | **planned (Phase D)** |
 
 Module relationships unchanged at the boundary level: Installments = bank obligations,
@@ -129,13 +129,14 @@ were fully standalone):
 - Mixed freely; existing vault entries remain valid (no backfill). Handoff:
   `.handoff/vault-funding-revision/HANDOFF.md` (ADR-021).
 
-### 4.4 Forecasting (the volatility) — Phase C
+### 4.4 Forecasting (the volatility) — Phase C *(shipped)*
 
 No new module — a query + agent surfacing.
 
-- Uses trend history to predict a **likely landing range** per variable category and a
-  **projected month-end savings rate** from spend-so-far + known upcoming obligations.
+- Uses trend history to predict a **likely landing range** per variable category (recency-weighted mean ± 1 std dev over last 6 import batches) and a **projected month-end savings rate** from the predicted variable total + fixed budget + trailing income average.
 - Early warning: "trending toward 9% savings, not the 20% you expected."
+- The `ForecastPanel` server component shows the projected savings rate, vs-target/vs-last-month deltas, and the top overspend drivers. A thin-data state renders when fewer than MIN_MONTHS (3) months of history exist.
+- Mid-month pacing (reading partial-month actuals to compute spend-so-far) is deferred — see backlog.
 
 Solves **pain #2** (land lower than expected) with no change to the monthly import habit.
 
@@ -193,7 +194,7 @@ shipped foundation.
 - **Vault-funding revision** — optional account-sourced contributions (4.6). Prerequisite for
   Phase B. Handoff: `.handoff/vault-funding-revision/HANDOFF.md`.
 - **Phase B — Income events + allocation rules** (#4). Handoff: `.handoff/income-allocation/HANDOFF.md`.
-- **Phase C — Forecasting + projection** (#2).
+- **Phase C — Forecasting + projection** (#2). *(shipped)*
 - **Phase D — Liquidity-aware advice + Emergency vault integration** (lending/emergencies).
 
 Each phase ends by registering its agent tools and updating `agent.md` §4 + the docs.
