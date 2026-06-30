@@ -126,6 +126,7 @@ model SavingsAccount {
   transfersFrom      Transfer[]     @relation("TransferFrom")
   transfersTo        Transfer[]     @relation("TransferTo")
   fundedInstallments Installment[]  @relation("InstallmentFunding")
+  vaultEntriesFunded VaultEntry[]   @relation("VaultFundingSource")
 }
 
 enum AccountType {
@@ -220,13 +221,15 @@ model Vault {
 }
 
 model VaultEntry {
-  id        String   @id @default(cuid())
-  vaultId   String
-  vault     Vault    @relation(fields: [vaultId], references: [id], onDelete: Cascade)
-  amount    Float    // positive = contribution, negative = withdrawal
-  date      DateTime @default(now())
-  notes     String?
-  createdAt DateTime @default(now())
+  id              String          @id @default(cuid())
+  vaultId         String
+  vault           Vault           @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+  amount          Float           // positive = contribution, negative = withdrawal
+  date            DateTime        @default(now())
+  notes           String?
+  createdAt       DateTime        @default(now())
+  sourceAccountId String?
+  sourceAccount   SavingsAccount? @relation("VaultFundingSource", fields: [sourceAccountId], references: [id], onDelete: SetNull)
 }
 
 // ─── Module 5: Recurring Expenses ────────────────────────────────────────────

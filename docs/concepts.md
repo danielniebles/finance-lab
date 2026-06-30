@@ -1,7 +1,9 @@
 # Concepts
 
+> Last updated: 2026-06-29
+
 ## What this project is
-Finance Lab is a personal finance tracking application built for a single user living in Colombia. It imports expense data from the MoneyLover mobile app, maps raw categories to a custom budget structure, and provides dashboards for monthly expense analysis, installment obligations, loan/savings tracking, and trend charts. An AI advisor (Claude Haiku) answers questions about the user's real financial data. All amounts are in Colombian Pesos (COP).
+Finance Lab is a personal finance tracking application built for a single user living in Colombia. It imports expense data from the MoneyLover mobile app, maps raw categories to a custom budget structure, and provides dashboards for monthly expense analysis, installment obligations, loan/savings tracking, goal-based vaults, and recurring-expense planning. An AI advisor (Claude Sonnet 4.6) answers questions about the user's real financial data and can propose vault contributions, recurring expense payments, and other actions for the user to approve. All amounts are in Colombian Pesos (COP).
 
 ## Core domain concepts
 
@@ -30,7 +32,7 @@ A bank credit card belonging to the user. Lives in the **Installments module** �
 The Loans module is a *liquidity tracker*: savings accounts Daniel controls + money owed **to** Daniel by debtors. The Installments module is an *obligations tracker*: what Daniel owes the bank, month by month. This boundary is intentional. A `Debtor` record may appear in both modules (formal cash loans via Loans, credit-funded purchases via Installments) because a debtor is a person, not a module concept.
 
 **Savings account**
-A personal savings or investment account the user controls. Balance is derived from a ledger of `AccountEntry` records (INITIAL + ADJUSTMENTs) plus transfer flows. Loans given reduce the available balance.
+A personal savings or investment account the user controls. Balance is derived from a ledger of `AccountEntry` records (INITIAL + ADJUSTMENTs) plus transfer flows minus loans given minus sourced vault contributions (see ADR-021). The `available` figure used in KPIs only counts accounts with `includeInAvailable = true`.
 
 **Loan**
 Money lent by the user to a named `Debtor`, sourced from one of their savings accounts. Repaid through `LoanPayment` records. The remaining balance is always computed — never stored.
@@ -42,7 +44,13 @@ A composite 0–100 score computed from four equally-weighted metrics (25 points
 A named, goal-based savings pocket. Distinct from `SavingsAccount` — vault balances are earmarked, not liquid (ADR-014). Three shapes: `FIXED_DEADLINE` (target amount + target date; auto re-spreads required contribution on shortfall), `OPEN_ENDED` (no deadline, optional aspirational target), and `RECURRING` (sinking fund; `requiredThisMonth` = sum of set-asides from linked recurring expenses). Two kinds: `MANDATORY` (must-fund, e.g. taxes) and `LEISURE` (wants, e.g. a trip). Balance is always computed from `VaultEntry` records — never stored (ADR-006).
 
 **VaultEntry**
-A ledger record for a vault. Positive amount = contribution, negative = withdrawal. The vault balance is `sum(entries.amount)`.
+A ledger record for a vault. Positive amount = contribution, negative = withdrawal. The vault balance is `sum(entries.amount)`. An entry may carry an optional `sourceAccountId` — a sourced entry is a real money move that also reduces that savings account's balance (ADR-021). An entry with no source is notional.
+
+**Sourced vs notional vault contribution**
+A vault contribution is **sourced** when it names a `sourceAccountId` — the money moves from that savings account's available balance into the vault (like putting cash into a bank pocket). The account balance drops; the vault balance rises; `netWorth` is unchanged. A contribution is **notional** when no source is named — it earmarks money conceptually but does not affect any account balance. Existing entries with no source remain notional; no backfill.
+
+**inVaults**
+The total real money that has left savings accounts and now sits in vaults (sum of all sourced vault entry amounts, globally). Reported separately from `totalSavings` — never rolled in. `totalSavings = available + inLoans` is unchanged. `netWorth = totalSavings + inVaults` is the conserved quantity shown as an informational line. `liquidityRatio` and the Health Score are untouched (ADR-021, ADR-011).
 
 **Vault status**
 Computed monthly for each vault:
@@ -90,3 +98,7 @@ A plain-text summary of the user's finances, now used as the body of the `get_ov
 | savings rate | (income − expenses) / income × 100 |
 | liquidity ratio | liquid available / (liquid available + loans out) × 100 |
 | installment burden | monthly installment obligation / income × 100 |
+| inVaults | total sourced vault money (real money that left savings accounts into vaults) |
+| netWorth | totalSavings + inVaults — the conserved quantity across savings + vault transfers |
+| sourced contribution | vault contribution with a sourceAccountId — reduces the source account's available |
+| notional contribution | vault contribution with no sourceAccountId — earmarks money without touching accounts |

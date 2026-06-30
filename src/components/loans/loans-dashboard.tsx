@@ -77,7 +77,7 @@ export function LoansDashboard({ data }: { data: LoansOverview }) {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
         <KpiCard
           label="Available"
           value={privacyMode ? MASK : formatCOP(data.available)}
@@ -101,6 +101,17 @@ export function LoansDashboard({ data }: { data: LoansOverview }) {
           sub="available / total"
           highlight={liquidityWarn ? "bad" : "neutral"}
           warn={liquidityWarn}
+        />
+        <KpiCard
+          label="Earmarked in vaults"
+          value={privacyMode ? MASK : formatCOP(data.inVaults)}
+          sub="sourced from accounts"
+        />
+        <KpiCard
+          label="Net worth"
+          value={privacyMode ? MASK : formatCOP(data.netWorth)}
+          sub="savings + vaults"
+          highlight="neutral"
         />
       </div>
 

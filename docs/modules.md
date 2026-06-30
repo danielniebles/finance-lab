@@ -1,5 +1,7 @@
 # Modules
 
+> Last updated: 2026-06-29
+
 ## Project structure
 ```
 src/
@@ -41,12 +43,13 @@ src/
     queries/
       expenses.ts           — getMonthlyAnalysis(), getImportBatches(), getUnmappedCategories()
       installments.ts       — getAllInstallments(), getMonthSummary()
-      loans.ts              — getLoansOverview()
+      loans.ts              — getLoansOverview() — now returns inVaults + netWorth; account balance formula subtracts vaultFundedNet
       trends.ts             — getTrends()
       health-score.ts       — getHealthScore()
       chat.ts               — getFinancialSnapshot()
-      vaults.ts             — getVaults() (branches on goalType: RECURRING uses summed set-asides), getVaultObligations()
+      vaults.ts             — getVaults() (branches on goalType: RECURRING uses summed set-asides), getVaultObligations(); VaultEntryRow now includes sourceAccountId + sourceAccountName
       recurring.ts          — getRecurringExpenses(month, year): items with set-aside + status
+      accounts.ts           — getSavingsAccounts(): lightweight AccountOption[] (id, name, balance) for pickers
     actions/
       import.ts             — importMoneyLoverFile(), importBuffer()
       drive.ts              — listDriveFiles(), importFromDrive()
@@ -55,7 +58,7 @@ src/
       installments.ts       — Installment + InstallmentPayment CRUD actions
       loans.ts              — SavingsAccount, Debtor, Loan, LoanPayment, Transfer CRUD actions
       chat.ts               — saveMessage()
-      vaults.ts             — createVault(), updateVault(), archiveVault(), addVaultEntry(), deleteVaultEntry()
+      vaults.ts             — createVault(), updateVault(), archiveVault(), addVaultEntry(vaultId, amount, date?, notes?, sourceAccountId?) — 5th arg optional; revalidates /loans, deleteVaultEntry()
       recurring.ts          — createRecurringExpense(), updateRecurringExpense(), deleteRecurringExpense(), payRecurringExpense() (atomic via prisma.$transaction)
   generated/
     prisma/                 — Prisma-generated client (do not edit manually)
@@ -98,7 +101,7 @@ src/
 ---
 
 ### `src/app/(app)/loans`
-**Responsibility:** Tracks personal savings accounts and money lent to debtors. Shows account balances (computed from ledger), outstanding loans per debtor, KPIs (available, in loans, liquidity ratio), and allows full CRUD on accounts, debtors, loans, payments, and transfers.
+**Responsibility:** Tracks personal savings accounts and money lent to debtors. Shows account balances (computed from ledger), outstanding loans per debtor, KPIs (available, in loans, liquidity ratio, earmarked in vaults, net worth), and allows full CRUD on accounts, debtors, loans, payments, and transfers. The "Entry log" dialog in `account-card.tsx` shows a unified sorted list of `AccountEntry` records (INITIAL/ADJUSTMENT badges) and sourced vault contributions (`VaultEntry` rows with a "Vault" badge and vault name; no delete — vault entries are managed from the Vaults module).
 **Key files:** `loans/page.tsx`, `components/loans/loans-dashboard.tsx`, `loans-client.tsx`, `account-card.tsx`, `debtor-form.tsx`, `loan-form.tsx`, `payment-form.tsx`, `entry-form.tsx`, `account-form.tsx`, `loan-row-actions.tsx`
 **Dependencies:** `getLoansOverview`
 **Exports:** `LoansPage` (route)
@@ -106,9 +109,9 @@ src/
 ---
 
 ### `src/app/(app)/vaults`
-**Responsibility:** Goal-based savings pockets. Shows a KPI band (total balance, mandatory still-needed, leisure still-needed) and a tile grid — one tile per vault with SVG progress ring, status badge, kind chip, and balance/target/required-this-month figures. Supports full CRUD (create, edit, archive) and a ledger sheet per vault for contributions and withdrawals. The "Ask agent" button on `VaultDueBanner` opens the chat pre-scoped to the relevant vault.
+**Responsibility:** Goal-based savings pockets. Shows a KPI band (total balance, mandatory still-needed, leisure still-needed) and a tile grid — one tile per vault with SVG progress ring, status badge, kind chip, and balance/target/required-this-month figures. Supports full CRUD (create, edit, archive) and a ledger sheet per vault for contributions and withdrawals. The "Ask agent" button on `VaultDueBanner` opens the chat pre-scoped to the relevant vault. Contributions optionally name a source savings account ("From account" picker in `entry-form.tsx`) — sourced entries are real money moves (ADR-021).
 **Key files:** `vaults/page.tsx`, `components/vaults/vaults-dashboard.tsx` (client), `vault-tile.tsx`, `vault-form.tsx`, `entry-form.tsx`, `vault-ledger.tsx`, `vault-due-banner.tsx`
-**Dependencies:** `getVaults`, `getVaultObligations`, `createVault`, `updateVault`, `archiveVault`, `addVaultEntry`, `deleteVaultEntry`
+**Dependencies:** `getVaults`, `getVaultObligations`, `getSavingsAccounts`, `createVault`, `updateVault`, `archiveVault`, `addVaultEntry`, `deleteVaultEntry`
 **Exports:** `VaultsPage` (route), `VaultDueBanner` (also mounted in overview)
 
 ---
@@ -135,11 +138,12 @@ src/
 **Key files:**
 - `expenses.ts` — `getMonthlyAnalysis()`: full budget/actual/severity breakdown for one month; `getImportBatches()`, `getUnmappedCategories()`
 - `installments.ts` — `getAllInstallments()`: status-enriched list; `getMonthSummary()`: obligations for a given month; `getCardSummaries(month, year)`: per-card outstanding debt + monthly obligation; `getInstallmentFormData()`: cards/debtors/accounts for form pickers
-- `loans.ts` — `getLoansOverview()`: accounts with computed balances, debtors with computed loan remainders, portfolio KPIs
+- `loans.ts` — `getLoansOverview()`: accounts with computed balances (now subtracts `vaultFundedNet` per account), debtors with computed loan remainders, portfolio KPIs. Now returns `inVaults` (total sourced vault money across accounts) and `netWorth = totalSavings + inVaults`. `totalSavings` and `liquidityRatio` are unchanged (ADR-011 untouched).
+- `accounts.ts` — `getSavingsAccounts()`: lightweight list of `{ id, name, balance }` for picker UIs. Uses the same balance formula as `loans.ts` (including `vaultFundedNet` deduction).
 - `trends.ts` — `getTrends(n)`: per-month income/expense/budget/savings-rate + per-category spend across n months
 - `health-score.ts` — `getHealthScore()`: composite 0–100 score with month-over-month delta
 - `chat.ts` — `getFinancialSnapshot()`: plain-text financial summary (used by the `get_overview` agent tool)
-- `vaults.ts` — `getVaults()`: all active vaults with computed `VaultWithMetrics` (balance, remaining, progress %, status, contributedThisMonth); `getVaultObligations(month, year)`: per-vault required/contributed/stillNeeded totals
+- `vaults.ts` — `getVaults()`: all active vaults with computed `VaultWithMetrics` (balance, remaining, progress %, status, contributedThisMonth). `VaultEntryRow` now includes `sourceAccountId` and `sourceAccountName`; entries include the `sourceAccount` relation. `getVaultObligations(month, year)`: per-vault required/contributed/stillNeeded totals.
 
 ---
 
@@ -152,7 +156,7 @@ src/
 - `installments.ts` — Installment CRUD (`createInstallment`, `updateInstallment`, `deleteInstallment`); payment actions (`markPayment` — auto-creates a Loan record when debtorId + fundingAccountId are set, `unmarkPayment`); CreditCard CRUD (`createCard`, `updateCard`, `deleteCard`)
 - `loans.ts` — SavingsAccount, AccountEntry, Transfer, Debtor, Loan, LoanPayment CRUD
 - `chat.ts` — `saveMessage()`: persist a single ChatMessage row
-- `vaults.ts` — `createVault()`, `updateVault()`, `archiveVault()` (sets archivedAt), `addVaultEntry()` (rejects withdrawal driving balance < 0), `deleteVaultEntry()`; all revalidate `/vaults` and `/overview`
+- `vaults.ts` — `createVault()`, `updateVault()`, `archiveVault()` (sets archivedAt), `addVaultEntry()` (signature: `vaultId, amount, date?, notes?, sourceAccountId?` — rejects withdrawal driving balance < 0), `deleteVaultEntry()`; all revalidate `/vaults`, `/overview`, and `/loans` (the last because sourced contributions change account balances)
 
 ---
 

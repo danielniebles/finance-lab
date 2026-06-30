@@ -64,6 +64,7 @@ async function executeProposal(
         Number(params.amount),
         params.date != null ? new Date(params.date as string) : undefined,
         params.notes as string | undefined,
+        (params.sourceAccountId as string | undefined) ?? null,
       );
       break;
     }
@@ -73,6 +74,7 @@ async function executeProposal(
         -Number(params.amount),
         params.date != null ? new Date(params.date as string) : undefined,
         params.notes as string | undefined,
+        (params.sourceAccountId as string | undefined) ?? null,
       );
       break;
     }

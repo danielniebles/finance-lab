@@ -15,6 +15,8 @@ export type VaultEntryRow = {
   date: Date;
   notes: string | null;
   createdAt: Date;
+  sourceAccountId: string | null;
+  sourceAccountName: string | null;
 };
 
 export type VaultWithMetrics = {
@@ -78,7 +80,10 @@ export async function getVaults(
     where: opts?.includeArchived ? undefined : { archivedAt: null },
     orderBy: { createdAt: "asc" },
     include: {
-      entries: { orderBy: { date: "desc" } },
+      entries: {
+        orderBy: { date: "desc" },
+        include: { sourceAccount: { select: { id: true, name: true } } },
+      },
       recurringExpenses: { where: { active: true } },
     },
   });
@@ -130,6 +135,8 @@ export async function getVaults(
         date: e.date,
         notes: e.notes,
         createdAt: e.createdAt,
+        sourceAccountId: e.sourceAccountId,
+        sourceAccountName: e.sourceAccount?.name ?? null,
       })),
       balance,
       remaining: metrics.remaining,

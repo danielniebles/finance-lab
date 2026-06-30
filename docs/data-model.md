@@ -144,7 +144,7 @@ A personal savings or investment account. Balance is computed from entries + tra
 | color | String? | Hex color for UI |
 | includeInAvailable | Boolean | Whether to count toward liquid available |
 
-**Relations:** has many `AccountEntry`; has many `Loan` (as lender); has many `Transfer` (from/to); has many `Installment` via "InstallmentFunding" (savings accounts that fund debtor-linked installments)
+**Relations:** has many `AccountEntry`; has many `Loan` (as lender); has many `Transfer` (from/to); has many `Installment` via "InstallmentFunding" (savings accounts that fund debtor-linked installments); has many `VaultEntry` via "VaultFundingSource" (entries sourced from this account reduce its computed balance)
 
 ---
 
@@ -286,6 +286,9 @@ Ledger entry for a vault. Positive = contribution, negative = withdrawal.
 | date | DateTime | Entry date (defaults to now) |
 | notes | String? | Optional notes |
 | createdAt | DateTime | Record creation time |
+| sourceAccountId | String? | FK → SavingsAccount via "VaultFundingSource" (optional). When set, this entry is a sourced contribution — the amount is deducted from that account's computed balance. Null = notional earmark (no account balance impact). |
+
+`VaultEntryRow` (the query return type) also exposes `sourceAccountName: string | null` (resolved from the relation).
 
 ---
 

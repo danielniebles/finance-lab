@@ -119,3 +119,19 @@ When a cuota is marked as paid AND the installment has `debtorId` set:
 
 **Supabase migration note:**
 Before building this feature, apply the two pending revert migrations (`20260608151001` + `20260608200000`) to Supabase production via `prisma migrate deploy` with the production DATABASE_URL.
+
+---
+
+### Agent — proactive action-card triggers (medium/large effort, deferred)
+
+**Context:** Today action cards fire *only inside a chat turn* — when the model calls a proposal tool while responding to a message. The agent has no background process and does not observe the database, so a direct UI action (e.g. registering a prima as a `SavingsAccount` entry) never triggers a card on its own. The card only appears when the user next talks to the agent, or clicks an "Ask the agent" button on a deterministic banner that links into a pre-seeded chat.
+
+**Open question (deferred during Phase B scoping):** how proactive should the moment-of-action be? Three levels, increasing cost:
+
+1. **Banner + chat (current Phase B plan).** Saving the entry changes nothing instantly; a deterministic Overview/Income banner surfaces "income waiting to allocate" and the user clicks into a pre-seeded chat. No background agent. Lowest cost — already specified in `.handoff/income-allocation/HANDOFF.md`.
+2. **Point-of-action prompt.** After saving a positive savings entry that matches an expected `IncomeEvent`, the savings form shows an inline "This looks like your June prima — allocate it?" that opens the agent pre-seeded with that entry. User-initiated but triggered at the exact moment of the action. Moderate cost: a hook on the savings entry form + the reconciliation match available client-side.
+3. **Auto-generated card outside chat.** Saving the entry fires the agent automatically and drops an allocation card into a notifications/inbox surface, visible even with chat closed. Most proactive, but requires two new capabilities the current architecture lacks: the agent running *outside* a chat request cycle, and action cards living *outside* the chat thread (a card store + an inbox UI + an approve path independent of the chat stream).
+
+**Recommendation:** ship Phase B with level 1, then evaluate level 2 as a cheap upgrade once the reconciliation matching exists. Level 3 is a broader "proactive agent" capability worth its own design pass (overlaps with any future scheduled-briefing feature, since both need the agent to run and surface cards without an open chat).
+
+This generalizes beyond primas: the same trigger question applies to recurring-expense due dates, vault shortfalls, and any future "the app noticed something and wants to propose an action" moment.

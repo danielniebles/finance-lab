@@ -198,6 +198,10 @@ const TOOLS: Anthropic.Tool[] = [
           description: "Optional ISO date (YYYY-MM-DD), defaults to today",
         },
         notes: { type: "string", description: "Optional notes" },
+        sourceAccountId: {
+          type: "string",
+          description: "Optional savings account ID to source the funds from. When set, the amount is deducted from that account's available balance (real money movement). Omit for a notional earmark that does not affect account balances.",
+        },
       },
       required: ["vaultId", "amount"],
     },
@@ -219,6 +223,10 @@ const TOOLS: Anthropic.Tool[] = [
           description: "Optional ISO date (YYYY-MM-DD)",
         },
         notes: { type: "string", description: "Optional notes" },
+        sourceAccountId: {
+          type: "string",
+          description: "Optional savings account ID that originally funded this vault (for returning money). When set, the withdrawal increases that account's available balance.",
+        },
       },
       required: ["vaultId", "amount"],
     },
@@ -413,9 +421,13 @@ function describeProposal(
     case "propose_update_vault":
       return `Update vault ${input.vaultId}`;
     case "propose_vault_contribution":
-      return `Contribute ${fmt(input.amount)} to vault ${input.vaultId}`;
+      return input.sourceAccountId
+        ? `Contribute ${fmt(input.amount)} to vault ${input.vaultId} from account ${input.sourceAccountId}`
+        : `Contribute ${fmt(input.amount)} to vault ${input.vaultId}`;
     case "propose_vault_withdrawal":
-      return `Withdraw ${fmt(input.amount)} from vault ${input.vaultId}`;
+      return input.sourceAccountId
+        ? `Withdraw ${fmt(input.amount)} from vault ${input.vaultId} (returns to account ${input.sourceAccountId})`
+        : `Withdraw ${fmt(input.amount)} from vault ${input.vaultId}`;
     case "propose_archive_vault":
       return `Archive vault ${input.vaultId}`;
     case "propose_create_recurring_expense":
@@ -467,7 +479,9 @@ One proposal per card. State your reasoning before proposing.
 
 Say "drafted for your approval," never "done."
 
-Vaults come in three types: FIXED_DEADLINE (saving toward a goal by a date), OPEN_ENDED (no deadline), and RECURRING (sinking fund for non-monthly costs). A RECURRING vault's requiredThisMonth reflects the sum of set-asides from its linked recurring expenses.${contextLine}
+Vaults come in three types: FIXED_DEADLINE (saving toward a goal by a date), OPEN_ENDED (no deadline), and RECURRING (sinking fund for non-monthly costs). A RECURRING vault's requiredThisMonth reflects the sum of set-asides from its linked recurring expenses.
+
+A vault contribution may optionally name a source savings account (sourceAccountId). Sourced contributions move real money out of that account's available balance into the vault — use propose_vault_contribution with sourceAccountId when the user says "move X from [account] into [vault]". Unsourced contributions are notional earmarks that don't affect account balances.${contextLine}
 
 Respond in the language the user writes in (Spanish or English).`;
 

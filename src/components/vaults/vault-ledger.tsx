@@ -50,6 +50,13 @@ function EntryRow({ entry }: { entry: VaultEntryRow }) {
         {entry.notes ?? (isContribution ? "Contribution" : "Withdrawal")}
       </span>
 
+      {/* Source account tag */}
+      {entry.sourceAccountName && (
+        <span className="text-xs text-muted-foreground shrink-0">
+          from {entry.sourceAccountName}
+        </span>
+      )}
+
       {/* Amount */}
       <span
         className={cn(

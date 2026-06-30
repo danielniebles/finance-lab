@@ -9,6 +9,13 @@ export type AccountWithBalance = {
   balance: number;
   loansOut: number;
   entries: { id: string; type: "INITIAL" | "ADJUSTMENT"; amount: number; date: Date; notes: string | null }[];
+  vaultEntries: {
+    id: string;
+    amount: number;
+    date: Date;
+    notes: string | null;
+    vaultName: string;
+  }[];
 };
 
 export type LoanWithRemaining = {
@@ -46,6 +53,8 @@ export type LoansOverview = {
   liquidityRatio: number | null;
   totalEverLent: number;
   totalRecovered: number;
+  inVaults: number;         // sourced vault money (separate from totalSavings)
+  netWorth: number;         // totalSavings + inVaults (informational)
 };
 
 export async function getLoansOverview(): Promise<LoansOverview> {
@@ -59,6 +68,9 @@ export async function getLoansOverview(): Promise<LoansOverview> {
         },
         transfersFrom: true,
         transfersTo: true,
+        vaultEntriesFunded: {
+          include: { vault: { select: { name: true } } },
+        },
       },
       orderBy: { name: "asc" },
     }),
@@ -85,7 +97,8 @@ export async function getLoansOverview(): Promise<LoansOverview> {
     const paymentsIn = acc.loansGiven
       .flatMap((l) => l.payments)
       .reduce((s, p) => s + p.amount, 0);
-    const balance = entriesTotal + transfersIn - transfersOut - totalLent + paymentsIn;
+    const vaultFundedNet = acc.vaultEntriesFunded.reduce((s, e) => s + e.amount, 0);
+    const balance = entriesTotal + transfersIn - transfersOut - totalLent + paymentsIn - vaultFundedNet;
     const loansOut = acc.loansGiven.reduce((s, l) => {
       const paid = l.payments.reduce((sp, p) => sp + p.amount, 0);
       return s + Math.max(0, l.amount - paid);
@@ -99,6 +112,13 @@ export async function getLoansOverview(): Promise<LoansOverview> {
       balance,
       loansOut,
       entries: acc.entries,
+      vaultEntries: acc.vaultEntriesFunded.map((e) => ({
+        id: e.id,
+        amount: e.amount,
+        date: e.date,
+        notes: e.notes,
+        vaultName: e.vault.name,
+      })),
     };
   });
 
@@ -150,5 +170,11 @@ export async function getLoansOverview(): Promise<LoansOverview> {
     0,
   );
 
-  return { accounts: accountsWithBalance, debtors: debtorsWithLoans, available, inLoans, totalSavings, liquidityRatio, totalEverLent, totalRecovered };
+  // Sourced vault money across all accounts (contributions positive, withdrawals negative)
+  const inVaults = accounts.reduce(
+    (s, acc) => s + acc.vaultEntriesFunded.reduce((as, e) => as + e.amount, 0),
+    0,
+  );
+
+  return { accounts: accountsWithBalance, debtors: debtorsWithLoans, available, inLoans, totalSavings, liquidityRatio, totalEverLent, totalRecovered, inVaults, netWorth: totalSavings + inVaults };
 }

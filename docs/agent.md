@@ -100,8 +100,8 @@ Tools come in two classes. **Read tools** execute immediately and return data.
 |---|---|---|
 | `propose_create_vault(name, kind, goalType, targetAmount?, targetDate?)` | `createVault()` | `targetAmount` + `targetDate` required when `goalType=FIXED_DEADLINE` |
 | `propose_update_vault(vaultId, …fields)` | `updateVault()` | Rename, retarget, recolor, change kind |
-| `propose_vault_contribution(vaultId, amount, date?, notes?)` | `addVaultEntry()` (positive) | The flagship action behind "save X this month" |
-| `propose_vault_withdrawal(vaultId, amount, date?, notes?)` | `addVaultEntry()` (negative) | Spending from / raiding a vault |
+| `propose_vault_contribution(vaultId, amount, date?, notes?, sourceAccountId?)` | `addVaultEntry()` (positive) | The flagship action behind "save X this month". Include `sourceAccountId` when the user says "move X from [account] into [vault]" — funds move from savings into the vault (real balance change). Omit for a notional earmark. |
+| `propose_vault_withdrawal(vaultId, amount, date?, notes?, sourceAccountId?)` | `addVaultEntry()` (negative) | Spending from / raiding a vault. Include `sourceAccountId` when funds should return to a specific savings account. |
 | `propose_archive_vault(vaultId)` | `archiveVault()` | Close a met or abandoned goal without deleting history |
 | `propose_create_recurring_expense(name, estimatedAmount, cadenceMonths, nextDueDate, category?, fundingVaultId?)` | `createRecurringExpense()` | Register a new recurring bill in the calendar |
 | `propose_pay_recurring(id, amount, fromVaultId?)` | `payRecurringExpense()` | Record a payment and roll the cycle forward; optionally withdraws from the linked sinking-fund vault |
@@ -117,7 +117,16 @@ Tools come in two classes. **Read tools** execute immediately and return data.
 
 A **vault** (a.k.a. pocket) is a standalone pot of earmarked money. It is **not** part of
 the SavingsAccount / liquidity model — it has its own ledger and balance and does not
-appear in the loans/liquidity KPIs. (See ADR-014.)
+appear in the loans/liquidity KPIs. (See ADR-014, amended by ADR-021.)
+
+**Sourced vs. notional contributions (ADR-021):** A vault entry may optionally name a
+`sourceAccountId`. When it does, the contribution is **sourced** — the funds move out of
+that savings account's computed `available` balance and into the vault. The account
+balance drops; the vault balance rises. These sourced amounts are tracked in `inVaults`
+(returned by `get_loans()`), a figure that is **separate from `totalSavings`**. The
+conserved quantity is `netWorth = totalSavings + inVaults`. Without a `sourceAccountId`,
+a contribution is **notional** — it earmarks money conceptually but does not touch any
+savings account balance. Choose based on whether the user is actually moving real money.
 
 **Kinds** (label that drives prioritization and tone, not behavior):
 `MANDATORY` (must-fund — e.g. taxes, insurance) and `LEISURE` (wants — e.g. a trip).

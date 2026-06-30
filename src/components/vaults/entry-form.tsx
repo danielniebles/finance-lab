@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -13,6 +16,7 @@ import {
 import { addVaultEntry } from "@/lib/actions/vaults";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { AccountOption } from "@/lib/queries/accounts";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -25,6 +29,7 @@ type Props = {
   vaultName: string;
   currentBalance: number;
   onClose: () => void;
+  accounts: AccountOption[];
 };
 
 // ─── Form state ───────────────────────────────────────────────────────────────
@@ -33,6 +38,7 @@ type FormState = {
   amount: string;
   date: string;
   notes: string;
+  sourceAccountId: string;
 };
 
 function today(): string {
@@ -43,6 +49,7 @@ const EMPTY_FORM: FormState = {
   amount: "",
   date: today(),
   notes: "",
+  sourceAccountId: "",
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -54,6 +61,7 @@ export function EntryForm({
   vaultName,
   currentBalance,
   onClose,
+  accounts,
 }: Props) {
   const [direction, setDirection] = useState<Direction>(initialDirection);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -64,13 +72,13 @@ export function EntryForm({
     if (!isOpen) handleClose();
     else {
       setDirection(initialDirection);
-      setForm({ ...EMPTY_FORM, date: today() });
+      setForm({ ...EMPTY_FORM, date: today(), sourceAccountId: "" });
       setError(null);
     }
   }
 
   function handleClose() {
-    setForm({ ...EMPTY_FORM, date: today() });
+    setForm({ ...EMPTY_FORM, date: today(), sourceAccountId: "" });
     setError(null);
     onClose();
   }
@@ -85,6 +93,8 @@ export function EntryForm({
     !isNaN(parsedAmount) &&
     parsedAmount > currentBalance;
 
+  const selectedAccount = accounts.find((a) => a.id === form.sourceAccountId);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.amount || isNaN(parsedAmount) || parsedAmount <= 0) return;
@@ -93,10 +103,11 @@ export function EntryForm({
     const signedAmount = direction === "contribute" ? parsedAmount : -parsedAmount;
     const entryDate = form.date ? new Date(form.date) : undefined;
     const notes = form.notes.trim() || undefined;
+    const sourceAccountId = form.sourceAccountId || undefined;
 
     startTransition(async () => {
       try {
-        await addVaultEntry(vaultId, signedAmount, entryDate, notes);
+        await addVaultEntry(vaultId, signedAmount, entryDate, notes, sourceAccountId);
         handleClose();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -224,6 +235,45 @@ export function EntryForm({
               disabled={pending}
             />
           </div>
+
+          {/* From account — contributions only */}
+          {direction === "contribute" && accounts.length > 0 && (
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="entry-source-account"
+                className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+              >
+                From account{" "}
+                <span className="text-muted-foreground font-normal normal-case tracking-normal">
+                  (optional)
+                </span>
+              </Label>
+              <Select
+                value={form.sourceAccountId}
+                onValueChange={(v) => setField("sourceAccountId", v ?? "")}
+              >
+                <SelectTrigger id="entry-source-account" className="h-9" disabled={pending}>
+                  <span className="text-sm">
+                    {selectedAccount ? selectedAccount.name : "None (notional)"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None (notional)</SelectItem>
+                  {accounts.map((acc) => (
+                    <SelectItem key={acc.id} value={acc.id}>
+                      {acc.name} — {formatCOP(acc.balance)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedAccount && (
+                <p className="text-xs text-muted-foreground">
+                  Moves {parsedAmount > 0 ? formatCOP(parsedAmount) : "this amount"} out of{" "}
+                  {selectedAccount.name}&apos;s available balance.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Error */}
           {error && (

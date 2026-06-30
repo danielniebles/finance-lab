@@ -17,6 +17,7 @@ async function computeBalance(vaultId: string): Promise<number> {
 function revalidateVaultPaths() {
   revalidatePath("/vaults");
   revalidatePath("/overview");
+  revalidatePath("/loans");
 }
 
 // ─── Vault CRUD ───────────────────────────────────────────────────────────────
@@ -125,6 +126,7 @@ export async function addVaultEntry(
   amount: number,
   date?: Date,
   notes?: string,
+  sourceAccountId?: string | null,
 ) {
   // Reject withdrawal that would drive balance negative
   if (amount < 0) {
@@ -142,6 +144,7 @@ export async function addVaultEntry(
       amount,
       date: date ?? new Date(),
       notes: notes ?? null,
+      sourceAccountId: sourceAccountId ?? null,
     },
   });
 
