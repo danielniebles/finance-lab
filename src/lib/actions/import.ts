@@ -3,8 +3,9 @@
 import { db } from "@/lib/db";
 import { parseMoneyLoverBuffer } from "@/lib/parse-moneylover";
 import { revalidatePath } from "next/cache";
+import { BatchStatus } from "@/generated/prisma";
 
-export async function importBuffer(buffer: Buffer, filename: string) {
+export async function importBuffer(buffer: Buffer, filename: string, status?: BatchStatus) {
   const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
 
   let parsed;
@@ -15,6 +16,14 @@ export async function importBuffer(buffer: Buffer, filename: string) {
   }
 
   const { transactions, categories, periodStart, periodEnd, month, year } = parsed;
+
+  // Heuristic: if the parsed month equals the current calendar month, mark IN_PROGRESS
+  const now = new Date();
+  const resolvedStatus: BatchStatus =
+    status ??
+    (month === now.getMonth() + 1 && year === now.getFullYear()
+      ? BatchStatus.IN_PROGRESS
+      : BatchStatus.FINAL);
 
   await db.$transaction(async (tx) => {
     // Delete existing batch for same month/year (replace strategy)
@@ -38,7 +47,7 @@ export async function importBuffer(buffer: Buffer, filename: string) {
 
     // Create the import batch
     const batch = await tx.importBatch.create({
-      data: { filename, periodStart, periodEnd, month, year },
+      data: { filename, periodStart, periodEnd, month, year, status: resolvedStatus },
     });
 
     // Insert transactions
@@ -56,7 +65,7 @@ export async function importBuffer(buffer: Buffer, filename: string) {
   });
 
   revalidatePath("/expenses");
-  return { success: true, month, year, count: transactions.length };
+  return { success: true, month, year, count: transactions.length, status: resolvedStatus };
 }
 
 export async function importMoneyLoverFile(formData: FormData) {

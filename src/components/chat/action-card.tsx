@@ -72,10 +72,11 @@ export function ActionCard({ proposal }: Props) {
     updateProposal(proposal.id, false);
   }
 
-  // Params to display (skip internal IDs)
-  const displayParams = Object.entries(proposal.params).filter(
-    ([k]) => k !== "vaultId" && k !== "id",
-  );
+  // Use enriched fields when available; fall back to raw params (skip internal IDs)
+  const hasFields = proposal.fields && proposal.fields.length > 0;
+  const displayParams = hasFields
+    ? null
+    : Object.entries(proposal.params).filter(([k]) => k !== "vaultId" && k !== "id");
 
   return (
     <div
@@ -93,8 +94,35 @@ export function ActionCard({ proposal }: Props) {
         {proposal.label}
       </p>
 
-      {/* Params table */}
-      {displayParams.length > 0 && (
+      {/* Enriched fields table */}
+      {hasFields && (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+          {proposal.fields.map((f, i) => {
+            const isWarning = f.value.startsWith("⚠");
+            return (
+              <>
+                <dt key={`dt-${i}`} className="text-muted-foreground text-xs pt-0.5">
+                  {f.label}
+                </dt>
+                <dd
+                  key={`dd-${i}`}
+                  className={cn(
+                    "font-mono text-xs break-all",
+                    isWarning
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-foreground",
+                  )}
+                >
+                  {f.value}
+                </dd>
+              </>
+            );
+          })}
+        </dl>
+      )}
+
+      {/* Fallback: raw params table */}
+      {!hasFields && displayParams && displayParams.length > 0 && (
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
           {displayParams.map(([k, v]) => (
             <>

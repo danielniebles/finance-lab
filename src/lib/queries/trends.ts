@@ -29,8 +29,9 @@ const MONTH_NAMES = [
 ];
 
 export async function getTrends(n = 6): Promise<TrendsData> {
-  // Fetch the n most recent batches that have transactions
+  // Fetch the n most recent FINAL batches (exclude IN_PROGRESS — partial months corrupt trend baselines)
   const batches = await db.importBatch.findMany({
+    where: { status: "FINAL" },
     orderBy: [{ year: "desc" }, { month: "desc" }],
     take: n,
   });

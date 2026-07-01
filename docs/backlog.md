@@ -138,13 +138,10 @@ This generalizes beyond primas: the same trigger question applies to recurring-e
 
 ---
 
-### Forecasting — mid-month pacing (medium effort, deferred from Phase C)
+### Forecasting — mid-month pacing ✅ SHIPPED (ADR-024)
 
-**Context:** Phase C ships a **historical** forecast (`getForecast`, ADR-019) — it predicts where variable categories and the savings rate will land using only past months, needs no mid-month upload, and runs on page-load / agent-on-demand. It deliberately does **not** read current-month actuals (there are none until import).
+`ImportBatch.status` (IN_PROGRESS / FINAL) added via migration `add_import_batch_status`. `getForecast()` now returns pacing-mode fields (`pacingMode`, `spentSoFar`, `projectedVariableSpend`, `daysElapsed`, `daysInMonth`) when an IN_PROGRESS batch exists for the target month. `getTrends()` and `getHealthScore()` exclude IN_PROGRESS batches. `getMonthlyAnalysis()` includes them and returns `isInProgress: true` for UI badging.
 
-**The follow-on:** mid-month "pacing" — *"you're 18 days in, you've spent 1.2M of your 2M variable budget, pacing to overshoot."* This is more accurate in-month but needs two things the historical forecast doesn't:
-
-1. **Mid-month imports.** The user imports the in-progress month (they've confirmed they can).
-2. **An in-progress vs final flag on `ImportBatch`.** Re-importing replaces the whole month's batch (ADR-005), so a partial mid-month import would otherwise make that month look *final and tiny* in expense analysis and trends. A `status` (or `partial: boolean`) field lets analysis/trends/forecast treat in-progress months as partial, and flip to final at month-end.
-
-**Shape:** a pacing query sits beside `getForecast`, blending the partial current-month actuals with the historical prediction (e.g. "spent X of predicted Y with Z days left → projected landing"). The agent and the forecast panel would prefer pacing when a partial current-month batch exists, and fall back to pure historical otherwise. No autonomous trigger — same view/chat model as the rest of the agent.
+**Deferred / open items from this domain:**
+- **Voucher OCR** — photographing receipts to auto-categorize without MoneyLover export. Requires a separate ingestion pipeline.
+- **One-off expense logger** — recording an expense directly in Finance Lab (not via MoneyLover import). Needs a transaction form + category mapping UI outside the import flow.

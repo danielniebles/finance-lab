@@ -3,7 +3,17 @@ import { db } from "@/lib/db";
 export async function getImportBatches() {
   return db.importBatch.findMany({
     orderBy: [{ year: "desc" }, { month: "desc" }],
-    include: { _count: { select: { transactions: true } } },
+    select: {
+      id: true,
+      filename: true,
+      importedAt: true,
+      periodStart: true,
+      periodEnd: true,
+      month: true,
+      year: true,
+      status: true,
+      _count: { select: { transactions: true } },
+    },
   });
 }
 
@@ -52,7 +62,7 @@ function classifyCategory(
 }
 
 export async function getMonthlyAnalysis(month: number, year: number) {
-  const [transactions, appCategories] = await Promise.all([
+  const [transactions, appCategories, batch] = await Promise.all([
     db.transaction.findMany({
       where: { batch: { month, year } },
       include: {
@@ -62,7 +72,10 @@ export async function getMonthlyAnalysis(month: number, year: number) {
       },
     }),
     db.appCategory.findMany({ include: { budgetItems: true } }),
+    db.importBatch.findFirst({ where: { month, year }, select: { status: true } }),
   ]);
+
+  const isInProgress = batch?.status === "IN_PROGRESS";
 
   // Split income (positive) vs expenses (negative)
   const totalIncome = transactions
@@ -222,6 +235,7 @@ export async function getMonthlyAnalysis(month: number, year: number) {
     realSavings,
     savingsRate,
     savingsGap,
+    isInProgress,
   };
 }
 

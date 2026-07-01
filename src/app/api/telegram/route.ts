@@ -144,8 +144,45 @@ async function handleTextMessage(chatId: number, text: string): Promise<void> {
 
 // ─── Callback query handler ───────────────────────────────────────────────────
 
+// Actions where an undo button is offered after approval
+const REVERSIBLE_ACTIONS = new Set([
+  "createInstallment", "markPayment", "createLoan", "recordPayment",
+  "createDebtor", "createCard",
+]);
+
 async function handleCallbackQuery(cbq: TelegramCallbackQuery): Promise<void> {
   const data = cbq.data ?? "";
+
+  // Handle undo callback: "undo:{proposalId}"
+  if (data.startsWith("undo:")) {
+    const originalProposalId = data.slice(5);
+    await answerCallbackQuery(cbq.id, "Running undo...");
+
+    const chatId = cbq.message?.chat?.id;
+    if (chatId == null) return;
+
+    // Trigger the undo proposal directly without needing an agent turn
+    const { runAgentTurn } = await import("@/lib/agent/run-agent-turn");
+    const undoResult = await runAgentTurn({
+      messages: [{ role: "user", content: `Undo the last action (proposal id: ${originalProposalId})` }],
+      channel: "telegram",
+    });
+
+    // Send the undo proposal card
+    for (const proposal of undoResult.proposals) {
+      const { toTelegramMessage } = await import("@/lib/telegram/render");
+      const { text: proposalText, reply_markup } = toTelegramMessage(proposal);
+      await sendMessage(chatId, proposalText, {
+        reply_markup,
+        parse_mode: "Markdown",
+      });
+    }
+    if (undoResult.text) {
+      await sendMessage(chatId, undoResult.text, { parse_mode: "Markdown" });
+    }
+    return;
+  }
+
   // Format: "{proposalId}:{choiceId}"
   const colonIdx = data.lastIndexOf(":");
   if (colonIdx === -1) {
@@ -171,5 +208,24 @@ async function handleCallbackQuery(cbq: TelegramCallbackQuery): Promise<void> {
   if (chatId != null && messageId != null) {
     const resolvedText = choiceId === "approve" ? "✅ Approved" : "❌ Dismissed";
     await editMessageText(chatId, messageId, resolvedText, { reply_markup: undefined });
+
+    // For approved reversible actions, send a follow-up with an undo button
+    if (choiceId === "approve" && result.ok) {
+      // Look up the proposal to check its action
+      const { db } = await import("@/lib/db");
+      const proposal = await db.pendingProposal.findUnique({
+        where: { id: proposalId },
+        select: { action: true },
+      });
+      if (proposal && REVERSIBLE_ACTIONS.has(proposal.action)) {
+        await sendMessage(chatId, "Action approved.", {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "↩ Undo", callback_data: `undo:${proposalId}` },
+            ]],
+          },
+        });
+      }
+    }
   }
 }

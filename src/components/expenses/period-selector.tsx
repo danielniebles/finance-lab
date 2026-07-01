@@ -25,7 +25,7 @@ function periodRangeLabel(month: number, year: number, startDay: number): string
   return `${fmt(start)} – ${fmt(end)}`;
 }
 
-type MonthEntry = { month: number; year: number };
+type MonthEntry = { month: number; year: number; status?: string };
 
 export function PeriodSelector({
   selectedMonth,
@@ -81,6 +81,11 @@ export function PeriodSelector({
   const hasPrev = availableMonths ? !!prevEntry : true;
   const hasNext = availableMonths ? !!nextEntry : true;
 
+  const selectedEntry = availableMonths?.find(
+    (m) => m.month === selectedMonth && m.year === selectedYear,
+  );
+  const isInProgress = selectedEntry?.status === "IN_PROGRESS";
+
   return (
     <div className="flex items-center gap-2">
       <Button
@@ -96,6 +101,11 @@ export function PeriodSelector({
         <span className="font-heading text-sm font-semibold">
           {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
         </span>
+        {isInProgress && (
+          <span className="ml-2 inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+            in progress
+          </span>
+        )}
         {startDay > 1 && (
           <span className="ml-2 text-xs text-muted-foreground">
             {periodRangeLabel(selectedMonth, selectedYear, startDay)}

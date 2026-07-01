@@ -55,7 +55,12 @@ export function FloatingChat() {
         </div>
 
         <ChatMessages items={items} isLoading={isLoading} />
-        <ChatInput onSend={sendMessage} disabled={isLoading} />
+        <ChatInput
+          onSend={sendMessage}
+          disabled={isLoading}
+          hasHistory={items.length > 0}
+          onUndo={() => sendMessage("undo last")}
+        />
       </div>
 
       {/* Toggle button */}

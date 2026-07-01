@@ -6,12 +6,17 @@ import { getFinancialSnapshot } from "@/lib/queries/chat";
 import { getHealthScore } from "@/lib/queries/health-score";
 import { getImportBatches, getMonthlyAnalysis } from "@/lib/queries/expenses";
 import { getTrends } from "@/lib/queries/trends";
-import { getAllInstallments, getMonthSummary } from "@/lib/queries/installments";
+import { getAllInstallments, getCardSummaries, getMonthSummary } from "@/lib/queries/installments";
 import { getLoansOverview } from "@/lib/queries/loans";
 import { getVaults, getVaultObligations } from "@/lib/queries/vaults";
 import { getRecurringExpenses } from "@/lib/queries/recurring";
 import { getForecast } from "@/lib/queries/forecast";
+import { listDriveFiles } from "@/lib/actions/drive";
+import { computeInstallmentDue } from "@/lib/installment-utils";
+import { isDueInMonth } from "@/lib/installment-utils";
+import { formatCOP } from "@/lib/format";
 import type { AgentTurnResult, ProposalDescriptor } from "./types";
+import { buildSystemPrompt } from "./prompt";
 
 const anthropic = new Anthropic();
 
@@ -29,6 +34,7 @@ const READ_TOOLS = new Set([
   "get_vault_obligations",
   "get_recurring_expenses",
   "get_forecast",
+  "list_drive_files",
 ]);
 
 const PROPOSAL_TOOLS = new Set([
@@ -39,6 +45,12 @@ const PROPOSAL_TOOLS = new Set([
   "propose_archive_vault",
   "propose_create_recurring_expense",
   "propose_pay_recurring",
+  "propose_import_from_drive",
+  "propose_create_installment",
+  "propose_mark_installment_paid",
+  "propose_create_loan",
+  "propose_record_loan_payment",
+  "propose_undo_last",
 ]);
 
 const TOOLS: Anthropic.Tool[] = [
@@ -312,6 +324,106 @@ const TOOLS: Anthropic.Tool[] = [
       required: ["id", "amount"],
     },
   },
+
+  // ── Drive import tool ──
+  {
+    name: "list_drive_files",
+    description: "List MoneyLover XLSX files available in the configured Google Drive folder, ordered by most recently modified.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "propose_import_from_drive",
+    description:
+      "Propose importing a MoneyLover file from Google Drive. If no fileId is specified, auto-picks the most recent file. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        fileId: { type: "string", description: "Drive file ID (optional — auto-picks most recent if omitted)" },
+        status: {
+          type: "string",
+          enum: ["IN_PROGRESS", "FINAL"],
+          description: "Override batch status (optional — heuristic default: current month → IN_PROGRESS, past month → FINAL)",
+        },
+      },
+      required: [],
+    },
+  },
+
+  // ── Installment tools ──
+  {
+    name: "propose_create_installment",
+    description:
+      "Propose registering a new installment (cuota purchase). Shows a true-cost preview including interest. Emits an action card — does NOT mutate. Call get_installments first to check existing cards.",
+    input_schema: {
+      type: "object",
+      properties: {
+        description: { type: "string", description: "Item description" },
+        totalAmount: { type: "number", description: "Total purchase amount in COP" },
+        numInstallments: { type: "number", description: "Number of installments" },
+        monthlyInterestRate: { type: "number", description: "Monthly interest rate % (optional, 0 if none)" },
+        startDate: { type: "string", description: "ISO date of first payment (YYYY-MM-DD)" },
+        cardName: { type: "string", description: "Credit card name (optional). If it does not exist, a new card will be created." },
+        fundingAccountName: { type: "string", description: "Savings account name to fund this (optional, only when bought for a debtor)" },
+      },
+      required: ["description", "totalAmount", "numInstallments", "startDate"],
+    },
+  },
+  {
+    name: "propose_mark_installment_paid",
+    description:
+      "Propose marking a cuota as paid for a given month. Call get_installments first to resolve the installment name and find the correct slot. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        installmentName: { type: "string", description: "Description of the installment (partial match OK)" },
+        month: { type: "number", description: "Month number (1–12), defaults to current month" },
+        year: { type: "number", description: "4-digit year, defaults to current year" },
+      },
+      required: ["installmentName"],
+    },
+  },
+
+  // ── Loan tools ──
+  {
+    name: "propose_create_loan",
+    description:
+      "Propose recording a new loan to a debtor, sourced from a savings account. Call get_loans first to resolve names. If the debtor doesn't exist they will be created in the same proposal. Savings accounts CANNOT be auto-created — ask the user which account to use. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        amount: { type: "number", description: "Loan amount in COP" },
+        debtorName: { type: "string", description: "Debtor name (existing or new)" },
+        fundingAccountName: { type: "string", description: "Savings account name to source from (must exist)" },
+        date: { type: "string", description: "Loan date ISO (YYYY-MM-DD), defaults to today" },
+        expectedBy: { type: "string", description: "Expected repayment date ISO (optional)" },
+        notes: { type: "string", description: "Notes (optional)" },
+      },
+      required: ["amount", "debtorName", "fundingAccountName"],
+    },
+  },
+  {
+    name: "propose_record_loan_payment",
+    description:
+      "Propose recording a repayment received from a debtor. Call get_loans first to resolve debtor and loan. If debtor has multiple active loans, the oldest is targeted. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        debtorName: { type: "string", description: "Debtor name" },
+        amount: { type: "number", description: "Payment amount in COP" },
+        date: { type: "string", description: "Payment date ISO (YYYY-MM-DD), defaults to today" },
+        notes: { type: "string", description: "Notes (optional)" },
+      },
+      required: ["debtorName", "amount"],
+    },
+  },
+
+  // ── Undo tool ──
+  {
+    name: "propose_undo_last",
+    description:
+      "Propose reversing the last approved conversational write (createInstallment, markPayment, createLoan, recordPayment, createDebtor, createCard). Imports cannot be undone. Emits an action card — does NOT mutate.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
 ];
 
 // ─── Read tool executor ───────────────────────────────────────────────────────
@@ -418,6 +530,9 @@ async function runReadTool(
       const year = Number(input.year);
       return getForecast(month, year);
     }
+    case "list_drive_files": {
+      return listDriveFiles();
+    }
     default:
       return { error: `Unknown read tool: ${name}` };
   }
@@ -476,6 +591,18 @@ function buildProposalTitle(name: string, input: Record<string, unknown>): strin
       return `Add recurring expense: ${input.name ?? "?"}, ${fmt(input.estimatedAmount)} every ${input.cadenceMonths}mo`;
     case "propose_pay_recurring":
       return `Pay recurring expense ${input.id}: ${fmt(input.amount)}${input.fromVaultId ? ` from vault ${input.fromVaultId}` : ""}`;
+    case "propose_import_from_drive":
+      return `Import from Drive: ${input.fileName ?? input.fileId ?? "latest file"}`;
+    case "propose_create_installment":
+      return `Create installment: ${input.description ?? "?"} — ${fmt(input.totalAmount)} × ${input.numInstallments}`;
+    case "propose_mark_installment_paid":
+      return `Mark cuota paid: ${input.installmentName ?? "?"}`;
+    case "propose_create_loan":
+      return `Create loan: ${fmt(input.amount)} → ${input.debtorName ?? "?"}`;
+    case "propose_record_loan_payment":
+      return `Record payment: ${fmt(input.amount)} from ${input.debtorName ?? "?"}`;
+    case "propose_undo_last":
+      return `Undo: ${input.originalAction ?? "last action"}`;
     default:
       return name;
   }
@@ -485,10 +612,362 @@ function buildProposalFields(
   input: Record<string, unknown>,
 ): { label: string; value: string }[] {
   // Skip internal ID fields from display
-  const skipKeys = new Set(["vaultId", "id", "sourceAccountId", "fromVaultId", "fundingVaultId"]);
+  const skipKeys = new Set([
+    "vaultId", "id", "sourceAccountId", "fromVaultId", "fundingVaultId",
+    "cardId", "debtorId", "accountId", "installmentId", "loanId",
+    "targetProposalId", "createCard", "createDebtor", "createdId", "createdDebtorId",
+  ]);
   return Object.entries(input)
     .filter(([k]) => !skipKeys.has(k))
     .map(([k, v]) => ({ label: formatParamKey(k), value: formatParamValue(k, v) }));
+}
+
+// ─── Complex proposal resolvers ───────────────────────────────────────────────
+// These run before PendingProposal is persisted.
+// They resolve names → IDs, compute previews, and return enriched params + fields.
+
+type ResolvedProposal = {
+  params: Record<string, unknown>;
+  title: string;
+  fields: { label: string; value: string }[];
+  /** If set, return this as a plain text tool result instead of creating a proposal */
+  blockingMessage?: string;
+};
+
+async function resolveComplexProposal(
+  toolName: string,
+  input: Record<string, unknown>,
+): Promise<ResolvedProposal | null> {
+  // Returns null → use default simple resolution
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+
+  // ── propose_import_from_drive ──────────────────────────────────────────────
+  if (toolName === "propose_import_from_drive") {
+    let fileId = input.fileId as string | undefined;
+    let fileName = input.fileName as string | undefined;
+    const statusOverride = input.status as string | undefined;
+
+    if (!fileId) {
+      const files = await listDriveFiles();
+      if (files.length === 0) return { params: input, title: "Import from Drive", fields: [], blockingMessage: "No files found in the configured Drive folder." };
+      fileId = files[0].id;
+      fileName = files[0].name;
+    }
+
+    // Guess month from filename pattern like "MoneyLover_2026_07" or similar
+    const monthMatch = fileName?.match(/(\d{4})[_-](\d{2})/);
+    let detectedLabel = fileName ?? fileId;
+    if (monthMatch) {
+      const y = parseInt(monthMatch[1]);
+      const m = parseInt(monthMatch[2]);
+      const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      detectedLabel = `${MONTH_NAMES[m - 1]} ${y}`;
+    }
+
+    const resolvedStatus = statusOverride ?? (
+      monthMatch && parseInt(monthMatch[1]) === currentYear && parseInt(monthMatch[2]) === currentMonth
+        ? "IN_PROGRESS"
+        : "FINAL"
+    );
+
+    const params = { fileId, fileName: fileName ?? fileId, status: resolvedStatus };
+    const title = `Import from Drive: ${fileName ?? fileId}`;
+    const fields = [
+      { label: "File", value: fileName ?? fileId ?? "?" },
+      { label: "Detected period", value: detectedLabel },
+      { label: "Batch status", value: resolvedStatus === "IN_PROGRESS" ? "IN PROGRESS (mid-month)" : "FINAL" },
+    ];
+    return { params, title, fields };
+  }
+
+  // ── propose_create_installment ──────────────────────────────────────────────
+  if (toolName === "propose_create_installment") {
+    const description = input.description as string;
+    const totalAmount = Number(input.totalAmount);
+    const numInstallments = Number(input.numInstallments);
+    const monthlyInterestRate = input.monthlyInterestRate != null ? Number(input.monthlyInterestRate) : 0;
+    const startDate = input.startDate as string;
+    const cardName = input.cardName as string | undefined;
+    const fundingAccountName = input.fundingAccountName as string | undefined;
+
+    // Resolve card
+    let cardId: string | null = null;
+    let createsCard = false;
+    if (cardName) {
+      const cards = await getCardSummaries(currentMonth, currentYear);
+      const found = cards.find((c) => c.name.toLowerCase() === cardName.toLowerCase());
+      if (found) {
+        cardId = found.id;
+      } else {
+        createsCard = true;
+      }
+    }
+
+    // Resolve funding account
+    let fundingAccountId: string | null = null;
+    if (fundingAccountName) {
+      const overview = await getLoansOverview();
+      const found = overview.accounts.find(
+        (a) => a.name.toLowerCase() === fundingAccountName.toLowerCase(),
+      );
+      if (found) fundingAccountId = found.id;
+    }
+
+    // True-cost preview (German amortization)
+    const monthlyCapital = Math.round(totalAmount / numInstallments);
+    const firstCuotaTotal = computeInstallmentDue(totalAmount, numInstallments, 1, monthlyInterestRate);
+    let totalInterest = 0;
+    for (let k = 1; k <= numInstallments; k++) {
+      totalInterest += computeInstallmentDue(totalAmount, numInstallments, k, monthlyInterestRate) - monthlyCapital;
+    }
+    const totalRepaid = totalAmount + totalInterest;
+
+    const params: Record<string, unknown> = {
+      description,
+      totalAmount,
+      numInstallments,
+      monthlyInterestRate: monthlyInterestRate || null,
+      startDate,
+      cardId,
+      fundingAccountId,
+      ...(createsCard && cardName ? { createCard: { name: cardName } } : {}),
+    };
+
+    const title = `Create installment: ${description} — ${formatCOP(totalAmount)} × ${numInstallments}`;
+    const fields: { label: string; value: string }[] = [
+      { label: "Item", value: description },
+      { label: "Total amount", value: formatCOP(totalAmount) },
+      { label: "Monthly capital", value: formatCOP(monthlyCapital) },
+      { label: "First cuota (with interest)", value: formatCOP(firstCuotaTotal) },
+      { label: "Total interest", value: formatCOP(totalInterest) },
+      { label: "Total repaid", value: formatCOP(totalRepaid) },
+      { label: "Installments", value: String(numInstallments) },
+      { label: "Card", value: cardName ? `${cardName}${createsCard ? " ⚠ new card will be created" : ""}` : "—" },
+      { label: "Start date", value: startDate },
+    ];
+
+    return { params, title, fields };
+  }
+
+  // ── propose_mark_installment_paid ──────────────────────────────────────────
+  if (toolName === "propose_mark_installment_paid") {
+    const installmentName = input.installmentName as string;
+    const targetMonth = input.month ? Number(input.month) : currentMonth;
+    const targetYear = input.year ? Number(input.year) : currentYear;
+
+    const installments = await getAllInstallments();
+    const found = installments.find((i) =>
+      i.description.toLowerCase().includes(installmentName.toLowerCase()),
+    );
+
+    if (!found) {
+      return {
+        params: input,
+        title: "Mark cuota paid",
+        fields: [],
+        blockingMessage: `No installment found matching "${installmentName}". Call get_installments to see available installments.`,
+      };
+    }
+
+    // Find the correct slot k for the target month
+    let installmentNum: number | null = null;
+    for (let k = 1; k <= found.numInstallments; k++) {
+      if (isDueInMonth(found.startDate, k, targetMonth, targetYear)) {
+        installmentNum = k;
+        break;
+      }
+    }
+
+    if (installmentNum === null) {
+      return {
+        params: input,
+        title: "Mark cuota paid",
+        fields: [],
+        blockingMessage: `No cuota found for "${found.description}" in ${targetMonth}/${targetYear}.`,
+      };
+    }
+
+    const amount = computeInstallmentDue(found.totalAmount, found.numInstallments, installmentNum, found.monthlyInterestRate ?? undefined);
+    const paidAt = new Date().toISOString();
+
+    const params: Record<string, unknown> = {
+      installmentId: found.id,
+      installmentNum,
+      paidAt,
+    };
+
+    const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const title = `Mark cuota ${installmentNum}/${found.numInstallments} paid: ${found.description}`;
+    const fields: { label: string; value: string }[] = [
+      { label: "Installment", value: found.description },
+      { label: "Cuota", value: `${installmentNum} / ${found.numInstallments}` },
+      { label: "Month", value: `${MONTH_NAMES[targetMonth - 1]} ${targetYear}` },
+      { label: "Amount due", value: formatCOP(amount) },
+    ];
+
+    return { params, title, fields };
+  }
+
+  // ── propose_create_loan ────────────────────────────────────────────────────
+  if (toolName === "propose_create_loan") {
+    const amount = Number(input.amount);
+    const debtorName = input.debtorName as string;
+    const fundingAccountName = input.fundingAccountName as string;
+    const date = (input.date as string | undefined) ?? new Date().toISOString().slice(0, 10);
+    const expectedBy = input.expectedBy as string | undefined;
+    const notes = input.notes as string | undefined;
+
+    const overview = await getLoansOverview();
+    const accountFound = overview.accounts.find(
+      (a) => a.name.toLowerCase() === fundingAccountName.toLowerCase(),
+    );
+
+    if (!accountFound) {
+      return {
+        params: input,
+        title: "Create loan",
+        fields: [],
+        blockingMessage: `Savings account "${fundingAccountName}" not found. Available accounts: ${overview.accounts.map((a) => a.name).join(", ")}. Ask the user which account to use.`,
+      };
+    }
+
+    const debtorFound = overview.debtors.find(
+      (d) => d.name.toLowerCase() === debtorName.toLowerCase(),
+    );
+    const createsDebtor = !debtorFound;
+    const debtorId = debtorFound?.id ?? null;
+
+    const params: Record<string, unknown> = {
+      amount,
+      debtorId,
+      accountId: accountFound.id,
+      date,
+      expectedBy: expectedBy ?? null,
+      notes: notes ?? null,
+      ...(createsDebtor ? { createDebtor: { name: debtorName } } : {}),
+    };
+
+    const title = `Create loan: ${formatCOP(amount)} → ${debtorName}`;
+    const fields: { label: string; value: string }[] = [
+      { label: "Amount", value: formatCOP(amount) },
+      { label: "Debtor", value: `${debtorName}${createsDebtor ? " ⚠ new debtor will be created" : ""}` },
+      { label: "From account", value: fundingAccountName },
+      { label: "Expected by", value: expectedBy ?? "—" },
+      { label: "Notes", value: notes ?? "—" },
+    ];
+
+    return { params, title, fields };
+  }
+
+  // ── propose_record_loan_payment ────────────────────────────────────────────
+  if (toolName === "propose_record_loan_payment") {
+    const debtorName = input.debtorName as string;
+    const amount = Number(input.amount);
+    const date = (input.date as string | undefined) ?? new Date().toISOString().slice(0, 10);
+    const notes = input.notes as string | undefined;
+
+    const overview = await getLoansOverview();
+    const debtor = overview.debtors.find(
+      (d) => d.name.toLowerCase() === debtorName.toLowerCase(),
+    );
+
+    if (!debtor) {
+      return {
+        params: input,
+        title: "Record loan payment",
+        fields: [],
+        blockingMessage: `Debtor "${debtorName}" not found. Call get_loans to see debtors.`,
+      };
+    }
+
+    const activeLoans = debtor.loans
+      .filter((l) => l.isActive)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+    if (activeLoans.length === 0) {
+      return {
+        params: input,
+        title: "Record loan payment",
+        fields: [],
+        blockingMessage: `No active loans found for "${debtorName}".`,
+      };
+    }
+
+    // Target oldest active loan
+    const targetLoan = activeLoans[0];
+    const resultingBalance = Math.max(0, targetLoan.remaining - amount);
+
+    const params: Record<string, unknown> = {
+      loanId: targetLoan.id,
+      debtorName,
+      amount,
+      date,
+      notes: notes ?? null,
+    };
+
+    const title = `Record payment: ${formatCOP(amount)} from ${debtorName}`;
+    const fields: { label: string; value: string }[] = [
+      { label: "Debtor", value: debtorName },
+      { label: "Amount", value: formatCOP(amount) },
+      { label: "Loan", value: targetLoan.notes ?? `Loan of ${formatCOP(targetLoan.amount)}` },
+      { label: "Current outstanding", value: formatCOP(targetLoan.remaining) },
+      { label: "Resulting balance", value: formatCOP(resultingBalance) },
+      { label: "Date", value: date },
+      ...(notes ? [{ label: "Notes", value: notes }] : []),
+    ];
+
+    if (activeLoans.length > 1) {
+      fields.push({ label: "Note", value: `${debtorName} has ${activeLoans.length} active loans — payment applied to oldest.` });
+    }
+
+    return { params, title, fields };
+  }
+
+  // ── propose_undo_last ──────────────────────────────────────────────────────
+  if (toolName === "propose_undo_last") {
+    const reversibleActions = [
+      "createInstallment", "markPayment", "createLoan", "recordPayment",
+      "createDebtor", "createCard",
+    ];
+
+    const lastApproved = await db.pendingProposal.findFirst({
+      where: {
+        status: "approved",
+        action: { in: reversibleActions },
+      },
+      orderBy: { resolvedAt: "desc" },
+    });
+
+    if (!lastApproved) {
+      return {
+        params: {},
+        title: "Undo last action",
+        fields: [],
+        blockingMessage: "No reversible recent action found.",
+      };
+    }
+
+    const resolvedAtLabel = lastApproved.resolvedAt
+      ? new Date(lastApproved.resolvedAt).toLocaleDateString("es-CO", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+      : "unknown time";
+
+    const params: Record<string, unknown> = {
+      targetProposalId: lastApproved.id,
+      originalAction: lastApproved.action,
+    };
+
+    const title = `Undo: ${lastApproved.action} from ${resolvedAtLabel}`;
+    const fields: { label: string; value: string }[] = [
+      { label: "Reversing", value: `${lastApproved.action} from ${resolvedAtLabel}` },
+      { label: "Original title", value: lastApproved.title },
+    ];
+
+    return { params, title, fields };
+  }
+
+  return null;
 }
 
 // ─── Channel-agnostic agent turn ─────────────────────────────────────────────
@@ -502,45 +981,7 @@ export async function runAgentTurn(args: {
   const { messages: inputMessages, context, onTextDelta, channel = "web" } = args;
 
   const now = new Date();
-  const dateStr = now.toLocaleDateString("en-CO", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-
-  // Build context line for system prompt
-  let contextLine = "";
-  if (context?.module) {
-    const focusPart = context.focus
-      ? ` (month ${context.focus.month}/${context.focus.year})`
-      : "";
-    const entityPart = context.entityId ? `, entity: ${context.entityId}` : "";
-    contextLine = `\nThe user is currently viewing: ${context.module}${focusPart}${entityPart}.`;
-  } else if (context?.route) {
-    contextLine = `\nThe user is currently viewing: ${context.route}.`;
-  }
-
-  const systemPrompt =
-    `You are a personal financial operator for a single user in Colombia. All amounts in COP. Today is ${dateStr}.
-
-You have live access to the user's financial data via tools. Read before you answer. Never estimate when a tool can tell you.
-
-Propose, never act: for any change to the user's data, call a proposal tool. A proposal surfaces an action card for the user to approve. You cannot mutate data directly.
-
-One proposal per card. State your reasoning before proposing.
-
-Say "drafted for your approval," never "done."
-
-Vaults come in three types: FIXED_DEADLINE (saving toward a goal by a date), OPEN_ENDED (no deadline), and RECURRING (sinking fund for non-monthly costs). A RECURRING vault's requiredThisMonth reflects the sum of set-asides from its linked recurring expenses.
-
-A vault contribution may optionally name a source savings account (sourceAccountId). Sourced contributions move real money out of that account's available balance into the vault — use propose_vault_contribution with sourceAccountId when the user says "move X from [account] into [vault]". Unsourced contributions are notional earmarks that don't affect account balances.${contextLine}
-
-When the user asks whether they will hit their savings target this month, call get_forecast for the current month and year. Report the projected savings rate and the top categories pushing it down. Always label the output as a projection from historical data, not a guarantee.
-When proposing vault contributions, check get_forecast first. If projectedSavingsRate is below the savingsRateTarget and vsTarget < 0, temper the advice: note that the user is projected to land below target and suggest funding vaults lighter this month.
-When dataSufficiency is "thin", stay quiet — acknowledge the projection isn't reliable yet.
-
-Respond in the language the user writes in (Spanish or English).`;
+  const systemPrompt = buildSystemPrompt({ now, context });
 
   // Guard against orphaned consecutive user messages.
   // Keep the most recent user message; strip extra trailing user messages.
@@ -604,15 +1045,34 @@ Respond in the language the user writes in (Spanish or English).`;
             }
           } else if (PROPOSAL_TOOLS.has(toolBlock.name)) {
             lastTool = toolBlock.name;
-            const title = buildProposalTitle(toolBlock.name, toolInput);
-            const fields = buildProposalFields(toolInput);
+
+            // Run complex resolution (name lookups, previews) for new tools
+            const resolved = await resolveComplexProposal(toolBlock.name, toolInput);
+
+            // If resolution produced a blocking message, return it as an error result
+            if (resolved?.blockingMessage) {
+              toolResults.push({
+                type: "tool_result",
+                tool_use_id: toolBlock.id,
+                content: resolved.blockingMessage,
+                is_error: true,
+              });
+              continue;
+            }
+
+            // Build final params, title, fields
+            const finalParams = resolved ? resolved.params : toolInput;
+            const title = resolved ? resolved.title : buildProposalTitle(toolBlock.name, toolInput);
+            const fields = resolved ? resolved.fields : buildProposalFields(toolInput);
+
+            // Map tool name to action name (drop "propose_" prefix for storage)
+            const actionName = toolBlock.name.replace(/^propose_/, "");
 
             // Persist a PendingProposal record
-            // Cast toolInput to unknown first to satisfy Prisma's Json InputJsonValue type
             const pendingProposal = await db.pendingProposal.create({
               data: {
-                action: toolBlock.name,
-                params: toolInput as unknown as Record<string, string>,
+                action: actionName,
+                params: finalParams as unknown as Record<string, string>,
                 title,
                 channel,
               },
@@ -620,8 +1080,8 @@ Respond in the language the user writes in (Spanish or English).`;
 
             const descriptor: ProposalDescriptor = {
               id: pendingProposal.id,
-              action: toolBlock.name,
-              params: toolInput,
+              action: actionName,
+              params: finalParams,
               title,
               fields,
               reasoning: "",

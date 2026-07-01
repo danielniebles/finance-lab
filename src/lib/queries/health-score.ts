@@ -66,7 +66,9 @@ function computeNumericScore(inputs: ScoreInputs): number {
 // ─── Main query ───────────────────────────────────────────────────────────────
 
 export async function getHealthScore(): Promise<HealthScore | null> {
+  // Use only FINAL batches for Health Score baseline (IN_PROGRESS partial months skew metrics)
   const batches = await db.importBatch.findMany({
+    where: { status: "FINAL" },
     orderBy: [{ year: "desc" }, { month: "desc" }],
     take: 2,
   });

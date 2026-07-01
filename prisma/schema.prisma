@@ -12,6 +12,11 @@ datasource db {
 
 // ─── Module 1: Expense Tracker ────────────────────────────────────────────────
 
+enum BatchStatus {
+  IN_PROGRESS
+  FINAL
+}
+
 model ImportBatch {
   id           String        @id @default(cuid())
   filename     String
@@ -20,6 +25,7 @@ model ImportBatch {
   periodEnd    DateTime
   month        Int           // 1–12
   year         Int
+  status       BatchStatus   @default(FINAL)
   transactions Transaction[]
 
   @@unique([month, year])
@@ -275,7 +281,7 @@ model PendingProposal {
   action     String
   params     Json
   title      String
-  status     String    @default("pending") // pending | approved | dismissed | expired
+  status     String    @default("pending") // pending | approved | dismissed | expired | undone
   channel    String                        // "web" | "telegram"
   createdAt  DateTime  @default(now())
   resolvedAt DateTime?

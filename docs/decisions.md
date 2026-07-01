@@ -166,3 +166,27 @@
 **Decision:** The agent core (`run-agent-turn.ts`) is channel-agnostic. It emits `ProposalDescriptor` objects and returns `AgentTurnResult`; it knows nothing about React or Telegram. Channel-specific rendering lives in thin adapters (`action-card.tsx` for web, `render.ts` for Telegram). Both channels approve through a single server-side `resolveProposal()` in `execute-proposal.ts`, which looks up a persisted `PendingProposal` and runs the mapped server action. This replaces web's previous client-side execution of server actions from `action-card.tsx`. The Telegram webhook is locked to a single authorized `chat_id` (hard allowlist) and verified with a webhook secret token. Propose-then-confirm (ADR-015) is intact on every channel.
 
 **Why:** A single write path is easier to audit and extend. The channel-agnostic core means adding WhatsApp or any other channel only requires a new renderer and webhook handler — no changes to the agent brain.
+
+---
+
+## ADR-023 — Agent write-scope expansion (installments, loans, debtors, payments)
+
+**Decision:** The agent gains proposal tools for: creating installments (`propose_create_installment` with true-cost preview), marking cuotas paid (`propose_mark_installment_paid`), creating loans (`propose_create_loan`), recording repayments (`propose_record_loan_payment`), importing from Drive (`propose_import_from_drive`), and undoing the last conversational write (`propose_undo_last`). All map to existing validated server actions. New entities (debtor, credit card) may be created within the same proposal card; savings accounts may NOT be auto-created (ask user). Propose-then-confirm (ADR-015) is unchanged. Money-moving cards state: source account, any new entity being created, cuota math + total interest (installments), resulting balance change. `execute-proposal.ts` stores `createdId` back into `PendingProposal.params` after each create action so undo can reference it. A `PendingProposalStatus` value `"undone"` is added to mark reversed proposals.
+
+**Why:** Conversational data entry reduces friction for recurring operations (buying on credit, lending money, marking a monthly cuota) without bypassing any validation. The true-cost preview surfaces the real cost of financed purchases — information the user currently computes manually. Centralizing all writes through `resolveProposal()` (ADR-022) means undo is implementable via a reverse-map without any new write paths. Telegram surfaces an ↩ Undo inline button after each approved reversible action.
+
+---
+
+## ADR-024 — Partial import batches (IN_PROGRESS / FINAL) — extends ADR-005
+
+**Decision:** `ImportBatch` gains a `BatchStatus` enum (`IN_PROGRESS` | `FINAL`, default `FINAL`). Heuristic: if the parsed period's month equals the current calendar month, the import is flagged `IN_PROGRESS`; end-of-month re-imports flip it to `FINAL` (or the agent can override via `propose_import_from_drive`). `IN_PROGRESS` batches are excluded from historical baselines: `getTrends()`, forecast history (ADR-019), and `getHealthScore()`. They ARE used for current-month analysis (`getMonthlyAnalysis`) but the response includes `isInProgress: true` so the UI can badge "in progress". Re-importing the same month still replaces the batch (ADR-005 unchanged). When an `IN_PROGRESS` batch exists for the target month, `getForecast()` enters pacing mode: it blends actuals-so-far with the historical prediction (60/40 split) to compute a projected landing, and returns `pacingMode: true`, `spentSoFar`, `projectedVariableSpend`, `daysElapsed`, and `daysInMonth`.
+
+**Why:** Mid-month imports are more useful than month-end imports for course-correction, but a partial month looks artificially under-budget and would corrupt multi-month trend analysis and forecast history if treated as final. The status flag resolves the conflict: partial months are visible in the current-month view while being invisible to the historical baseline.
+
+---
+
+## ADR-025 — System prompt is a single source in code (`prompt.ts`); `agent.md` is documentation
+
+**Decision:** The full runtime system prompt lives in `src/lib/agent/prompt.ts`, exported as `buildSystemPrompt({ now, context })`. `run-agent-turn.ts` imports and calls it — no inline prompt string remains in the call site. Tool schemas (the `TOOLS` array) stay in `run-agent-turn.ts` by necessity. `docs/agent.md` is now a human-readable description of the agent's behavior, not the source of truth for the words the model sees.
+
+**Why:** The prompt text previously existed both as an inline string in `run-agent-turn.ts` and as prose in `agent.md`, kept in sync by hand. They had already drifted (the doc still referenced `route.ts` after the Telegram refactor moved the prompt). A single code source eliminates the drift: to change the agent's behavior, you edit `prompt.ts`; to understand the intent, you read `agent.md`.
