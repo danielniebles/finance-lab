@@ -8,8 +8,12 @@ export async function getMessages() {
   });
 }
 
-export async function saveMessage(role: "user" | "assistant", content: string) {
-  return db.chatMessage.create({ data: { role, content } });
+export async function saveMessage(
+  role: "user" | "assistant",
+  content: string,
+  channel?: "web" | "telegram",
+) {
+  return db.chatMessage.create({ data: { role, content, channel: channel ?? null } });
 }
 
 export async function clearHistory() {

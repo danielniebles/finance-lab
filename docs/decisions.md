@@ -158,3 +158,11 @@
 ## ADR-021 — Vault funding: optional account source (amends ADR-014)
 
 **Decision:** A `VaultEntry` may now carry an optional `sourceAccountId` (FK → `SavingsAccount`). Sourced entries reduce that account's computed `available` balance — the money moves out of the savings pool and into the vault. Sourced vault money is tracked in a new `inVaults` figure reported by `getLoansOverview()`. `inVaults` is displayed as a standalone "Earmarked in vaults" figure and is NEVER rolled into `totalSavings`. The formulas `totalSavings = available + inLoans` and `liquidityRatio = available / totalSavings` are unchanged; the Health Score (ADR-011) is untouched. `netWorth = totalSavings + inVaults` is the conserved quantity (shown as an informational line). Unsourced contributions remain notional earmarks and are unchanged from ADR-014. Existing entries get `sourceAccountId = null` (backward compatible, no backfill).
+
+---
+
+## ADR-022 — Multi-channel agent via neutral ProposalDescriptor + shared resolveProposal
+
+**Decision:** The agent core (`run-agent-turn.ts`) is channel-agnostic. It emits `ProposalDescriptor` objects and returns `AgentTurnResult`; it knows nothing about React or Telegram. Channel-specific rendering lives in thin adapters (`action-card.tsx` for web, `render.ts` for Telegram). Both channels approve through a single server-side `resolveProposal()` in `execute-proposal.ts`, which looks up a persisted `PendingProposal` and runs the mapped server action. This replaces web's previous client-side execution of server actions from `action-card.tsx`. The Telegram webhook is locked to a single authorized `chat_id` (hard allowlist) and verified with a webhook secret token. Propose-then-confirm (ADR-015) is intact on every channel.
+
+**Why:** A single write path is easier to audit and extend. The channel-agnostic core means adding WhatsApp or any other channel only requires a new renderer and webhook handler — no changes to the agent brain.

@@ -4,106 +4,8 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  createVault,
-  updateVault,
-  addVaultEntry,
-  archiveVault,
-} from "@/lib/actions/vaults";
-import { createRecurringExpense, payRecurringExpense } from "@/lib/actions/recurring";
 import { useChat } from "./chat-provider";
 import type { ProposalEvent } from "./chat-provider";
-import type { VaultKind, VaultGoalType } from "@/generated/prisma";
-
-// ─── Action map ───────────────────────────────────────────────────────────────
-
-async function executeProposal(
-  action: string,
-  params: Record<string, unknown>,
-): Promise<void> {
-  switch (action) {
-    case "propose_create_vault": {
-      await createVault({
-        name: params.name as string,
-        kind: (params.kind as VaultKind | undefined) ?? "LEISURE",
-        goalType: params.goalType as VaultGoalType,
-        targetAmount: params.targetAmount != null ? Number(params.targetAmount) : null,
-        targetDate:
-          params.targetDate != null
-            ? new Date(params.targetDate as string)
-            : null,
-      });
-      break;
-    }
-    case "propose_update_vault": {
-      const { vaultId, ...fields } = params;
-      await updateVault(vaultId as string, {
-        name: fields.name as string | undefined,
-        kind: fields.kind as VaultKind | undefined,
-        goalType: fields.goalType as VaultGoalType | undefined,
-        targetAmount:
-          "targetAmount" in fields
-            ? fields.targetAmount != null
-              ? Number(fields.targetAmount)
-              : null
-            : undefined,
-        targetDate:
-          "targetDate" in fields
-            ? fields.targetDate != null
-              ? new Date(fields.targetDate as string)
-              : null
-            : undefined,
-        color: fields.color as string | undefined,
-        notes: fields.notes as string | undefined,
-      });
-      break;
-    }
-    case "propose_vault_contribution": {
-      await addVaultEntry(
-        params.vaultId as string,
-        Number(params.amount),
-        params.date != null ? new Date(params.date as string) : undefined,
-        params.notes as string | undefined,
-        (params.sourceAccountId as string | undefined) ?? null,
-      );
-      break;
-    }
-    case "propose_vault_withdrawal": {
-      await addVaultEntry(
-        params.vaultId as string,
-        -Number(params.amount),
-        params.date != null ? new Date(params.date as string) : undefined,
-        params.notes as string | undefined,
-        (params.sourceAccountId as string | undefined) ?? null,
-      );
-      break;
-    }
-    case "propose_archive_vault": {
-      await archiveVault(params.vaultId as string);
-      break;
-    }
-    case "propose_create_recurring_expense": {
-      await createRecurringExpense({
-        name: params.name as string,
-        estimatedAmount: Number(params.estimatedAmount),
-        cadenceMonths: Number(params.cadenceMonths),
-        nextDueDate: new Date(params.nextDueDate as string),
-        category: params.category as string | undefined ?? null,
-        fundingVaultId: params.fundingVaultId as string | undefined ?? null,
-      });
-      break;
-    }
-    case "propose_pay_recurring": {
-      await payRecurringExpense(params.id as string, {
-        amount: Number(params.amount),
-        fromVaultId: params.fromVaultId as string | undefined,
-      });
-      break;
-    }
-    default:
-      throw new Error(`No handler for action: ${action}`);
-  }
-}
 
 // ─── Param display helpers ────────────────────────────────────────────────────
 
@@ -149,16 +51,20 @@ export function ActionCard({ proposal }: Props) {
   const isApproved = proposal.approved === true;
 
   async function handleApprove() {
+    if (!proposal.proposalId) return;
     try {
-      await executeProposal(proposal.action, proposal.params);
+      const res = await fetch("/api/proposals/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proposalId: proposal.proposalId, choiceId: "approve" }),
+      });
+      const data = (await res.json()) as { ok: boolean; message: string };
+      if (!data.ok) throw new Error(data.message);
       updateProposal(proposal.id, true);
       router.refresh();
     } catch (err) {
       console.error("[ActionCard] approve failed:", err);
-      // Surface error without crashing — keep the card in pending state
-      alert(
-        `Could not apply: ${err instanceof Error ? err.message : "Unknown error"}`,
-      );
+      alert(`Could not apply: ${err instanceof Error ? err.message : "Unknown error"}`);
     }
   }
 

@@ -293,14 +293,31 @@ Ledger entry for a vault. Positive = contribution, negative = withdrawal.
 ---
 
 ### ChatMessage
-Persisted conversation history for the AI advisor. Up to 20 recent messages are sent to Claude on each request.
+Persisted conversation history for the AI advisor. Up to 20 recent messages are sent to Claude on each request. History is shared across channels (web + Telegram) for continuity.
 
 | Field | Type | Description |
 |---|---|---|
 | id | String (cuid) | Primary key |
 | role | String | "user" or "assistant" |
 | content | String | Full message text |
+| channel | String? | "web" or "telegram" — null = legacy/unknown. For filtering/debugging; history is shared by default. |
 | createdAt | DateTime | Message timestamp |
+
+---
+
+### PendingProposal
+A persisted record of every proposal the agent has emitted, across all channels. The unified approval path (`resolveProposal`) looks up and acts on these records.
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key — used as the `proposalId` in NDJSON events and Telegram `callback_data` |
+| action | String | Proposal tool name, e.g. "propose_vault_contribution" |
+| params | Json | Validated arguments for the server action |
+| title | String | Human-readable title built by the agent |
+| status | String | "pending" \| "approved" \| "dismissed" \| "expired" (default: "pending") |
+| channel | String | "web" or "telegram" — which channel surfaced this proposal |
+| createdAt | DateTime | When the proposal was emitted |
+| resolvedAt | DateTime? | When the user approved or dismissed it |
 
 ## Enums
 

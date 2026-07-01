@@ -53,6 +53,17 @@ The agent should:
 
 ---
 
+## 2b. Channels
+
+The agent core is channel-agnostic. `runAgentTurn()` knows nothing about React or Telegram — it emits neutral `ProposalDescriptor` objects and streams text via an `onTextDelta` callback. Two channels are currently wired:
+
+- **Web:** the NDJSON stream in `/api/chat` serializes proposals as `{type:"proposal", proposalId, ...}`; `ActionCard` renders them; approval calls `POST /api/proposals/resolve`.
+- **Telegram:** the webhook at `/api/telegram` calls `runAgentTurn()` (buffered, no streaming), sends text and proposal messages with inline keyboard buttons; button taps call `resolveProposal()` directly.
+
+Propose-then-confirm (§2) is preserved on every channel — the user must tap Approve before any mutation occurs.
+
+---
+
 ## 3. Module-context awareness
 
 The chat bubble is openable from any screen. When the user opens it from inside a

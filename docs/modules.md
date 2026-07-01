@@ -21,7 +21,11 @@ src/
         categories/page.tsx — AppCategory + BudgetItem CRUD
         mappings/page.tsx   — MoneyLoverCategory → AppCategory mapping
     api/
-      chat/route.ts         — NDJSON tool-use loop (read + proposal tools)
+      chat/route.ts         — Thin NDJSON streaming wrapper over runAgentTurn; emits {type:"proposal",proposalId,...} events
+      proposals/
+        resolve/route.ts    — POST handler: { proposalId, choiceId } → resolveProposal() → { ok, message }
+      telegram/
+        route.ts            — Telegram webhook: verifies secret token + allowlist; dispatches message and callback_query updates
   components/
     app-sidebar.tsx         — Sidebar nav + theme toggle
     overview/               — OverviewDashboard (BudgetBarsPanel, TopUnplannedPanel), ExpenseDonut, ForecastPanel
@@ -52,6 +56,13 @@ src/
       vaults.ts             — getVaults() (branches on goalType: RECURRING uses summed set-asides), getVaultObligations(); VaultEntryRow now includes sourceAccountId + sourceAccountName
       recurring.ts          — getRecurringExpenses(month, year): items with set-aside + status
       accounts.ts           — getSavingsAccounts(): lightweight AccountOption[] (id, name, balance) for pickers
+    agent/
+      types.ts              — ProposalChoice, ProposalDescriptor, AgentTurnResult (channel-agnostic types)
+      run-agent-turn.ts     — Channel-agnostic tool-use loop: TOOLS, READ_TOOLS, runReadTool(), runAgentTurn(); persists PendingProposal on each proposal tool call
+      execute-proposal.ts   — resolveProposal(): looks up PendingProposal, runs action→server-action map, marks approved/dismissed; used by both web and Telegram
+    telegram/
+      api.ts                — Telegram Bot API helpers: sendMessage, answerCallbackQuery, editMessageText, sendChatAction
+      render.ts             — toTelegramMessage(): converts ProposalDescriptor → Telegram text + inline_keyboard
     actions/
       import.ts             — importMoneyLoverFile(), importBuffer()
       drive.ts              — listDriveFiles(), importFromDrive()
@@ -119,11 +130,18 @@ src/
 ---
 
 ### `src/app/(app)/chat`
-**Responsibility:** Full-screen AI advisor backed by `claude-sonnet-4-6`. Uses a tool-use loop (9 read tools + 5 proposal tools). Conversation history is persisted in `ChatMessage`. The floating chat panel is available on every page, module-context-aware. Proposal tools surface action cards (`ActionCard`) that the user must approve before mutations occur (ADR-015).
-**Key files:** `chat/page.tsx` (messages area constrained to `max-w-3xl` for mobile-friendly width), `components/chat/chat-provider.tsx` (NDJSON streaming + proposal state), `chat-messages.tsx` (renders assistant messages as Markdown via `remark-gfm` with custom table/code/paragraph styles), `chat-input.tsx`, `floating-chat.tsx`, `action-card.tsx`, `src/app/api/chat/route.ts` (orphaned-user-message guard — strips trailing consecutive user messages on history load to prevent Anthropic 400 errors; saves an assistant error message in the outer catch to prevent the loop-on-failure bug; structured error logging)
-**Dependencies:** `getFinancialSnapshot`, `getHealthScore`, `getMonthlyAnalysis`, `getTrends`, `getAllInstallments`, `getLoansOverview`, `getVaults`, `getVaultObligations`, vault write actions, Anthropic SDK
-**Exports:** `ChatPage` (route), `FloatingChat` (accessible from any page via the app layout), `ActionCard` (renders proposal events inline in the chat stream)
-**Transport:** `application/x-ndjson` — one JSON object per line: `{"type":"text","delta":"..."}` or `{"type":"proposal","action":"...","params":{...},"label":"..."}`
+**Responsibility:** Full-screen AI advisor backed by `claude-sonnet-4-6`. Uses a channel-agnostic tool-use loop (11 read tools + 7 proposal tools) in `src/lib/agent/run-agent-turn.ts`. Conversation history is persisted in `ChatMessage` (shared with Telegram). The floating chat panel is available on every page, module-context-aware. Proposal tools persist a `PendingProposal` record and surface action cards (`ActionCard`) that the user must approve before mutations occur (ADR-015). Approval calls `POST /api/proposals/resolve` which runs the unified `resolveProposal()` (ADR-022).
+**Key files:** `chat/page.tsx`, `components/chat/chat-provider.tsx` (NDJSON streaming + proposal state), `chat-messages.tsx`, `chat-input.tsx`, `floating-chat.tsx`, `action-card.tsx`, `src/app/api/chat/route.ts` (thin streaming wrapper), `src/app/api/proposals/resolve/route.ts` (web approve path), `src/lib/agent/run-agent-turn.ts` (tool-use loop), `src/lib/agent/execute-proposal.ts` (unified write path)
+**Dependencies:** All agent read queries, vault + recurring write actions, Anthropic SDK, Prisma (PendingProposal)
+**Exports:** `ChatPage` (route), `FloatingChat`, `ActionCard`
+**Transport:** `application/x-ndjson` — one JSON object per line: `{"type":"text","delta":"..."}` or `{"type":"proposal","proposalId":"...","action":"...","params":{...},"label":"..."}`
+
+---
+
+### `src/app/api/telegram`
+**Responsibility:** Telegram webhook for the multi-channel agent (ADR-022). Receives `message` and `callback_query` updates from Telegram, verifies the secret token and the hard-allowlisted `chat_id`, and dispatches to the shared agent core. Text messages → `runAgentTurn()` → `sendMessage()`; inline keyboard taps → `resolveProposal()` → `answerCallbackQuery` + `editMessageText`. Uses `after()` (Next.js) for fast-ack + async work pattern (Vercel-compatible).
+**Key files:** `src/app/api/telegram/route.ts`, `src/lib/telegram/api.ts`, `src/lib/telegram/render.ts`
+**Env vars required:** `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET`
 
 ---
 
