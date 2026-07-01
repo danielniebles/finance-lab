@@ -144,7 +144,7 @@ A personal savings or investment account. Balance is computed from entries + tra
 | color | String? | Hex color for UI |
 | includeInAvailable | Boolean | Whether to count toward liquid available |
 
-**Relations:** has many `AccountEntry`; has many `Loan` (as lender); has many `Transfer` (from/to); has many `Installment` via "InstallmentFunding" (savings accounts that fund debtor-linked installments)
+**Relations:** has many `AccountEntry`; has many `Loan` (as lender); has many `Transfer` (from/to); has many `Installment` via "InstallmentFunding" (savings accounts that fund debtor-linked installments); has many `VaultEntry` via "VaultFundingSource" (entries sourced from this account reduce its computed balance)
 
 ---
 
@@ -220,15 +220,104 @@ A partial or full repayment of a Loan.
 
 ---
 
+### Vault
+A named goal-based savings pocket. Isolated from the SavingsAccount/liquidity model (ADR-014). Balance is computed — never stored (ADR-006).
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key |
+| name | String (unique) | e.g. "Emergency Fund", "Trip to Japan" |
+| kind | VaultKind enum | MANDATORY or LEISURE |
+| goalType | VaultGoalType enum | FIXED_DEADLINE, OPEN_ENDED, or RECURRING |
+| targetAmount | Float? | Required when goalType = FIXED_DEADLINE |
+| targetDate | DateTime? | Required when goalType = FIXED_DEADLINE |
+| color | String? | Hex color for UI tile accent strip |
+| notes | String? | Optional notes |
+| archivedAt | DateTime? | Set when goal met or abandoned; record is kept for history |
+| createdAt | DateTime | Record creation time |
+
+**Relations:** has many `VaultEntry`; has many `RecurringExpense` (via `"VaultRecurring"` relation name)
+
+---
+
+### RecurringExpense
+A non-monthly cost the user expects to pay on a recurring cadence. Source of truth for due dates and set-aside math.
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key |
+| name | String | e.g. "Tecnomecánica", "Car insurance" |
+| estimatedAmount | Float | Expected cost in COP |
+| cadenceMonths | Int | Recurrence interval (1=monthly, 6=semiannual, 12=annual) |
+| nextDueDate | DateTime | When the next payment falls due |
+| category | String? | Free label (e.g. "Vehicle", "Taxes") |
+| fundingVaultId | String? | FK → Vault (optional; the RECURRING vault that holds the money) |
+| active | Boolean | Default true; set false to deactivate without deleting |
+| notes | String? | Optional notes |
+| createdAt | DateTime | Record creation time |
+
+**Relations:** belongs to `Vault` (optional, via `"VaultRecurring"`); has many `RecurringExpensePayment`
+
+---
+
+### RecurringExpensePayment
+Ledger of paid cycles. Created atomically with the vault withdrawal in `payRecurringExpense`.
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key |
+| recurringExpenseId | String | FK → RecurringExpense (cascade delete) |
+| amount | Float | Actual amount paid (may differ from estimate) |
+| dueDate | DateTime | The cycle this payment satisfied (the previous `nextDueDate`) |
+| paidAt | DateTime | When the payment was recorded |
+| vaultEntryId | String? | FK to the VaultEntry withdrawal, if paid from a vault |
+| notes | String? | Optional notes |
+
+---
+
+### VaultEntry
+Ledger entry for a vault. Positive = contribution, negative = withdrawal.
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key |
+| vaultId | String | FK → Vault (cascade delete) |
+| amount | Float | Signed amount in COP |
+| date | DateTime | Entry date (defaults to now) |
+| notes | String? | Optional notes |
+| createdAt | DateTime | Record creation time |
+| sourceAccountId | String? | FK → SavingsAccount via "VaultFundingSource" (optional). When set, this entry is a sourced contribution — the amount is deducted from that account's computed balance. Null = notional earmark (no account balance impact). |
+
+`VaultEntryRow` (the query return type) also exposes `sourceAccountName: string | null` (resolved from the relation).
+
+---
+
 ### ChatMessage
-Persisted conversation history for the AI advisor. Up to 20 recent messages are sent to Claude on each request.
+Persisted conversation history for the AI advisor. Up to 20 recent messages are sent to Claude on each request. History is shared across channels (web + Telegram) for continuity.
 
 | Field | Type | Description |
 |---|---|---|
 | id | String (cuid) | Primary key |
 | role | String | "user" or "assistant" |
 | content | String | Full message text |
+| channel | String? | "web" or "telegram" — null = legacy/unknown. For filtering/debugging; history is shared by default. |
 | createdAt | DateTime | Message timestamp |
+
+---
+
+### PendingProposal
+A persisted record of every proposal the agent has emitted, across all channels. The unified approval path (`resolveProposal`) looks up and acts on these records.
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key — used as the `proposalId` in NDJSON events and Telegram `callback_data` |
+| action | String | Proposal tool name, e.g. "propose_vault_contribution" |
+| params | Json | Validated arguments for the server action |
+| title | String | Human-readable title built by the agent |
+| status | String | "pending" \| "approved" \| "dismissed" \| "expired" (default: "pending") |
+| channel | String | "web" or "telegram" — which channel surfaced this proposal |
+| createdAt | DateTime | When the proposal was emitted |
+| resolvedAt | DateTime? | When the user approved or dismissed it |
 
 ## Enums
 
@@ -237,3 +326,5 @@ Persisted conversation history for the AI advisor. Up to 20 recent messages are 
 | BudgetType | FIXED, VARIABLE |
 | AccountType | BANK, DIGITAL, PENSION |
 | EntryType | INITIAL, ADJUSTMENT |
+| VaultKind | MANDATORY, LEISURE |
+| VaultGoalType | FIXED_DEADLINE, OPEN_ENDED, RECURRING |

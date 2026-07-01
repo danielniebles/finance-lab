@@ -105,3 +105,64 @@
 **Decision:** `prisma.config.ts` (project root) must always include `directUrl: env("DIRECT_URL")` in its datasource block, mirroring the same field in `prisma/schema.prisma`.
 
 **Why:** When `prisma.config.ts` is present, Prisma uses it as the authoritative datasource configuration and silently ignores the `datasource db` block in `schema.prisma`. This means a `directUrl` defined only in `schema.prisma` has no effect when `prisma.config.ts` exists. Without `directUrl`, all database connections — including `prisma migrate deploy` DDL statements — are routed through the pgbouncer pooler (port 6543). pgbouncer does not support DDL in transaction mode, so migrations hang indefinitely. Fix: always keep `directUrl` in both files. If `prisma.config.ts` is ever removed, the `schema.prisma` entry still applies.
+
+---
+
+## ADR-014 — Vaults are a standalone ledger (not liquidity)
+
+**Decision:** The Vaults module maintains its own `Vault` / `VaultEntry` ledger. Vault balances are never added to `SavingsAccount` balances, never factored into the Liquidity Ratio KPI, and never represented as `AccountEntry` records. Vault balance = `sum(VaultEntry.amount)` — computed, never stored (ADR-006 applies).
+
+**Why:** Vaults are earmarked goal pockets, not liquid capital. Including vault balances in the liquidity view would inflate
+ available funds and understate loan exposure. Keeping the ledgers separate means the Loans module accurately reflects deployable liquidity and the Health Score's Liquidity Ratio remains meaningful. The trade-off is that "total savings" across all vehicles requires an explicit cross-module sum, but that is a future dashboard concern.
+
+---
+
+## ADR-016 — Plan layer beside Actuals
+
+**Decision:** Finance Lab adopts a two-layer model: **Actuals** (imported transactions, computed balances, severity — the record of what happened) and **Plan** (expected non-monthly outflows and, in future phases, expected inflows). The app's reconciliation job is comparing the two: given what's coming, what must be set aside this month, and where will you actually land? Plan inputs are material (above a meaningful threshold relative to income) and non-monthly by design — small noisy spending stays absorbed by the variable budget. Setup effort scales to stakes.
+
+**Why:** The existing monthly budget can only represent costs that are smooth and monthly. Every recurring pain (annual taxes, semiannual insurance, birthday gifts) shares one root cause: there is no model of the future that isn't monthly. The Plan layer fixes this without changing the import habit.
+
+**Re-spread is the default for shortfalls:** `requiredThisMonth = remaining / periodsLeft` is always recomputed from the current balance and next due date. Falling behind one month silently raises the next month's requirement — no auto-debt, no auto-raid of savings. See `docs/financial-model.md` for the full north-star model.
+
+---
+
+## ADR-017 — Recurring expense registry feeds a RECURRING vault
+
+**Decision:** `VaultGoalType` gains a third value `RECURRING`. A `RECURRING` vault's `requiredThisMonth` is `sum(monthlySetAside(item))` over its linked `RecurringExpense` records — not a deadline split. The vault holds the money; the registry (`RecurringExpense` + `RecurringExpensePayment`) is the calendar. On payment, `nextDueDate` advances by `cadenceMonths` via `rollCycle()` inside a `prisma.$transaction`. The withdrawal from the vault is an ordinary `VaultEntry` with a negative amount, reusing the existing vault ledger. Balances are never stored (ADR-006 applies).
+
+**Why:** Keeping sinking-fund money as a vault reuses the entire vault ledger, banner, status classification, and agent surface. A separate account or balance column would create a second source of truth. The `RECURRING` vault shape is the minimal addition that unblocks the non-monthly planning use case without blurring the Loans/Vaults boundary (ADR-014).
+
+---
+
+## ADR-015 — Agent upgrade: tool use + propose-then-confirm (supersedes ADR-009)
+
+**Decision:** The AI advisor (`src/app/api/chat/route.ts`) was rewritten from a static-snapshot streamer to a tool-use loop. Model upgraded to `claude-sonnet-4-6`. The system prompt is minimal (role, date, currency, current module context). On each turn the model calls read tools to fetch exactly the data the question needs, and proposal tools to surface action cards. Proposal tools never mutate — they emit a `{"type":"proposal"}` NDJSON event. Mutation only happens when the user clicks Approve on an action card, which calls the pre-validated server action directly from the client. Transport changed from `text/plain` streaming to NDJSON (`application/x-ndjson`), one JSON object per line.
+
+**Why:** The old advisor could only reason over a pre-baked ~2000-token snapshot injected on every message. The tool-use approach lets the model fetch only what it needs (cheaper per-call) and reason over live, granular data (individual transactions, any historical month, vault obligations). The propose-then-confirm gate means a misbehaving or hallucinating model can propose a bad action but can never silently mutate data. The existing server actions (which carry all validation) remain the only write path. `docs/agent.md` is the canonical spec for tool definitions and domain rules.
+
+---
+
+## ADR-019 — Forecasting from trend history (Phase C)
+
+**Decision:** `getForecast(month, year)` reads the last 6 import batches via `getTrends`, feeds per-category spend history into `predictCategoryLanding` (recency-weighted mean ± 1 std), and projects a month-end savings rate. One read tool (`get_forecast`) surfaces this to the agent. No schema change, no proposal tool.
+
+**Why:** Landing lower than expected (pain #2) can be addressed purely from existing import history — no new import habit, no mid-month workflow. The forecast is historical: it does not read current-month actuals. Mid-month pacing (reading a partial import to compute spend-so-far) requires an in-progress flag on ImportBatch (ADR-005 extension) and is explicitly deferred to the backlog.
+
+**Thin data:** When fewer than 3 months of history exist, `dataSufficiency = "thin"` and the UI/agent stays quiet — no fabricated numbers.
+
+**Income source:** Phase B (getIncomePlan) not yet shipped; expectedIncome falls back to trailing income average from getTrends.
+
+---
+
+## ADR-021 — Vault funding: optional account source (amends ADR-014)
+
+**Decision:** A `VaultEntry` may now carry an optional `sourceAccountId` (FK → `SavingsAccount`). Sourced entries reduce that account's computed `available` balance — the money moves out of the savings pool and into the vault. Sourced vault money is tracked in a new `inVaults` figure reported by `getLoansOverview()`. `inVaults` is displayed as a standalone "Earmarked in vaults" figure and is NEVER rolled into `totalSavings`. The formulas `totalSavings = available + inLoans` and `liquidityRatio = available / totalSavings` are unchanged; the Health Score (ADR-011) is untouched. `netWorth = totalSavings + inVaults` is the conserved quantity (shown as an informational line). Unsourced contributions remain notional earmarks and are unchanged from ADR-014. Existing entries get `sourceAccountId = null` (backward compatible, no backfill).
+
+---
+
+## ADR-022 — Multi-channel agent via neutral ProposalDescriptor + shared resolveProposal
+
+**Decision:** The agent core (`run-agent-turn.ts`) is channel-agnostic. It emits `ProposalDescriptor` objects and returns `AgentTurnResult`; it knows nothing about React or Telegram. Channel-specific rendering lives in thin adapters (`action-card.tsx` for web, `render.ts` for Telegram). Both channels approve through a single server-side `resolveProposal()` in `execute-proposal.ts`, which looks up a persisted `PendingProposal` and runs the mapped server action. This replaces web's previous client-side execution of server actions from `action-card.tsx`. The Telegram webhook is locked to a single authorized `chat_id` (hard allowlist) and verified with a webhook secret token. Propose-then-confirm (ADR-015) is intact on every channel.
+
+**Why:** A single write path is easier to audit and extend. The channel-agnostic core means adding WhatsApp or any other channel only requires a new renderer and webhook handler — no changes to the agent brain.

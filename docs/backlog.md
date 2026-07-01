@@ -21,63 +21,19 @@ The trends page reads a `?period` search param (3, 6, or 12) but the `TrendsDash
 
 ## Future improvements
 
-### AI Advisor — upgrade to tool use (high value, medium effort)
+### AI Advisor + Vaults — Vaults in Health Score (low effort, medium value)
 
-**Problem:** The current advisor calls `getFinancialSnapshot()` on every message and injects a static plain-text report (last 3 months of expenses + loans + installments) as the system prompt. Claude can only reason over what's in that pre-baked blob — it can't drill into individual transactions, query months outside the 3-month window, or ask for more granular data. Every message also pays the full ~2000-token system prompt cost regardless of how simple the question is.
-
-**Proposed solution:** Replace the static snapshot with Anthropic tool use. The system prompt becomes minimal (role + current date + currency). Claude calls tools on demand, fetching only the data the question requires.
-
-**Tools to define** (map directly to existing query functions):
-
-| Tool name | Maps to | What it unlocks |
-|---|---|---|
-| `get_available_months()` | `getImportBatches()` | Claude knows what data exists before asking |
-| `get_monthly_analysis(month, year)` | `getMonthlyAnalysis()` in `queries/expenses.ts` | Full category breakdown for any month, not just last 3 |
-| `get_transactions(month, year, category?)` | raw Prisma query on `Transaction` | Individual transactions, searchable by note/category |
-| `get_trends(n)` | `getTrends()` in `queries/trends.ts` | Multi-month patterns |
-| `get_installments()` | `getAllInstallments()` in `queries/installments.ts` | Full installment state |
-| `get_loans()` | `getLoansOverview()` in `queries/loans.ts` | Savings + loans |
-| `get_overview()` | `getFinancialSnapshot()` in `queries/chat.ts` | High-level briefing (optional, Claude calls when needed) |
-
-**Primary file to change:** `src/app/api/chat/route.ts`
-
-Current streaming loop (simple):
-```ts
-for await (const chunk of stream) {
-  if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-    fullResponse += chunk.delta.text;
-    controller.enqueue(encoder.encode(chunk.delta.text));
-  }
-}
-```
-
-New loop must handle the tool-use cycle — Claude emits a `tool_use` block, execution pauses, server runs the tool, injects a `tool_result` message, stream resumes:
-```ts
-// pseudo-code
-while (true) {
-  const response = await anthropic.messages.create({ tools, messages, ... });
-  if (response.stop_reason === "tool_use") {
-    const toolUseBlocks = response.content.filter(b => b.type === "tool_use");
-    const toolResults = await Promise.all(toolUseBlocks.map(executeTool));
-    messages.push({ role: "assistant", content: response.content });
-    messages.push({ role: "user", content: toolResults }); // tool_result blocks
-    // continue loop
-  } else {
-    // stop_reason === "end_turn" — stream the text content to client
-    break;
-  }
-}
-```
-
-**Streaming concern:** Tool execution interrupts the text stream. The client sees a brief pause while a tool runs (typically a Prisma query, ~10–50ms). This is acceptable for a chat UI but requires switching from `anthropic.messages.stream()` to `anthropic.messages.create()` for the tool-use turns, then streaming only the final text response. Alternatively, use streaming throughout and handle `content_block_start` events with `type: "tool_use"`.
-
-**Model consideration:** Switch from `claude-haiku-4-5-20251001` to Sonnet for this feature. Haiku supports tool use but Sonnet is significantly better at deciding when and what to call. Cost delta is negligible for a personal app with low message volume.
-
-**Prompt caching note:** Once tool use is in place, the minimal system prompt is cheap and stable — prompt caching becomes less critical than it is today. But if the `get_overview()` tool result is large and called frequently, caching its output at the tool-result level could help.
+The `getHealthScore()` metric uses four pillars (Savings Rate, Variable Burn Rate, Installment Burden, Liquidity Ratio). Vault obligations could add a fifth pillar: **Vault Funding Rate** = mandatory vault contributions made / mandatory vault obligations due × 100. Not yet implemented — Health Score still uses only the original four.
 
 ---
 
-- **Prompt caching:** The AI advisor sends a fresh `getFinancialSnapshot()` string as the system prompt on every message. Since the snapshot is identical within a session, adding `cache_control: { type: "ephemeral" }` on the system prompt block would reduce Claude API costs by up to 90% for the repeated prefix.
+### AI Advisor + Vaults — Global vault obligations banner (low effort)
+
+`VaultDueBanner` is currently mounted only on `/overview`. It could also appear on `/vaults` when the user is looking at their vaults page and still has obligations. Minor duplication — one mount point vs. two.
+
+---
+
+- **Prompt caching:** The AI advisor sends context and history on every call. Adding `cache_control: { type: "ephemeral" }` on stable system prompt blocks could reduce Claude API costs for the repeated prefix across turns.
 - **Category mapping UI:** Currently, unmapped MoneyLover categories are shown as a count with a link to the mappings settings page. An inline mapping shortcut on the expenses dashboard would speed up the post-import workflow.
 - **Import from Drive — auto-detect latest:** The Drive integration lists files and requires manual selection. An "import latest" button that automatically picks the most-recently-modified file would reduce clicks.
 - **Installment interest rate display:** The installment form accepts a monthly interest rate but the dashboard does not prominently display the total interest cost over the installment's life. Showing `total interest = sum(interest_k for k in 1..n)` would help the user evaluate purchases.
@@ -163,3 +119,32 @@ When a cuota is marked as paid AND the installment has `debtorId` set:
 
 **Supabase migration note:**
 Before building this feature, apply the two pending revert migrations (`20260608151001` + `20260608200000`) to Supabase production via `prisma migrate deploy` with the production DATABASE_URL.
+
+---
+
+### Agent — proactive action-card triggers (medium/large effort, deferred)
+
+**Context:** Today action cards fire *only inside a chat turn* — when the model calls a proposal tool while responding to a message. The agent has no background process and does not observe the database, so a direct UI action (e.g. registering a prima as a `SavingsAccount` entry) never triggers a card on its own. The card only appears when the user next talks to the agent, or clicks an "Ask the agent" button on a deterministic banner that links into a pre-seeded chat.
+
+**Open question (deferred during Phase B scoping):** how proactive should the moment-of-action be? Three levels, increasing cost:
+
+1. **Banner + chat (current Phase B plan).** Saving the entry changes nothing instantly; a deterministic Overview/Income banner surfaces "income waiting to allocate" and the user clicks into a pre-seeded chat. No background agent. Lowest cost — already specified in `.handoff/income-allocation/HANDOFF.md`.
+2. **Point-of-action prompt.** After saving a positive savings entry that matches an expected `IncomeEvent`, the savings form shows an inline "This looks like your June prima — allocate it?" that opens the agent pre-seeded with that entry. User-initiated but triggered at the exact moment of the action. Moderate cost: a hook on the savings entry form + the reconciliation match available client-side.
+3. **Auto-generated card outside chat.** Saving the entry fires the agent automatically and drops an allocation card into a notifications/inbox surface, visible even with chat closed. Most proactive, but requires two new capabilities the current architecture lacks: the agent running *outside* a chat request cycle, and action cards living *outside* the chat thread (a card store + an inbox UI + an approve path independent of the chat stream).
+
+**Recommendation:** ship Phase B with level 1, then evaluate level 2 as a cheap upgrade once the reconciliation matching exists. Level 3 is a broader "proactive agent" capability worth its own design pass (overlaps with any future scheduled-briefing feature, since both need the agent to run and surface cards without an open chat).
+
+This generalizes beyond primas: the same trigger question applies to recurring-expense due dates, vault shortfalls, and any future "the app noticed something and wants to propose an action" moment.
+
+---
+
+### Forecasting — mid-month pacing (medium effort, deferred from Phase C)
+
+**Context:** Phase C ships a **historical** forecast (`getForecast`, ADR-019) — it predicts where variable categories and the savings rate will land using only past months, needs no mid-month upload, and runs on page-load / agent-on-demand. It deliberately does **not** read current-month actuals (there are none until import).
+
+**The follow-on:** mid-month "pacing" — *"you're 18 days in, you've spent 1.2M of your 2M variable budget, pacing to overshoot."* This is more accurate in-month but needs two things the historical forecast doesn't:
+
+1. **Mid-month imports.** The user imports the in-progress month (they've confirmed they can).
+2. **An in-progress vs final flag on `ImportBatch`.** Re-importing replaces the whole month's batch (ADR-005), so a partial mid-month import would otherwise make that month look *final and tiny* in expense analysis and trends. A `status` (or `partial: boolean`) field lets analysis/trends/forecast treat in-progress months as partial, and flip to final at month-end.
+
+**Shape:** a pacing query sits beside `getForecast`, blending the partial current-month actuals with the historical prediction (e.g. "spent X of predicted Y with Z days left → projected landing"). The agent and the forecast panel would prefer pacing when a partial current-month batch exists, and fall back to pure historical otherwise. No autonomous trigger — same view/chat model as the rest of the agent.

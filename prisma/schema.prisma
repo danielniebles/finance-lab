@@ -126,6 +126,7 @@ model SavingsAccount {
   transfersFrom      Transfer[]     @relation("TransferFrom")
   transfersTo        Transfer[]     @relation("TransferTo")
   fundedInstallments Installment[]  @relation("InstallmentFunding")
+  vaultEntriesFunded VaultEntry[]   @relation("VaultFundingSource")
 }
 
 enum AccountType {
@@ -191,11 +192,91 @@ model LoanPayment {
   notes   String?
 }
 
+// ─── Module 4: Vaults ─────────────────────────────────────────────────────────
+
+enum VaultKind {
+  MANDATORY
+  LEISURE
+}
+
+enum VaultGoalType {
+  FIXED_DEADLINE
+  OPEN_ENDED
+  RECURRING
+}
+
+model Vault {
+  id                String              @id @default(cuid())
+  name              String              @unique
+  kind              VaultKind           @default(LEISURE)
+  goalType          VaultGoalType       @default(FIXED_DEADLINE)
+  targetAmount      Float?              // required when goalType = FIXED_DEADLINE
+  targetDate        DateTime?           // required when goalType = FIXED_DEADLINE
+  color             String?
+  notes             String?
+  archivedAt        DateTime?           // set when goal met/abandoned; keeps history
+  createdAt         DateTime            @default(now())
+  entries           VaultEntry[]
+  recurringExpenses RecurringExpense[]  @relation("VaultRecurring")
+}
+
+model VaultEntry {
+  id              String          @id @default(cuid())
+  vaultId         String
+  vault           Vault           @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+  amount          Float           // positive = contribution, negative = withdrawal
+  date            DateTime        @default(now())
+  notes           String?
+  createdAt       DateTime        @default(now())
+  sourceAccountId String?
+  sourceAccount   SavingsAccount? @relation("VaultFundingSource", fields: [sourceAccountId], references: [id], onDelete: SetNull)
+}
+
+// ─── Module 5: Recurring Expenses ────────────────────────────────────────────
+
+model RecurringExpense {
+  id             String                    @id @default(cuid())
+  name           String
+  estimatedAmount Float
+  cadenceMonths  Int
+  nextDueDate    DateTime
+  category       String?
+  fundingVaultId String?
+  fundingVault   Vault?                    @relation("VaultRecurring", fields: [fundingVaultId], references: [id], onDelete: SetNull)
+  active         Boolean                   @default(true)
+  notes          String?
+  createdAt      DateTime                  @default(now())
+  payments       RecurringExpensePayment[]
+}
+
+model RecurringExpensePayment {
+  id                 String           @id @default(cuid())
+  recurringExpenseId String
+  recurringExpense   RecurringExpense @relation(fields: [recurringExpenseId], references: [id], onDelete: Cascade)
+  amount             Float
+  dueDate            DateTime
+  paidAt             DateTime         @default(now())
+  vaultEntryId       String?
+  notes              String?
+}
+
 // ─── Milestone 5 — AI Advisor ─────────────────────────────────────────────────
 
 model ChatMessage {
   id        String   @id @default(cuid())
   role      String   // "user" | "assistant"
   content   String
+  channel   String?  // "web" | "telegram" — null = legacy/unknown
   createdAt DateTime @default(now())
+}
+
+model PendingProposal {
+  id         String    @id @default(cuid())
+  action     String
+  params     Json
+  title      String
+  status     String    @default("pending") // pending | approved | dismissed | expired
+  channel    String                        // "web" | "telegram"
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
 }

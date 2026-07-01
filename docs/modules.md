@@ -1,5 +1,7 @@
 # Modules
 
+> Last updated: 2026-06-30
+
 ## Project structure
 ```
 src/
@@ -13,35 +15,54 @@ src/
       trends/page.tsx       — Multi-month income/expense/category charts
       installments/page.tsx — Installment CRUD + monthly due summary
       loans/page.tsx        — Savings accounts + debtor/loan management
+      vaults/page.tsx       — Goal-based savings pockets (CRUD + obligations)
       chat/page.tsx         — Full-screen AI advisor chat
       settings/
         categories/page.tsx — AppCategory + BudgetItem CRUD
         mappings/page.tsx   — MoneyLoverCategory → AppCategory mapping
     api/
-      chat/route.ts         — Streaming AI advisor endpoint (POST)
+      chat/route.ts         — Thin NDJSON streaming wrapper over runAgentTurn; emits {type:"proposal",proposalId,...} events
+      proposals/
+        resolve/route.ts    — POST handler: { proposalId, choiceId } → resolveProposal() → { ok, message }
+      telegram/
+        route.ts            — Telegram webhook: verifies secret token + allowlist; dispatches message and callback_query updates
   components/
     app-sidebar.tsx         — Sidebar nav + theme toggle
-    overview/               — OverviewDashboard (BudgetBarsPanel, TopUnplannedPanel), ExpenseDonut
+    overview/               — OverviewDashboard (BudgetBarsPanel, TopUnplannedPanel), ExpenseDonut, ForecastPanel
     expenses/               — ImportForm, AnalysisDashboard, CategoryBreakdownTable, PeriodSelector
     trends/                 — TrendsDashboard (Recharts)
     installments/           — InstallmentsDashboard (client), InstallmentForm, PayButton, MonthNav, AllInstallmentsTable, InstallmentActions, CreditCardTile, CreditCardManager
     loans/                  — LoansDashboard, AccountCard, DebtorForm, LoanForm, PaymentForm, EntryForm, AccountForm, TransferForm, LoansClient, LoanRowActions
+    vaults/                 — VaultsDashboard (client), VaultTile, VaultForm, EntryForm, VaultLedger, VaultDueBanner, RecurringList, RecurringExpenseForm
     settings/               — CategoryList, MappingList
-    chat/                   — FloatingChat, ChatProvider, ChatMessages, ChatInput
+    chat/                   — FloatingChat, ChatProvider, ChatMessages, ChatInput, ActionCard
     ui/                     — shadcn/ui base-nova primitives
   lib/
     db.ts                   — Prisma client singleton
     format.ts               — formatCOP(), formatShort(), MONTH_NAMES
     utils.ts                — cn() (clsx + tailwind-merge)
     installment-utils.ts    — computeMonthlyAmount(), computeInstallmentDue(), isDueInMonth(), computeMonthSummary(), rate converters
+    vault-utils.ts          — computeVaultMetrics(), classifyVault(), monthsLeft() — pure math, client-safe
+    forecast-utils.ts       — pure math for the forecasting module; predictCategoryLanding (recency-weighted mean, MIN_MONTHS guard), projectSavingsRate. Mirrors vault-utils.ts pattern.
+    forecast-utils.test.ts  — Vitest unit tests for forecast-utils (12 tests: prediction, null/thin-data cases, projectSavingsRate edge cases). Run with `npm test`.
     parse-moneylover.ts     — XLSX → Transaction[] parser
     queries/
       expenses.ts           — getMonthlyAnalysis(), getImportBatches(), getUnmappedCategories()
       installments.ts       — getAllInstallments(), getMonthSummary()
-      loans.ts              — getLoansOverview()
+      loans.ts              — getLoansOverview() — now returns inVaults + netWorth; account balance formula subtracts vaultFundedNet
       trends.ts             — getTrends()
       health-score.ts       — getHealthScore()
       chat.ts               — getFinancialSnapshot()
+      vaults.ts             — getVaults() (branches on goalType: RECURRING uses summed set-asides), getVaultObligations(); VaultEntryRow now includes sourceAccountId + sourceAccountName
+      recurring.ts          — getRecurringExpenses(month, year): items with set-aside + status
+      accounts.ts           — getSavingsAccounts(): lightweight AccountOption[] (id, name, balance) for pickers
+    agent/
+      types.ts              — ProposalChoice, ProposalDescriptor, AgentTurnResult (channel-agnostic types)
+      run-agent-turn.ts     — Channel-agnostic tool-use loop: TOOLS, READ_TOOLS, runReadTool(), runAgentTurn(); persists PendingProposal on each proposal tool call
+      execute-proposal.ts   — resolveProposal(): looks up PendingProposal, runs action→server-action map, marks approved/dismissed; used by both web and Telegram
+    telegram/
+      api.ts                — Telegram Bot API helpers: sendMessage, answerCallbackQuery, editMessageText, sendChatAction
+      render.ts             — toTelegramMessage(): converts ProposalDescriptor → Telegram text + inline_keyboard
     actions/
       import.ts             — importMoneyLoverFile(), importBuffer()
       drive.ts              — listDriveFiles(), importFromDrive()
@@ -50,6 +71,8 @@ src/
       installments.ts       — Installment + InstallmentPayment CRUD actions
       loans.ts              — SavingsAccount, Debtor, Loan, LoanPayment, Transfer CRUD actions
       chat.ts               — saveMessage()
+      vaults.ts             — createVault(), updateVault(), archiveVault(), addVaultEntry(vaultId, amount, date?, notes?, sourceAccountId?) — 5th arg optional; revalidates /loans, deleteVaultEntry()
+      recurring.ts          — createRecurringExpense(), updateRecurringExpense(), deleteRecurringExpense(), payRecurringExpense() (atomic via prisma.$transaction)
   generated/
     prisma/                 — Prisma-generated client (do not edit manually)
   hooks/
@@ -59,10 +82,10 @@ src/
 ## Module breakdown
 
 ### `src/app/(app)/overview`
-**Responsibility:** Home dashboard. Aggregates data from all three modules into a single-page health summary. Uses an asymmetric 7/5 grid layout with a `BudgetBarsPanel` (variable/fixed burn rates + savings rate bars) and `TopUnplannedPanel` (top unplanned spending). Installments split into Upcoming/Paid columns. Loans section shows a Liquidity Health panel.
-**Key files:** `overview/page.tsx` → `components/overview/overview-dashboard.tsx` (contains `BudgetBarsPanel`, `TopUnplannedPanel` as module-private components), `components/overview/expense-donut.tsx` (horizontal layout, Total Spent center label, two-row legend)
-**Dependencies:** `getMonthlyAnalysis`, `getMonthSummary`, `getLoansOverview`, `getHealthScore`
-**Exports:** `OverviewPage` (route), `OverviewDashboard` (async Server Component), `ExpenseDonut` (Recharts pie chart)
+**Responsibility:** Home dashboard. Aggregates data from all modules into a single-page health summary. Uses an asymmetric 7/5 grid layout with a `BudgetBarsPanel` (variable/fixed burn rates + savings rate bars) and `TopUnplannedPanel` (top unplanned spending). Installments split into Upcoming/Paid columns. Loans section shows a Liquidity Health panel. Mounts `VaultDueBanner` at the top when vault obligations are still needed this month.
+**Key files:** `overview/page.tsx` → `components/overview/overview-dashboard.tsx` (contains `BudgetBarsPanel`, `TopUnplannedPanel` as module-private components), `components/overview/expense-donut.tsx` (horizontal layout, Total Spent center label, two-row legend), `components/overview/forecast-panel.tsx` (server component; shows projected savings rate, vsTarget delta, and top overspend drivers; renders a quiet thin-data state when < 3 months of history)
+**Dependencies:** `getMonthlyAnalysis`, `getMonthSummary`, `getLoansOverview`, `getHealthScore`, `getVaultObligations`, `getForecast`
+**Exports:** `OverviewPage` (route), `OverviewDashboard` (async Server Component), `ExpenseDonut` (Recharts pie chart), `ForecastPanel` (async Server Component)
 
 ---
 
@@ -91,18 +114,34 @@ src/
 ---
 
 ### `src/app/(app)/loans`
-**Responsibility:** Tracks personal savings accounts and money lent to debtors. Shows account balances (computed from ledger), outstanding loans per debtor, KPIs (available, in loans, liquidity ratio), and allows full CRUD on accounts, debtors, loans, payments, and transfers.
+**Responsibility:** Tracks personal savings accounts and money lent to debtors. Shows account balances (computed from ledger), outstanding loans per debtor, KPIs (available, in loans, liquidity ratio, earmarked in vaults, net worth), and allows full CRUD on accounts, debtors, loans, payments, and transfers. The "Entry log" dialog in `account-card.tsx` shows a unified sorted list of `AccountEntry` records (INITIAL/ADJUSTMENT badges) and sourced vault contributions (`VaultEntry` rows with a "Vault" badge and vault name; no delete — vault entries are managed from the Vaults module).
 **Key files:** `loans/page.tsx`, `components/loans/loans-dashboard.tsx`, `loans-client.tsx`, `account-card.tsx`, `debtor-form.tsx`, `loan-form.tsx`, `payment-form.tsx`, `entry-form.tsx`, `account-form.tsx`, `loan-row-actions.tsx`
 **Dependencies:** `getLoansOverview`
 **Exports:** `LoansPage` (route)
 
 ---
 
+### `src/app/(app)/vaults`
+**Responsibility:** Goal-based savings pockets. Shows a KPI band (total balance, mandatory still-needed, leisure still-needed) and a tile grid — one tile per vault with SVG progress ring, status badge, kind chip, and balance/target/required-this-month figures. Supports full CRUD (create, edit, archive) and a ledger sheet per vault for contributions and withdrawals. The "Ask agent" button on `VaultDueBanner` opens the chat pre-scoped to the relevant vault. Contributions optionally name a source savings account ("From account" picker in `entry-form.tsx`) — sourced entries are real money moves (ADR-021).
+**Key files:** `vaults/page.tsx`, `components/vaults/vaults-dashboard.tsx` (client), `vault-tile.tsx`, `vault-form.tsx`, `entry-form.tsx`, `vault-ledger.tsx`, `vault-due-banner.tsx`
+**Dependencies:** `getVaults`, `getVaultObligations`, `getSavingsAccounts`, `createVault`, `updateVault`, `archiveVault`, `addVaultEntry`, `deleteVaultEntry`
+**Exports:** `VaultsPage` (route), `VaultDueBanner` (also mounted in overview)
+
+---
+
 ### `src/app/(app)/chat`
-**Responsibility:** Full-screen AI advisor backed by Claude Haiku. Conversation history is persisted in the `ChatMessage` table. Each message injects a live financial snapshot as the system prompt.
-**Key files:** `chat/page.tsx`, `components/chat/chat-provider.tsx`, `chat-messages.tsx`, `chat-input.tsx`, `floating-chat.tsx`, `src/app/api/chat/route.ts`
-**Dependencies:** `getFinancialSnapshot`, `saveMessage`, Anthropic SDK (streaming)
-**Exports:** `ChatPage` (route), `FloatingChat` (accessible from any page via the app layout)
+**Responsibility:** Full-screen AI advisor backed by `claude-sonnet-4-6`. Uses a channel-agnostic tool-use loop (11 read tools + 7 proposal tools) in `src/lib/agent/run-agent-turn.ts`. Conversation history is persisted in `ChatMessage` (shared with Telegram). The floating chat panel is available on every page, module-context-aware. Proposal tools persist a `PendingProposal` record and surface action cards (`ActionCard`) that the user must approve before mutations occur (ADR-015). Approval calls `POST /api/proposals/resolve` which runs the unified `resolveProposal()` (ADR-022).
+**Key files:** `chat/page.tsx`, `components/chat/chat-provider.tsx` (NDJSON streaming + proposal state), `chat-messages.tsx`, `chat-input.tsx`, `floating-chat.tsx`, `action-card.tsx`, `src/app/api/chat/route.ts` (thin streaming wrapper), `src/app/api/proposals/resolve/route.ts` (web approve path), `src/lib/agent/run-agent-turn.ts` (tool-use loop), `src/lib/agent/execute-proposal.ts` (unified write path)
+**Dependencies:** All agent read queries, vault + recurring write actions, Anthropic SDK, Prisma (PendingProposal)
+**Exports:** `ChatPage` (route), `FloatingChat`, `ActionCard`
+**Transport:** `application/x-ndjson` — one JSON object per line: `{"type":"text","delta":"..."}` or `{"type":"proposal","proposalId":"...","action":"...","params":{...},"label":"..."}`
+
+---
+
+### `src/app/api/telegram`
+**Responsibility:** Telegram webhook for the multi-channel agent (ADR-022). Receives `message` and `callback_query` updates from Telegram, verifies the secret token and the hard-allowlisted `chat_id`, and dispatches to the shared agent core. Text messages → `runAgentTurn()` → `sendMessage()`; inline keyboard taps → `resolveProposal()` → `answerCallbackQuery` + `editMessageText`. Uses `after()` (Next.js) for fast-ack + async work pattern (Vercel-compatible).
+**Key files:** `src/app/api/telegram/route.ts`, `src/lib/telegram/api.ts`, `src/lib/telegram/render.ts`
+**Env vars required:** `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET`
 
 ---
 
@@ -119,10 +158,13 @@ src/
 **Key files:**
 - `expenses.ts` — `getMonthlyAnalysis()`: full budget/actual/severity breakdown for one month; `getImportBatches()`, `getUnmappedCategories()`
 - `installments.ts` — `getAllInstallments()`: status-enriched list; `getMonthSummary()`: obligations for a given month; `getCardSummaries(month, year)`: per-card outstanding debt + monthly obligation; `getInstallmentFormData()`: cards/debtors/accounts for form pickers
-- `loans.ts` — `getLoansOverview()`: accounts with computed balances, debtors with computed loan remainders, portfolio KPIs
+- `loans.ts` — `getLoansOverview()`: accounts with computed balances (now subtracts `vaultFundedNet` per account), debtors with computed loan remainders, portfolio KPIs. Now returns `inVaults` (total sourced vault money across accounts) and `netWorth = totalSavings + inVaults`. `totalSavings` and `liquidityRatio` are unchanged (ADR-011 untouched).
+- `accounts.ts` — `getSavingsAccounts()`: lightweight list of `{ id, name, balance }` for picker UIs. Uses the same balance formula as `loans.ts` (including `vaultFundedNet` deduction).
 - `trends.ts` — `getTrends(n)`: per-month income/expense/budget/savings-rate + per-category spend across n months
 - `health-score.ts` — `getHealthScore()`: composite 0–100 score with month-over-month delta
-- `chat.ts` — `getFinancialSnapshot()`: plain-text financial summary for the AI system prompt
+- `chat.ts` — `getFinancialSnapshot()`: plain-text financial summary (used by the `get_overview` agent tool)
+- `vaults.ts` — `getVaults()`: all active vaults with computed `VaultWithMetrics` (balance, remaining, progress %, status, contributedThisMonth). `VaultEntryRow` now includes `sourceAccountId` and `sourceAccountName`; entries include the `sourceAccount` relation. `getVaultObligations(month, year)`: per-vault required/contributed/stillNeeded totals.
+- `forecast.ts` — `getForecast(month, year)`: historical projection using trend history + budget structure. Reuses `getTrends` + `getMonthlyAnalysis`. No new DB shape. Returns `ForecastResult` with per-category predictions, projected savings rate, vsTarget/vsLastMonth deltas, overspend drivers, and `dataSufficiency` flag.
 
 ---
 
@@ -135,6 +177,7 @@ src/
 - `installments.ts` — Installment CRUD (`createInstallment`, `updateInstallment`, `deleteInstallment`); payment actions (`markPayment` — auto-creates a Loan record when debtorId + fundingAccountId are set, `unmarkPayment`); CreditCard CRUD (`createCard`, `updateCard`, `deleteCard`)
 - `loans.ts` — SavingsAccount, AccountEntry, Transfer, Debtor, Loan, LoanPayment CRUD
 - `chat.ts` — `saveMessage()`: persist a single ChatMessage row
+- `vaults.ts` — `createVault()`, `updateVault()`, `archiveVault()` (sets archivedAt), `addVaultEntry()` (signature: `vaultId, amount, date?, notes?, sourceAccountId?` — rejects withdrawal driving balance < 0), `deleteVaultEntry()`; all revalidate `/vaults`, `/overview`, and `/loans` (the last because sourced contributions change account balances)
 
 ---
 
@@ -146,6 +189,26 @@ src/
 - `isDueInMonth(startDate, installmentNum, month, year)` — true if payment slot n falls in the given month/year
 - `computeMonthSummary(month, year, installments)` — synchronous client-safe recompute of `MonthSummary` from a pre-fetched array (used for client-side card filtering)
 - `eaToMonthly(ea)` / `monthlyToEA(monthly)` — interest rate conversions
+
+---
+
+### `src/lib/vault-utils.ts`
+**Responsibility:** Pure math for vault metrics and status classification. Client-safe — no Prisma imports.
+**Key exports:**
+- `VaultStatus` — `"Met" | "On track" | "Behind" | "Overdue" | "Open" | "Underfunded"`
+- `computeVaultMetrics(vault, balance, month, year, recurringRequired?)` — returns `{ balance, remaining, monthsLeft, requiredThisMonth, progressPct }`. For RECURRING vaults, pass `recurringRequired` (sum of set-asides from linked expenses).
+- `classifyVault(vault, balance, contributedThisMonth, month, year, requiredThisMonth?)` — returns `VaultStatus`. RECURRING: `Underfunded` when behind, `On track` otherwise.
+- `monthsLeft(targetDate, month, year)` — integer months until deadline from the given reference month
+
+---
+
+### `src/lib/recurring-utils.ts`
+**Responsibility:** Pure math for the Recurring Expenses module. Client-safe — no Prisma imports.
+**Key exports:**
+- `monthsUntilDue(nextDueDate, month, year)` — whole months from (month,year) to dueDate, min 1
+- `monthlySetAside(estimatedAmount, nextDueDate, month, year)` — `estimatedAmount / monthsUntilDue`
+- `isDueInMonth(nextDueDate, month, year)` — true if nextDueDate falls within the given month
+- `rollCycle(nextDueDate, cadenceMonths)` — new Date advanced by cadenceMonths; used after payment
 
 ---
 
