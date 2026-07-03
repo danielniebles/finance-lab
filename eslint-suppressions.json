@@ -84,35 +84,6 @@
       "count": 1
     }
   },
-  "src/components/loans/account-card.tsx": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "src/components/loans/debtors-section.tsx": {
-    "complexity": {
-      "count": 2
-    },
-    "max-lines-per-function": {
-      "count": 1
-    },
-    "sonarjs/cognitive-complexity": {
-      "count": 1
-    }
-  },
-  "src/components/loans/loans-dashboard.tsx": {
-    "complexity": {
-      "count": 1
-    },
-    "sonarjs/cognitive-complexity": {
-      "count": 1
-    }
-  },
-  "src/components/loans/payment-form.tsx": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
   "src/components/overview/forecast-panel.tsx": {
     "complexity": {
       "count": 1
