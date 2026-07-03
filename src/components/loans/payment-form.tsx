@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useActionState, useMemo } from "react";
+import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +14,17 @@ import {
 import { recordPayment } from "@/lib/actions/loans";
 import { formatCOP } from "@/lib/format";
 import type { AccountWithBalance, DebtorWithLoans } from "@/lib/queries/loans";
+
+type FormState = { error?: string } | null;
+
+function SubmitButton({ disabled }: { disabled: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending || disabled}>
+      {pending ? "Saving…" : "Record payment"}
+    </Button>
+  );
+}
 
 export function PaymentForm({
   open,
@@ -27,12 +39,10 @@ export function PaymentForm({
   debtors: DebtorWithLoans[];
   defaultDebtorId?: string;
 }) {
+  // These drive derived preview UI so must stay as state
   const [debtorId, setDebtorId] = useState(defaultDebtorId ?? "");
   const [accountId, setAccountId] = useState("");
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [notes, setNotes] = useState("");
-  const [pending, startTransition] = useTransition();
 
   const debtor = debtors.find((d) => d.id === debtorId);
 
@@ -64,19 +74,26 @@ export function PaymentForm({
     }).filter(Boolean) as { loan: (typeof activeLoans)[0]; apply: number }[];
   }, [debtor, accountId, amount]);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    startTransition(async () => {
-      await recordPayment({
-        debtorId,
-        accountId: accountId || undefined,
-        totalAmount: parseFloat(amount),
-        date: new Date(date + "T12:00:00"),
-        notes: notes.trim() || undefined,
-      });
-      onClose();
-    });
-  }
+  const [state, action] = useActionState(
+    async (_prev: FormState, formData: FormData): Promise<FormState> => {
+      try {
+        const date = formData.get("date") as string;
+        const notes = (formData.get("notes") as string).trim() || undefined;
+        await recordPayment({
+          debtorId,
+          accountId: accountId || undefined,
+          totalAmount: parseFloat(amount),
+          date: new Date(date + "T12:00:00"),
+          notes,
+        });
+        onClose();
+        return null;
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : "Something went wrong" };
+      }
+    },
+    null
+  );
 
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => !o && onClose()}>
@@ -84,7 +101,7 @@ export function PaymentForm({
         <DialogHeader>
           <DialogTitle>Record payment</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form action={action} className="space-y-4">
           <div className="space-y-1.5">
             <Label>Debtor</Label>
             <Select value={debtorId} onValueChange={(v) => v && setDebtorId(v)}>
@@ -148,7 +165,12 @@ export function PaymentForm({
             </div>
             <div className="space-y-1.5">
               <Label>Date</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+              <Input
+                name="date"
+                type="date"
+                defaultValue={new Date().toISOString().slice(0, 10)}
+                required
+              />
             </div>
           </div>
 
@@ -172,12 +194,16 @@ export function PaymentForm({
 
           <div className="space-y-1.5">
             <Label>Notes</Label>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
+            <Input name="notes" placeholder="Optional notes" />
           </div>
+
+          {state?.error && (
+            <p className="text-destructive text-sm">{state.error}</p>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={pending || !debtorId || !amount}>Record payment</Button>
+            <SubmitButton disabled={!debtorId || !amount} />
           </DialogFooter>
         </form>
       </DialogContent>

@@ -21,6 +21,20 @@ The trends page reads a `?period` search param (3, 6, or 12) but the `TrendsDash
 
 ## Future improvements
 
+### Component organization — deferred cross-module items (from 2026-07-02 review)
+
+These patterns were identified during a finance-lab component organization review and are intentionally deferred; revisit during the next feature pass in each module.
+
+- **`vaults/entry-form.tsx` rename** — rename to `vault-entry-form.tsx` (mirrors the loans/account-entry-form.tsx rename already applied). Caller: `vaults/vaults-dashboard.tsx` and/or `vaults/page.tsx`.
+- **`installments/` forms — `useActionState` migration** — `installment-form.tsx` and any other installments forms still use manual `useState` + `useTransition`; migrate to React 19 `useActionState` + `useFormStatus` once the loans forms are done (see below).
+- **`vaults/` forms — `useActionState` migration** — `vault-form.tsx`, `entry-form.tsx`, `recurring-expense-form.tsx` use manual `useState` + `useTransition`; migrate to React 19 pattern.
+- **`installments/` folder growth** — at 9 files (threshold is ~8–10); add `hooks/` + `lib/` subfolders when the next hook is extracted from `installment-form.tsx`.
+- **Pattern to check in future reviews** — when reviewing any feature folder: (a) check for inline colour palettes duplicated across feature files → extract to `src/lib/color-presets.ts`; (b) check for file-per-constant → consolidate into `lib/constants.ts`; (c) check that hooks live in `hooks/` and helpers in `lib/` subfolders once folder exceeds ~8–10 files; (d) check for form state using `useState`+`useTransition` instead of `useActionState`/`useFormStatus`; (e) check for ambiguous filenames shared across feature folders.
+
+---
+
+
+
 ### AI Advisor + Vaults — Vaults in Health Score (low effort, medium value)
 
 The `getHealthScore()` metric uses four pillars (Savings Rate, Variable Burn Rate, Installment Burden, Liquidity Ratio). Vault obligations could add a fifth pillar: **Vault Funding Rate** = mandatory vault contributions made / mandatory vault obligations due × 100. Not yet implemented — Health Score still uses only the original four.

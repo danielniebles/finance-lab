@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,45 +14,212 @@ import {
 import { createAccount, updateAccount } from "@/lib/actions/loans";
 import { AccountType } from "@/generated/prisma";
 import type { AccountWithBalance } from "@/lib/queries/loans";
+import { PRESET_COLORS } from "@/lib/color-presets";
 
-const PRESET_COLORS = [
-  { label: "Yellow",  value: "#EAB308" },
-  { label: "Purple",  value: "#9333EA" },
-  { label: "Orange",  value: "#F97316" },
-  { label: "Lime",    value: "#A3E635" },
-  { label: "Blue",    value: "#3B82F6" },
-  { label: "Pink",    value: "#EC4899" },
-  { label: "Teal",    value: "#14B8A6" },
-  { label: "Red",     value: "#EF4444" },
-];
+type FormState = { error?: string } | null;
 
-type FormState = {
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  BANK: "Bank",
+  DIGITAL: "Digital Wallet",
+  PENSION: "Pension (AFP)",
+};
+
+function SubmitButton({ editing }: { editing: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? "Saving…" : editing ? "Save" : "Add account"}
+    </Button>
+  );
+}
+
+function ColorPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      {PRESET_COLORS.map((c) => (
+        <button
+          key={c.value}
+          type="button"
+          onClick={() => onChange(c.value)}
+          className="size-6 rounded-full border-2 transition-all"
+          style={{
+            backgroundColor: c.value,
+            borderColor: value === c.value ? "white" : "transparent",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function AccountTypeSelect({
+  value,
+  onChange,
+}: {
+  value: AccountType;
+  onChange: (v: AccountType) => void;
+}) {
+  function handleChange(v: string | null) {
+    if (v) onChange(v as AccountType);
+  }
+  return (
+    <Select value={value} onValueChange={handleChange}>
+      <SelectTrigger className="h-8">
+        <span className="text-sm">
+          {ACCOUNT_TYPE_LABELS[value] ?? value}
+        </span>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="BANK">Bank</SelectItem>
+        <SelectItem value="DIGITAL">Digital Wallet</SelectItem>
+        <SelectItem value="PENSION">Pension (AFP)</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+function IncludeCheckbox({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        id="include"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="size-4 rounded"
+      />
+      <Label htmlFor="include" className="font-normal cursor-pointer">
+        Include in Available balance
+      </Label>
+    </div>
+  );
+}
+
+function InitialBalanceFields() {
+  return (
+    <div className="grid grid-cols-2 gap-3 border-t border-border pt-4">
+      <div className="space-y-1.5">
+        <Label>Initial balance (COP)</Label>
+        <Input name="initialBalance" type="number" placeholder="0" />
+      </div>
+      <div className="space-y-1.5">
+        <Label>As of date</Label>
+        <Input
+          name="initialDate"
+          type="date"
+          defaultValue={new Date().toISOString().slice(0, 10)}
+        />
+      </div>
+    </div>
+  );
+}
+
+type AccountFormData = {
   name: string;
   accountType: AccountType;
   color: string;
   includeInAvailable: boolean;
-  initialBalance: string;
-  initialDate: string;
 };
 
-const EMPTY: FormState = {
-  name: "",
-  accountType: AccountType.BANK,
-  color: "#EAB308",
-  includeInAvailable: true,
-  initialBalance: "",
-  initialDate: new Date().toISOString().slice(0, 10),
-};
+async function saveAccount(
+  editing: AccountWithBalance | null,
+  base: AccountFormData,
+  formData: FormData
+): Promise<FormState> {
+  try {
+    if (editing) {
+      await updateAccount(editing.id, base);
+    } else {
+      const balanceStr = formData.get("initialBalance") as string;
+      const dateStr = formData.get("initialDate") as string;
+      await createAccount({
+        ...base,
+        initialBalance: balanceStr ? parseFloat(balanceStr) : undefined,
+        initialDate: dateStr ? new Date(dateStr + "T12:00:00") : undefined,
+      });
+    }
+    return null;
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Something went wrong" };
+  }
+}
 
-function toForm(acc: AccountWithBalance): FormState {
-  return {
-    name: acc.name,
-    accountType: acc.accountType as AccountType,
-    color: acc.color ?? "#EAB308",
-    includeInAvailable: acc.includeInAvailable,
-    initialBalance: "",
-    initialDate: new Date().toISOString().slice(0, 10),
-  };
+/** Inner form — keyed so it remounts fresh when editing target changes. */
+function AccountFormInner({
+  editing,
+  onClose,
+}: {
+  editing: AccountWithBalance | null;
+  onClose: () => void;
+}) {
+  const [accountType, setAccountType] = useState<AccountType>(
+    (editing?.accountType as AccountType) ?? AccountType.BANK
+  );
+  const [color, setColor] = useState(editing?.color ?? "#EAB308");
+  const [includeInAvailable, setIncludeInAvailable] = useState(
+    editing?.includeInAvailable ?? true
+  );
+
+  const [state, action] = useActionState(
+    async (_prev: FormState, formData: FormData): Promise<FormState> => {
+      const name = (formData.get("name") as string).trim();
+      const result = await saveAccount(editing, { name, accountType, color, includeInAvailable }, formData);
+      if (!result) onClose();
+      return result;
+    },
+    null
+  );
+
+  return (
+    <form action={action} className="space-y-4">
+      <div className="space-y-1.5">
+        <Label>Name</Label>
+        <Input
+          name="name"
+          defaultValue={editing?.name ?? ""}
+          placeholder="e.g. Bancolombia"
+          required
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label>Type</Label>
+          <AccountTypeSelect value={accountType} onChange={setAccountType} />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Color</Label>
+          <ColorPicker value={color} onChange={setColor} />
+        </div>
+      </div>
+
+      <IncludeCheckbox checked={includeInAvailable} onChange={setIncludeInAvailable} />
+
+      {!editing && <InitialBalanceFields />}
+
+      {state?.error && (
+        <p className="text-destructive text-sm">{state.error}</p>
+      )}
+
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+        <SubmitButton editing={!!editing} />
+      </DialogFooter>
+    </form>
+  );
 }
 
 export function AccountForm({
@@ -63,134 +231,13 @@ export function AccountForm({
   onClose: () => void;
   editing: AccountWithBalance | null;
 }) {
-  const [form, setForm] = useState<FormState>(() => editing ? toForm(editing) : EMPTY);
-  const [last, setLast] = useState(editing);
-  const [pending, startTransition] = useTransition();
-
-  if (editing !== last) {
-    setLast(editing);
-    setForm(editing ? toForm(editing) : EMPTY);
-  }
-
-  function set<K extends keyof FormState>(k: K, v: FormState[K]) {
-    setForm((p) => ({ ...p, [k]: v }));
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    startTransition(async () => {
-      if (editing) {
-        await updateAccount(editing.id, {
-          name: form.name.trim(),
-          accountType: form.accountType,
-          color: form.color,
-          includeInAvailable: form.includeInAvailable,
-        });
-      } else {
-        await createAccount({
-          name: form.name.trim(),
-          accountType: form.accountType,
-          color: form.color,
-          includeInAvailable: form.includeInAvailable,
-          initialBalance: form.initialBalance ? parseFloat(form.initialBalance) : undefined,
-          initialDate: form.initialDate ? new Date(form.initialDate + "T12:00:00") : undefined,
-        });
-      }
-      onClose();
-    });
-  }
-
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit account" : "New savings account"}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Name</Label>
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Bancolombia" required />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Type</Label>
-              <Select
-                value={form.accountType}
-                onValueChange={(v) => { if (v) set("accountType", v as AccountType); }}
-              >
-                <SelectTrigger className="h-8">
-                  <span className="text-sm">
-                    {({ BANK: "Bank", DIGITAL: "Digital Wallet", PENSION: "Pension (AFP)" } as Record<string, string>)[form.accountType] ?? form.accountType}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="BANK">Bank</SelectItem>
-                  <SelectItem value="DIGITAL">Digital Wallet</SelectItem>
-                  <SelectItem value="PENSION">Pension (AFP)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Color</Label>
-              <div className="flex gap-1.5 flex-wrap">
-                {PRESET_COLORS.map((c) => (
-                  <button
-                    key={c.value}
-                    type="button"
-                    onClick={() => set("color", c.value)}
-                    className="size-6 rounded-full border-2 transition-all"
-                    style={{
-                      backgroundColor: c.value,
-                      borderColor: form.color === c.value ? "white" : "transparent",
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="include"
-              checked={form.includeInAvailable}
-              onChange={(e) => set("includeInAvailable", e.target.checked)}
-              className="size-4 rounded"
-            />
-            <Label htmlFor="include" className="font-normal cursor-pointer">
-              Include in Available balance
-            </Label>
-          </div>
-
-          {!editing && (
-            <div className="grid grid-cols-2 gap-3 border-t border-border pt-4">
-              <div className="space-y-1.5">
-                <Label>Initial balance (COP)</Label>
-                <Input
-                  type="number"
-                  value={form.initialBalance}
-                  onChange={(e) => set("initialBalance", e.target.value)}
-                  placeholder="0"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>As of date</Label>
-                <Input
-                  type="date"
-                  value={form.initialDate}
-                  onChange={(e) => set("initialDate", e.target.value)}
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={pending}>{editing ? "Save" : "Add account"}</Button>
-          </DialogFooter>
-        </form>
+        <AccountFormInner key={editing?.id ?? "new"} editing={editing} onClose={onClose} />
       </DialogContent>
     </Dialog>
   );
