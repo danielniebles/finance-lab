@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Eye, EyeOff, AlertTriangle } from "lucide-react";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -10,8 +9,16 @@ import { AccountCard } from "./account-card";
 import { DebtorsSection } from "./debtors-section";
 import type { LoansOverview } from "@/lib/queries/loans";
 import { MASK } from "./lib/constants";
+import { usePrivacyMode } from "./hooks/use-privacy-mode";
 
-// ─── KPI strip ────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function maskValue(v: number, masked: boolean): string {
+  if (masked) return MASK;
+  return formatCOP(v);
+}
+
+// ─── KPI card primitive ────────────────────────────────────────────────────────
 
 function KpiCard({
   label, value, sub, highlight, warn,
@@ -35,23 +42,70 @@ function KpiCard({
   );
 }
 
+// ─── KPI strip ────────────────────────────────────────────────────────────────
+
+interface KpiStripProps {
+  data: LoansOverview;
+  masked: boolean;
+  liquidityWarn: boolean;
+  activeDebtorCount: number;
+}
+
+function KpiStrip({ data, masked, liquidityWarn, activeDebtorCount }: KpiStripProps) {
+  const liquidityValue = masked
+    ? MASK
+    : data.liquidityRatio !== null
+    ? `${data.liquidityRatio.toFixed(1)}%`
+    : "—";
+
+  return (
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+      <KpiCard
+        label="Available"
+        value={maskValue(data.available, masked)}
+        sub="liquid accounts"
+        highlight={masked ? "neutral" : data.available >= 0 ? "neutral" : "bad"}
+      />
+      <KpiCard
+        label="In Loans"
+        value={maskValue(data.inLoans, masked)}
+        sub={`${activeDebtorCount} active debtor${activeDebtorCount !== 1 ? "s" : ""}`}
+      />
+      <KpiCard
+        label="Total Savings"
+        value={maskValue(data.totalSavings, masked)}
+        sub="available + in loans"
+        highlight="neutral"
+      />
+      <KpiCard
+        label="Liquidity"
+        value={liquidityValue}
+        sub="available / total"
+        highlight={liquidityWarn ? "bad" : "neutral"}
+        warn={liquidityWarn}
+      />
+      <KpiCard
+        label="Earmarked in vaults"
+        value={maskValue(data.inVaults, masked)}
+        sub="sourced from accounts"
+      />
+      <KpiCard
+        label="Net worth"
+        value={maskValue(data.netWorth, masked)}
+        sub="savings + vaults"
+        highlight="neutral"
+      />
+    </div>
+  );
+}
+
 // ─── Main dashboard ───────────────────────────────────────────────────────────
 
 export function LoansDashboard({ data }: { data: LoansOverview }) {
-  const [privacyMode, setPrivacyMode] = useState(false);
-  const [revealedDebtorId, setRevealedDebtorId] = useState<string | null>(null);
+  const { privacyMode, revealedDebtorId, handleReveal, handlePrivacyToggle, liquidityWarn } =
+    usePrivacyMode({ ratio: data.liquidityRatio });
 
-  const liquidityWarn = !privacyMode && data.liquidityRatio !== null && data.liquidityRatio < 10;
   const activeDebtorCount = data.debtors.filter((d) => d.totalOwed > 0).length;
-
-  function handleReveal(id: string) {
-    setRevealedDebtorId((prev) => (prev === id ? null : id));
-  }
-
-  function handlePrivacyToggle() {
-    if (privacyMode) setRevealedDebtorId(null);
-    setPrivacyMode((prev) => !prev);
-  }
 
   return (
     <div className="space-y-8">
@@ -77,43 +131,12 @@ export function LoansDashboard({ data }: { data: LoansOverview }) {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
-        <KpiCard
-          label="Available"
-          value={privacyMode ? MASK : formatCOP(data.available)}
-          sub="liquid accounts"
-          highlight={privacyMode ? "neutral" : data.available >= 0 ? "neutral" : "bad"}
-        />
-        <KpiCard
-          label="In Loans"
-          value={privacyMode ? MASK : formatCOP(data.inLoans)}
-          sub={`${activeDebtorCount} active debtor${activeDebtorCount !== 1 ? "s" : ""}`}
-        />
-        <KpiCard
-          label="Total Savings"
-          value={privacyMode ? MASK : formatCOP(data.totalSavings)}
-          sub="available + in loans"
-          highlight="neutral"
-        />
-        <KpiCard
-          label="Liquidity"
-          value={privacyMode ? MASK : (data.liquidityRatio !== null ? `${data.liquidityRatio.toFixed(1)}%` : "—")}
-          sub="available / total"
-          highlight={liquidityWarn ? "bad" : "neutral"}
-          warn={liquidityWarn}
-        />
-        <KpiCard
-          label="Earmarked in vaults"
-          value={privacyMode ? MASK : formatCOP(data.inVaults)}
-          sub="sourced from accounts"
-        />
-        <KpiCard
-          label="Net worth"
-          value={privacyMode ? MASK : formatCOP(data.netWorth)}
-          sub="savings + vaults"
-          highlight="neutral"
-        />
-      </div>
+      <KpiStrip
+        data={data}
+        masked={privacyMode}
+        liquidityWarn={liquidityWarn}
+        activeDebtorCount={activeDebtorCount}
+      />
 
       {/* Accounts grid */}
       <section className="space-y-3">

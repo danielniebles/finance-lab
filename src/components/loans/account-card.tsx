@@ -14,6 +14,8 @@ import { EntryForm } from "./account-entry-form";
 import type { AccountWithBalance } from "@/lib/queries/loans";
 import { MASK } from "./lib/constants";
 
+// ─── Badge sub-components ─────────────────────────────────────────────────────
+
 function AccountTypeBadge({ type }: { type: string }) {
   const map: Record<string, string> = {
     BANK:    "bg-blue-500/10 text-blue-400",
@@ -44,6 +46,139 @@ function VaultBadge() {
   );
 }
 
+// ─── Entry log types and helpers ──────────────────────────────────────────────
+
+type EntryLogRow = { kind: "entry"; id: string; type: string; amount: number; date: Date; notes: string | null };
+type VaultLogRow = { kind: "vault"; id: string; amount: number; date: Date; notes: string | null; vaultName: string };
+type LogRow = EntryLogRow | VaultLogRow;
+
+function buildLogRows(account: AccountWithBalance): LogRow[] {
+  return [
+    ...account.entries.map((e) => ({ kind: "entry" as const, ...e })),
+    ...account.vaultEntries.map((e) => ({ kind: "vault" as const, ...e })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+// ─── Log row sub-components ───────────────────────────────────────────────────
+
+function EntryLogRowItem({
+  row,
+  onDelete,
+  deletePending,
+}: {
+  row: EntryLogRow;
+  onDelete: (id: string) => void;
+  deletePending: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-[5rem_6.5rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 group/row hover:bg-muted/20">
+      <span className="text-xs text-muted-foreground">
+        {new Date(row.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
+      </span>
+      <EntryTypeBadge type={row.type} />
+      <span className={cn("font-mono text-xs font-medium", row.amount < 0 ? "text-destructive" : "text-success")}>
+        {row.amount >= 0 ? "+" : ""}{formatCOP(row.amount)}
+      </span>
+      <span className="text-xs text-muted-foreground truncate">{row.notes ?? ""}</span>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-5 opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-destructive"
+        onClick={() => onDelete(row.id)}
+        disabled={deletePending}
+      >
+        <Trash className="size-3" />
+      </Button>
+    </div>
+  );
+}
+
+function VaultLogRowItem({ row }: { row: VaultLogRow }) {
+  const displayAmount = -row.amount;
+  const direction = row.amount > 0 ? "→" : "←";
+  const label = row.notes ? `${row.notes} · ${direction} ${row.vaultName}` : `${direction} ${row.vaultName}`;
+
+  return (
+    <div className="grid grid-cols-[5rem_6.5rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 hover:bg-muted/20">
+      <span className="text-xs text-muted-foreground">
+        {new Date(row.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
+      </span>
+      <VaultBadge />
+      <span className={cn("font-mono text-xs font-medium", displayAmount < 0 ? "text-destructive" : "text-success")}>
+        {displayAmount >= 0 ? "+" : ""}{formatCOP(displayAmount)}
+      </span>
+      <span className="text-xs text-muted-foreground truncate">{label}</span>
+      <span />
+    </div>
+  );
+}
+
+// ─── Entry log dialog ─────────────────────────────────────────────────────────
+
+function AccountEntryLog({
+  open,
+  onClose,
+  account,
+  onAddEntry,
+  onDeleteEntry,
+  deleteEntryPending,
+}: {
+  open: boolean;
+  onClose: () => void;
+  account: AccountWithBalance;
+  onAddEntry: () => void;
+  onDeleteEntry: (id: string) => void;
+  deleteEntryPending: boolean;
+}) {
+  const logRows = buildLogRows(account);
+
+  return (
+    <Dialog open={open} onOpenChange={(o: boolean) => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="size-3 rounded-full shrink-0" style={{ backgroundColor: account.color ?? "#888" }} />
+            {account.name} — Entry log
+          </DialogTitle>
+        </DialogHeader>
+
+        {logRows.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">No entries yet.</p>
+        ) : (
+          <div className="max-h-[60vh] overflow-x-auto overflow-y-auto -mx-6 divide-y divide-border/40">
+            {logRows.map((row) =>
+              row.kind === "entry" ? (
+                <EntryLogRowItem
+                  key={row.id}
+                  row={row}
+                  onDelete={onDeleteEntry}
+                  deletePending={deleteEntryPending}
+                />
+              ) : (
+                <VaultLogRowItem key={row.id} row={row} />
+              )
+            )}
+          </div>
+        )}
+
+        <div className="pt-2 border-t border-border/40">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-1.5"
+            onClick={onAddEntry}
+          >
+            <Plus className="size-3" />
+            Add entry
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Account card ─────────────────────────────────────────────────────────────
+
 export function AccountCard({ account, masked }: { account: AccountWithBalance; masked?: boolean }) {
   const [editOpen, setEditOpen] = useState(false);
   const [entryOpen, setEntryOpen] = useState(false);
@@ -70,10 +205,7 @@ export function AccountCard({ account, masked }: { account: AccountWithBalance; 
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span
-                className="size-3 rounded-full shrink-0"
-                style={{ backgroundColor: account.color ?? "#888" }}
-              />
+              <span className="size-3 rounded-full shrink-0" style={{ backgroundColor: account.color ?? "#888" }} />
               <span className="font-medium text-sm">{account.name}</span>
             </div>
             <div className="flex items-center gap-1">
@@ -100,7 +232,7 @@ export function AccountCard({ account, masked }: { account: AccountWithBalance; 
             )}
           </div>
 
-          {/* Actions — always visible, pinned to bottom */}
+          {/* Actions */}
           <div className="flex items-center gap-1 pt-1 border-t border-border/40">
             <Button
               variant="ghost"
@@ -134,107 +266,18 @@ export function AccountCard({ account, masked }: { account: AccountWithBalance; 
             </Button>
           </div>
         </div>
-
       </div>
 
       <AccountForm open={editOpen} onClose={() => setEditOpen(false)} editing={account} />
       <EntryForm open={entryOpen} onClose={() => setEntryOpen(false)} account={account} />
-
-      {/* Entry log dialog */}
-      <Dialog open={logOpen} onOpenChange={(o: boolean) => setLogOpen(o)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <span
-                className="size-3 rounded-full shrink-0"
-                style={{ backgroundColor: account.color ?? "#888" }}
-              />
-              {account.name} — Entry log
-            </DialogTitle>
-          </DialogHeader>
-
-          {(() => {
-            type LogRow =
-              | { kind: "entry"; id: string; type: string; amount: number; date: Date; notes: string | null }
-              | { kind: "vault"; id: string; amount: number; date: Date; notes: string | null; vaultName: string };
-
-            const logRows: LogRow[] = [
-              ...account.entries.map((e) => ({ kind: "entry" as const, ...e })),
-              ...account.vaultEntries.map((e) => ({ kind: "vault" as const, ...e })),
-            ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-            if (logRows.length === 0) {
-              return <p className="py-6 text-center text-sm text-muted-foreground">No entries yet.</p>;
-            }
-
-            return (
-              <div className="max-h-[60vh] overflow-x-auto overflow-y-auto -mx-6 divide-y divide-border/40">
-                {logRows.map((row) => {
-                  if (row.kind === "entry") {
-                    return (
-                      <div key={row.id} className="grid grid-cols-[5rem_6.5rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 group/row hover:bg-muted/20">
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(row.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
-                        </span>
-                        <EntryTypeBadge type={row.type} />
-                        <span className={cn("font-mono text-xs font-medium", row.amount < 0 ? "text-destructive" : "text-success")}>
-                          {row.amount >= 0 ? "+" : ""}{formatCOP(row.amount)}
-                        </span>
-                        <span className="text-xs text-muted-foreground truncate">
-                          {row.notes ?? ""}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-5 opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDeleteEntry(row.id)}
-                          disabled={deleteEntryPending}
-                        >
-                          <Trash className="size-3" />
-                        </Button>
-                      </div>
-                    );
-                  }
-
-                  const displayAmount = -row.amount;
-                  const direction = row.amount > 0 ? "→" : "←";
-                  const label = row.notes
-                    ? `${row.notes} · ${direction} ${row.vaultName}`
-                    : `${direction} ${row.vaultName}`;
-
-                  return (
-                    <div key={row.id} className="grid grid-cols-[5rem_6.5rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 hover:bg-muted/20">
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(row.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
-                      </span>
-                      <VaultBadge />
-                      <span className={cn("font-mono text-xs font-medium", displayAmount < 0 ? "text-destructive" : "text-success")}>
-                        {displayAmount >= 0 ? "+" : ""}{formatCOP(displayAmount)}
-                      </span>
-                      <span className="text-xs text-muted-foreground truncate">
-                        {label}
-                      </span>
-                      <span />
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-
-          <div className="pt-2 border-t border-border/40">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full gap-1.5"
-              onClick={() => { setLogOpen(false); setEntryOpen(true); }}
-            >
-              <Plus className="size-3" />
-              Add entry
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <AccountEntryLog
+        open={logOpen}
+        onClose={() => setLogOpen(false)}
+        account={account}
+        onAddEntry={() => { setLogOpen(false); setEntryOpen(true); }}
+        onDeleteEntry={handleDeleteEntry}
+        deleteEntryPending={deleteEntryPending}
+      />
     </>
   );
 }
