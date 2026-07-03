@@ -9,7 +9,7 @@ import { LoansClient } from "./loans-client";
 import { AccountCard } from "./account-card";
 import { DebtorsSection } from "./debtors-section";
 import type { LoansOverview } from "@/lib/queries/loans";
-import { MASK } from "./privacy";
+import { MASK } from "./lib/constants";
 
 // ─── KPI strip ────────────────────────────────────────────────────────────────
 

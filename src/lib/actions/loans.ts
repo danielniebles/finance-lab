@@ -84,8 +84,9 @@ export async function deleteTransfer(id: string) {
 // ─── Debtors ──────────────────────────────────────────────────────────────────
 
 export async function createDebtor(data: { name: string; notes?: string }) {
-  await db.debtor.create({ data });
+  const created = await db.debtor.create({ data });
   revalidatePath(PATH);
+  return created;
 }
 
 export async function updateDebtor(id: string, data: { name: string; notes?: string }) {
@@ -108,8 +109,9 @@ export async function createLoan(data: {
   expectedBy?: Date;
   notes?: string;
 }) {
-  await db.loan.create({ data });
+  const created = await db.loan.create({ data });
   revalidatePath(PATH);
+  return created;
 }
 
 export async function updateLoan(
@@ -163,6 +165,18 @@ export async function recordPayment(data: {
   }
   revalidatePath(PATH);
   return { allocated: data.totalAmount - left, unallocated: left, splits: toCreate.length };
+}
+
+/** Records a payment directly against a specific loan (used by agent proposals). Returns created payment. */
+export async function recordLoanPayment(data: {
+  loanId: string;
+  amount: number;
+  date: Date;
+  notes?: string;
+}) {
+  const created = await db.loanPayment.create({ data });
+  revalidatePath(PATH);
+  return created;
 }
 
 export async function deleteLoanPayment(id: string) {

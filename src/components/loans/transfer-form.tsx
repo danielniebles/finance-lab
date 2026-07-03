@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,12 +14,23 @@ import {
 import { createTransfer } from "@/lib/actions/loans";
 import type { AccountWithBalance } from "@/lib/queries/loans";
 
+type FormState = { error?: string } | null;
+
 function AccountOption({ account }: { account: AccountWithBalance }) {
   return (
     <span className="flex items-center gap-2">
       <span className="size-2.5 rounded-full inline-block" style={{ backgroundColor: account.color ?? "#888" }} />
       {account.name}
     </span>
+  );
+}
+
+function SubmitButton({ disabled }: { disabled: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending || disabled}>
+      {pending ? "Saving…" : "Transfer"}
+    </Button>
   );
 }
 
@@ -31,30 +43,35 @@ export function TransferForm({
   onClose: () => void;
   accounts: AccountWithBalance[];
 }) {
+  // Selects that filter each other must stay as state
   const [fromId, setFromId] = useState(accounts[0]?.id ?? "");
   const [toId, setToId] = useState(accounts[1]?.id ?? "");
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [notes, setNotes] = useState("");
-  const [pending, startTransition] = useTransition();
 
   const from = accounts.find((a) => a.id === fromId);
   const to = accounts.find((a) => a.id === toId);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (fromId === toId) return;
-    startTransition(async () => {
-      await createTransfer({
-        fromAccountId: fromId,
-        toAccountId: toId,
-        amount: parseFloat(amount),
-        date: new Date(date + "T12:00:00"),
-        notes: notes.trim() || undefined,
-      });
-      onClose();
-    });
-  }
+  const [state, action] = useActionState(
+    async (_prev: FormState, formData: FormData): Promise<FormState> => {
+      try {
+        if (fromId === toId) return { error: "From and To accounts must be different" };
+        const date = formData.get("date") as string;
+        const notes = (formData.get("notes") as string).trim() || undefined;
+        await createTransfer({
+          fromAccountId: fromId,
+          toAccountId: toId,
+          amount: parseFloat(amount),
+          date: new Date(date + "T12:00:00"),
+          notes,
+        });
+        onClose();
+        return null;
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : "Something went wrong" };
+      }
+    },
+    null
+  );
 
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => !o && onClose()}>
@@ -62,7 +79,7 @@ export function TransferForm({
         <DialogHeader>
           <DialogTitle>Transfer between accounts</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form action={action} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>From</Label>
@@ -106,18 +123,27 @@ export function TransferForm({
             </div>
             <div className="space-y-1.5">
               <Label>Date</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+              <Input
+                name="date"
+                type="date"
+                defaultValue={new Date().toISOString().slice(0, 10)}
+                required
+              />
             </div>
           </div>
 
           <div className="space-y-1.5">
             <Label>Notes</Label>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
+            <Input name="notes" placeholder="Optional notes" />
           </div>
+
+          {state?.error && (
+            <p className="text-destructive text-sm">{state.error}</p>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={pending || fromId === toId || !amount}>Transfer</Button>
+            <SubmitButton disabled={fromId === toId || !amount} />
           </DialogFooter>
         </form>
       </DialogContent>

@@ -16,7 +16,7 @@ export async function createInstallment(data: {
   fundingAccountId?: string | null;
 }) {
   const monthlyAmount = computeMonthlyAmount(data.totalAmount, data.numInstallments);
-  await db.installment.create({
+  const created = await db.installment.create({
     data: {
       description: data.description,
       totalAmount: data.totalAmount,
@@ -31,6 +31,7 @@ export async function createInstallment(data: {
     },
   });
   revalidatePath("/installments");
+  return created;
 }
 
 export async function updateInstallment(
@@ -126,6 +127,12 @@ export async function unmarkPayment(paymentId: string) {
   revalidatePath("/installments");
 }
 
+/** Undo variant: delete by installmentId + installmentNum (used by agent undo). */
+export async function unmarkPaymentBySlot(installmentId: string, installmentNum: number) {
+  await db.installmentPayment.deleteMany({ where: { installmentId, installmentNum } });
+  revalidatePath("/installments");
+}
+
 // ─── Credit Card CRUD ─────────────────────────────────────────────────────────
 
 export async function createCard(data: {
@@ -135,7 +142,7 @@ export async function createCard(data: {
   paymentDueDay?: number;
   color?: string;
 }) {
-  await db.creditCard.create({
+  const created = await db.creditCard.create({
     data: {
       name: data.name,
       creditLimit: data.creditLimit ?? null,
@@ -145,6 +152,7 @@ export async function createCard(data: {
     },
   });
   revalidatePath("/installments");
+  return created;
 }
 
 export async function updateCard(

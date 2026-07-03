@@ -31,7 +31,7 @@ export default async function ExpensesPage({ searchParams }: Props) {
   const selectedYear = params.year ? parseInt(params.year) : fallback.year;
 
   const importedMonths = await db.importBatch.findMany({
-    select: { month: true, year: true },
+    select: { month: true, year: true, status: true },
     orderBy: [{ year: "asc" }, { month: "asc" }],
   });
 

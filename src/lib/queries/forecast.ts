@@ -1,7 +1,10 @@
 // HISTORICAL projection — reads only past import batches, never current-month actuals.
 // Phase B (getIncomePlan) is not yet shipped; expectedIncome falls back to trailing
 // income average from getTrends. See ADR-019.
+// Pacing mode: when an IN_PROGRESS batch exists for the target month, blends actuals-so-far
+// with historical prediction (ADR-024).
 
+import { db } from "@/lib/db";
 import { getTrends } from "@/lib/queries/trends";
 import { getMonthlyAnalysis } from "@/lib/queries/expenses";
 import {
@@ -33,6 +36,12 @@ export type ForecastResult = {
   vsLastMonth: number | null;
   drivers: CategoryForecast[];
   dataSufficiency: "ok" | "thin";
+  // Pacing mode fields — only present when an IN_PROGRESS batch exists for the target month
+  pacingMode?: boolean;
+  spentSoFar?: number;
+  projectedVariableSpend?: number;
+  daysElapsed?: number;
+  daysInMonth?: number;
 };
 
 export async function getForecast(
@@ -119,6 +128,47 @@ export async function getForecast(
   // ── Data sufficiency ──────────────────────────────────────────────────────────
   const dataSufficiency: "ok" | "thin" =
     trends.months.length < MIN_MONTHS ? "thin" : "ok";
+
+  // ── Pacing mode: blend actuals-so-far with historical prediction ─────────────
+  const inProgressBatch = await db.importBatch.findFirst({
+    where: { month, year, status: "IN_PROGRESS" },
+    include: { transactions: { select: { amount: true } } },
+  });
+
+  if (inProgressBatch) {
+    const now = new Date();
+    const daysElapsed = now.getDate();
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    // Sum of negative transactions (expenses) in the partial batch
+    const spentSoFar = inProgressBatch.transactions
+      .filter((t) => t.amount < 0)
+      .reduce((s, t) => s + Math.abs(t.amount), 0);
+
+    // Project: spend rate × remaining days
+    const projectedTotal = daysElapsed > 0 ? spentSoFar * (daysInMonth / daysElapsed) : spentSoFar;
+
+    // Blend: 60% pacing projection + 40% historical prediction
+    const projectedVariableSpend = 0.6 * projectedTotal + 0.4 * predictedVariableTotal;
+
+    return {
+      perCategory,
+      predictedVariableTotal,
+      fixedBudget,
+      expectedIncome,
+      projectedSavingsRate,
+      savingsRateTarget,
+      vsTarget,
+      vsLastMonth,
+      drivers,
+      dataSufficiency,
+      pacingMode: true,
+      spentSoFar,
+      projectedVariableSpend,
+      daysElapsed,
+      daysInMonth,
+    };
+  }
 
   return {
     perCategory,

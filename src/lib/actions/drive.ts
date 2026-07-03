@@ -3,6 +3,7 @@
 import { drive } from "@googleapis/drive";
 import { GoogleAuth } from "google-auth-library";
 import { importBuffer } from "./import";
+import { BatchStatus } from "@/generated/prisma";
 
 function getCredentials() {
   const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON!);
@@ -32,7 +33,7 @@ export async function listDriveFiles(): Promise<DriveFile[]> {
   return (res.data.files ?? []) as DriveFile[];
 }
 
-export async function importFromDrive(fileId: string, fileName: string) {
+export async function importFromDrive(fileId: string, fileName: string, status?: BatchStatus) {
   const auth = getAuth();
   const token = await auth.getAccessToken();
   const headers = { Authorization: `Bearer ${token}` };
@@ -57,5 +58,5 @@ export async function importFromDrive(fileId: string, fileName: string) {
     const body = await res.text();
     throw new Error(`Drive download failed: ${res.status} ${res.statusText} — ${body}`);
   }
-  return importBuffer(Buffer.from(await res.arrayBuffer()), fileName);
+  return importBuffer(Buffer.from(await res.arrayBuffer()), fileName, status);
 }

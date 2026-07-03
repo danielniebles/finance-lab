@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
             action: p.action,
             params: p.params,
             label: p.title,
+            fields: p.fields,
           });
         }
 

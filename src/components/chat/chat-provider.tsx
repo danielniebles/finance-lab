@@ -24,6 +24,7 @@ export type ProposalEvent = {
   action: string;
   params: Record<string, unknown>;
   label: string;
+  fields: { label: string; value: string }[];
   proposalId?: string; // DB id from backend — used by ActionCard to resolve
   approved: boolean | null; // null = pending, true = approved, false = dismissed
 };
@@ -156,7 +157,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           const trimmed = line.trim();
           if (!trimmed) continue;
           try {
-            const event = JSON.parse(trimmed) as { type: string; delta?: string; action?: string; params?: Record<string, unknown>; label?: string; proposalId?: string };
+            const event = JSON.parse(trimmed) as { type: string; delta?: string; action?: string; params?: Record<string, unknown>; label?: string; proposalId?: string; fields?: { label: string; value: string }[] };
             if (event.type === "text" && event.delta) {
               textAccum += event.delta;
               const captured = textAccum;
@@ -175,6 +176,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 action: event.action ?? "",
                 params: event.params ?? {},
                 label: event.label ?? event.action ?? "",
+                fields: event.fields ?? [],
                 proposalId: event.proposalId,
                 approved: null,
               };

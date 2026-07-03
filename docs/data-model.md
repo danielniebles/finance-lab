@@ -14,6 +14,9 @@ One import run covering a single calendar month. Uniquely keyed on `(month, year
 | periodEnd | DateTime | Last day of the period |
 | month | Int | 1–12 |
 | year | Int | e.g. 2025 |
+| status | BatchStatus enum | `FINAL` (default) or `IN_PROGRESS` — mid-month partial import. `IN_PROGRESS` batches are excluded from trend/forecast history and Health Score baselines but are included in current-month analysis (see ADR-024). |
+
+**Enum `BatchStatus`:** `IN_PROGRESS` | `FINAL`
 
 **Relations:** has many `Transaction`
 

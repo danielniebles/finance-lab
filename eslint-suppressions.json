@@ -1,0 +1,274 @@
+{
+  "src/app/api/telegram/route.ts": {
+    "complexity": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "src/components/chat/chat-messages.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/components/chat/chat-provider.tsx": {
+    "complexity": {
+      "count": 1
+    },
+    "max-depth": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "src/components/expenses/analysis-dashboard.tsx": {
+    "complexity": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "src/components/expenses/category-breakdown-table.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/components/expenses/import-form.tsx": {
+    "complexity": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/components/expenses/period-selector.tsx": {
+    "complexity": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "src/components/installments/all-installments-table.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/components/installments/credit-card-manager.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/components/installments/installment-form.tsx": {
+    "complexity": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "src/components/installments/installments-dashboard.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/components/loans/account-card.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/components/loans/debtors-section.tsx": {
+    "complexity": {
+      "count": 2
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "src/components/loans/loans-dashboard.tsx": {
+    "complexity": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "src/components/loans/payment-form.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/components/overview/forecast-panel.tsx": {
+    "complexity": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "src/components/overview/overview-dashboard.tsx": {
+    "complexity": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    },
+    "sonarjs/no-duplicate-string": {
+      "count": 1
+    }
+  },
+  "src/components/trends/trends-dashboard.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/components/vaults/entry-form.tsx": {
+    "complexity": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/components/vaults/recurring-expense-form.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/components/vaults/recurring-list.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/components/vaults/vault-form.tsx": {
+    "complexity": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "sonarjs/no-duplicate-string": {
+      "count": 2
+    }
+  },
+  "src/components/vaults/vault-tile.tsx": {
+    "complexity": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "src/components/vaults/vaults-dashboard.tsx": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/lib/actions/categories.ts": {
+    "sonarjs/no-duplicate-string": {
+      "count": 1
+    }
+  },
+  "src/lib/actions/installments.ts": {
+    "sonarjs/no-duplicate-string": {
+      "count": 1
+    }
+  },
+  "src/lib/actions/recurring.ts": {
+    "complexity": {
+      "count": 1
+    }
+  },
+  "src/lib/actions/vaults.ts": {
+    "complexity": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "src/lib/agent/execute-proposal.ts": {
+    "complexity": {
+      "count": 1
+    },
+    "max-depth": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    },
+    "sonarjs/no-duplicate-string": {
+      "count": 1
+    }
+  },
+  "src/lib/agent/run-agent-turn.ts": {
+    "complexity": {
+      "count": 4
+    },
+    "max-depth": {
+      "count": 4
+    },
+    "max-lines-per-function": {
+      "count": 2
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 2
+    },
+    "sonarjs/no-duplicate-string": {
+      "count": 1
+    }
+  },
+  "src/lib/parse-moneylover.ts": {
+    "complexity": {
+      "count": 1
+    }
+  },
+  "src/lib/queries/chat.ts": {
+    "complexity": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "src/lib/queries/expenses.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/lib/vault-utils.ts": {
+    "max-params": {
+      "count": 1
+    }
+  }
+}

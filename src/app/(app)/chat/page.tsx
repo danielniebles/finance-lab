@@ -35,7 +35,12 @@ export default function ChatPage() {
       </div>
       <div className="px-4 pb-4">
         <div className="rounded-xl border border-border bg-card max-w-3xl mx-auto">
-          <ChatInput onSend={sendMessage} disabled={isLoading} />
+          <ChatInput
+            onSend={sendMessage}
+            disabled={isLoading}
+            hasHistory={items.length > 0}
+            onUndo={() => sendMessage("undo last")}
+          />
         </div>
       </div>
     </div>

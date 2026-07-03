@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deleteCard } from "@/lib/actions/installments";
-import { MASK } from "@/components/loans/privacy";
+import { MASK } from "@/components/loans/lib/constants";
 import type { CreditCardSummary } from "@/lib/queries/installments";
 
 type Props = {

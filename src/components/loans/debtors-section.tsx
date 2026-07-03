@@ -11,7 +11,7 @@ import { LoansClient } from "./loans-client";
 import { LoanRowActions } from "./loan-row-actions";
 import { deleteLoanPayment, deleteSettledLoans } from "@/lib/actions/loans";
 import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/lib/queries/loans";
-import { MASK } from "./privacy";
+import { MASK } from "./lib/constants";
 
 // ─── Loan row ─────────────────────────────────────────────────────────────────
 

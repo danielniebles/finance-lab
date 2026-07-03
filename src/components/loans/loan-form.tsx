@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,8 +9,37 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { createLoan, updateLoan } from "@/lib/actions/loans";
 import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/lib/queries/loans";
+import { useLoanForm } from "./hooks/use-loan-form";
+
+function AccountDot({ color }: { color: string | null }) {
+  return (
+    <span
+      className="size-2.5 rounded-full inline-block"
+      style={{ backgroundColor: color ?? "#888" }}
+    />
+  );
+}
+
+function AccountTriggerLabel({ name, color }: { name: string; color: string | null }) {
+  return (
+    <span className="text-sm flex items-center gap-2">
+      <AccountDot color={color} />
+      {name}
+    </span>
+  );
+}
+
+function AccountSelectItem({ id, name, color }: { id: string; name: string; color: string | null }) {
+  return (
+    <SelectItem value={id}>
+      <span className="flex items-center gap-2">
+        <span className="size-2 rounded-full" style={{ backgroundColor: color ?? "#888" }} />
+        {name}
+      </span>
+    </SelectItem>
+  );
+}
 
 export function LoanForm({
   open,
@@ -28,56 +56,18 @@ export function LoanForm({
   defaultDebtorId?: string;
   editing?: LoanWithRemaining | null;
 }) {
-  const [debtorId, setDebtorId] = useState(editing?.debtorId ?? defaultDebtorId ?? "");
-  const [accountId, setAccountId] = useState(editing?.accountId ?? accounts[0]?.id ?? "");
-  const [amount, setAmount] = useState(editing ? String(editing.amount) : "");
-  const [date, setDate] = useState(
-    editing ? new Date(editing.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
-  );
-  const [expectedBy, setExpectedBy] = useState(
-    editing?.expectedBy ? new Date(editing.expectedBy).toISOString().slice(0, 10) : ""
-  );
-  const [notes, setNotes] = useState(editing?.notes ?? "");
-  const [last, setLast] = useState(editing);
-  const [pending, startTransition] = useTransition();
-
-  if (editing !== last) {
-    setLast(editing);
-    setDebtorId(editing?.debtorId ?? defaultDebtorId ?? "");
-    setAccountId(editing?.accountId ?? accounts[0]?.id ?? "");
-    setAmount(editing ? String(editing.amount) : "");
-    setDate(editing ? new Date(editing.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
-    setExpectedBy(editing?.expectedBy ? new Date(editing.expectedBy).toISOString().slice(0, 10) : "");
-    setNotes(editing?.notes ?? "");
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    startTransition(async () => {
-      if (editing) {
-        await updateLoan(editing.id, {
-          accountId,
-          amount: parseFloat(amount),
-          date: new Date(date + "T12:00:00"),
-          expectedBy: expectedBy ? new Date(expectedBy + "T12:00:00") : undefined,
-          notes: notes.trim() || undefined,
-        });
-      } else {
-        await createLoan({
-          debtorId,
-          accountId,
-          amount: parseFloat(amount),
-          date: new Date(date + "T12:00:00"),
-          expectedBy: expectedBy ? new Date(expectedBy + "T12:00:00") : undefined,
-          notes: notes.trim() || undefined,
-        });
-      }
-      onClose();
-    });
-  }
-
-  const selectedDebtor = debtors.find((d) => d.id === debtorId);
-  const selectedAccount = accounts.find((a) => a.id === accountId);
+  const {
+    debtorId, setDebtorId,
+    accountId, setAccountId,
+    amount, setAmount,
+    date, setDate,
+    expectedBy, setExpectedBy,
+    notes, setNotes,
+    pending,
+    handleSubmit,
+    selectedDebtor,
+    selectedAccount,
+  } = useLoanForm({ accounts, debtors, defaultDebtorId, editing, onClose });
 
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => !o && onClose()}>
@@ -93,16 +83,16 @@ export function LoanForm({
                 {selectedDebtor?.name ?? debtorId}
               </p>
             ) : (
-            <Select value={debtorId} onValueChange={(v) => v && setDebtorId(v)}>
-              <SelectTrigger className="h-9">
-                <span className="text-sm">{selectedDebtor?.name ?? "Select debtor…"}</span>
-              </SelectTrigger>
-              <SelectContent>
-                {debtors.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <Select value={debtorId} onValueChange={(v) => v && setDebtorId(v)}>
+                <SelectTrigger className="h-9">
+                  <span className="text-sm">{selectedDebtor?.name ?? "Select debtor…"}</span>
+                </SelectTrigger>
+                <SelectContent>
+                  {debtors.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </div>
 
@@ -110,21 +100,14 @@ export function LoanForm({
             <Label>From account</Label>
             <Select value={accountId} onValueChange={(v) => v && setAccountId(v)}>
               <SelectTrigger className="h-9">
-                <span className="text-sm flex items-center gap-2">
-                  {selectedAccount && (
-                    <span className="size-2.5 rounded-full inline-block" style={{ backgroundColor: selectedAccount.color ?? "#888" }} />
-                  )}
-                  {selectedAccount?.name ?? "Select account…"}
-                </span>
+                {selectedAccount
+                  ? <AccountTriggerLabel name={selectedAccount.name} color={selectedAccount.color} />
+                  : <span className="text-sm">Select account…</span>
+                }
               </SelectTrigger>
               <SelectContent>
                 {accounts.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    <span className="flex items-center gap-2">
-                      <span className="size-2 rounded-full" style={{ backgroundColor: a.color ?? "#888" }} />
-                      {a.name}
-                    </span>
-                  </SelectItem>
+                  <AccountSelectItem key={a.id} id={a.id} name={a.name} color={a.color} />
                 ))}
               </SelectContent>
             </Select>
@@ -160,7 +143,9 @@ export function LoanForm({
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={pending || !debtorId || !accountId}>{editing ? "Save" : "Record loan"}</Button>
+            <Button type="submit" disabled={pending || !debtorId || !accountId}>
+              {editing ? "Save" : "Record loan"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

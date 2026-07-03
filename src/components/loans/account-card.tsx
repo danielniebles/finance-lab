@@ -10,9 +10,9 @@ import { cn } from "@/lib/utils";
 import { formatCOP } from "@/lib/format";
 import { deleteAccount, deleteEntry } from "@/lib/actions/loans";
 import { AccountForm } from "./account-form";
-import { EntryForm } from "./entry-form";
+import { EntryForm } from "./account-entry-form";
 import type { AccountWithBalance } from "@/lib/queries/loans";
-import { MASK } from "./privacy";
+import { MASK } from "./lib/constants";
 
 function AccountTypeBadge({ type }: { type: string }) {
   const map: Record<string, string> = {

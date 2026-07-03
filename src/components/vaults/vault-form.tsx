@@ -15,19 +15,7 @@ import { createVault, updateVault, archiveVault } from "@/lib/actions/vaults";
 import { cn } from "@/lib/utils";
 import { VaultKind, VaultGoalType } from "@/generated/prisma";
 import type { VaultWithMetrics } from "@/lib/queries/vaults";
-
-// ─── Color presets — mirrored from credit-card-manager.tsx ────────────────────
-
-const PRESET_COLORS = [
-  { label: "Yellow",  value: "#EAB308" },
-  { label: "Purple",  value: "#9333EA" },
-  { label: "Orange",  value: "#F97316" },
-  { label: "Lime",    value: "#A3E635" },
-  { label: "Blue",    value: "#3B82F6" },
-  { label: "Pink",    value: "#EC4899" },
-  { label: "Teal",    value: "#14B8A6" },
-  { label: "Red",     value: "#EF4444" },
-];
+import { PRESET_COLORS } from "@/lib/color-presets";
 
 // ─── Form state ───────────────────────────────────────────────────────────────
 

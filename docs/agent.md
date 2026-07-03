@@ -1,14 +1,12 @@
 # Finance Lab Agent
 
-> The definition of the in-app agent that powers the chat advisor. This file is the
-> **single source of truth** for the agent's identity, authority, and tool surface.
-> It is meant to grow: when you add a new capability, you add a tool to the catalog
-> here and (optionally) a new domain-rules section. Keep it in sync with the system
-> prompt that ships in `src/app/api/chat/route.ts`.
+> This file documents the agent's behavior for humans. The operative system prompt lives in `src/lib/agent/prompt.ts` (single source of truth). Tool schemas live in the `TOOLS` array in `src/lib/agent/run-agent-turn.ts`. Keep this doc descriptive, not authoritative.
 
 ---
 
 ## 1. Identity
+
+*(canonical text: `src/lib/agent/prompt.ts`)*
 
 The agent is a **personal financial operator** embedded in Finance Lab. It is not a
 generic chatbot. It has live, structured access to one user's real finances (single
@@ -104,7 +102,8 @@ Tools come in two classes. **Read tools** execute immediately and return data.
 | `get_vaults()` | `getVaults()` | All vaults with computed balance + progress. A RECURRING vault's `requiredThisMonth` reflects the sum of set-asides from its linked recurring expenses. |
 | `get_vault_obligations(month, year)` | `getVaultObligations()` | Per-vault required / contributed / still-needed this month |
 | `get_recurring_expenses(month, year)` | `getRecurringExpenses()` | All active recurring expenses with computed set-aside amounts and status |
-| `get_forecast(month, year)` | `getForecast()` | Projected savings rate + per-category landing ranges from trend history (historical only) |
+| `get_forecast(month, year)` | `getForecast()` | Projected savings rate + per-category landing ranges from trend history (historical only). When an IN_PROGRESS batch exists for the month, returns pacing mode fields: `pacingMode`, `spentSoFar`, `projectedVariableSpend`, `daysElapsed`, `daysInMonth`. |
+| `list_drive_files()` | `listDriveFiles()` | Lists MoneyLover XLSX files in the configured Google Drive folder, ordered by most-recently modified |
 
 ### 4.2 Proposal tools (return an action card; never mutate)
 
@@ -117,11 +116,12 @@ Tools come in two classes. **Read tools** execute immediately and return data.
 | `propose_archive_vault(vaultId)` | `archiveVault()` | Close a met or abandoned goal without deleting history |
 | `propose_create_recurring_expense(name, estimatedAmount, cadenceMonths, nextDueDate, category?, fundingVaultId?)` | `createRecurringExpense()` | Register a new recurring bill in the calendar |
 | `propose_pay_recurring(id, amount, fromVaultId?)` | `payRecurringExpense()` | Record a payment and roll the cycle forward; optionally withdraws from the linked sinking-fund vault |
-
-> **v1 write scope covers Vaults + Recurring Expenses.** Read tools span every
-> module so the agent can reason holistically (e.g. "your Trip vault needs 200k but your
-> variable burn rate is 130% this month — fund less"), but the only things it can *change*
-> in v1 are vaults. Expand deliberately (§6).
+| `propose_import_from_drive(fileId?, status?)` | `importFromDrive()` | Import a MoneyLover file from Drive. Auto-picks most recent if `fileId` omitted. `status` defaults to `IN_PROGRESS` for current month, `FINAL` for past months. |
+| `propose_create_installment(description, totalAmount, numInstallments, startDate, monthlyInterestRate?, cardName?, fundingAccountName?)` | `createInstallment()` | Create a new installment with true-cost preview (capital, first cuota, total interest, total repaid). If `cardName` doesn't exist, a new `CreditCard` is created in the same proposal. |
+| `propose_mark_installment_paid(installmentName, month?, year?)` | `markPayment()` | Mark the cuota due in the given month as paid. Resolves installment by name and slot by month. |
+| `propose_create_loan(amount, debtorName, fundingAccountName, date?, expectedBy?, notes?)` | `createLoan()` | Create a loan record. If debtor doesn't exist, creates them in the proposal. Savings accounts must exist — ask user if not found. |
+| `propose_record_loan_payment(debtorName, amount, date?, notes?)` | `recordLoanPayment()` | Record a repayment from a debtor. Targets oldest active loan when multiple exist. Shows resulting outstanding balance. |
+| `propose_undo_last()` | reverse of last approved action | Proposes reversal of the most recent approved conversational write. Reversible: createInstallment, markPayment, createLoan, recordPayment, createDebtor, createCard. Imports are NOT reversible. |
 
 ---
 
@@ -218,6 +218,40 @@ The forecast is **historical-only** — it reads past import batches (last 6 mon
 - **Quiet on thin data.** When `dataSufficiency === "thin"` (fewer than 3 months of history), the agent acknowledges the projection isn't reliable yet. It should NOT fabricate numbers or confidence.
 - **Temper vault-funding advice when below target.** If `projectedSavingsRate` is below `savingsRateTarget` and `vsTarget < 0`, the agent should note the shortfall and suggest funding vaults lighter this month rather than pushing the user into further deficit.
 - **Income fallback.** Phase B (`getIncomePlan`) is not yet shipped. `expectedIncome` is the trailing income average from `getTrends`. When income has been highly variable, the agent should acknowledge uncertainty on that dimension too.
+
+---
+
+---
+
+## 5d. Domain rules: Conversational entry
+
+Conversational entry covers the set of proposal tools that write to Installments and Loans. These tools interact with real money and structured records — follow these rules to keep proposals correct and honest.
+
+**Read before you propose.** Always call `get_installments()` or `get_loans()` before any proposal in these domains. Name resolution (installment description → id, debtor name → id, card name → id) happens in the proposal tool itself, but you need the list to confirm names before calling.
+
+**Name resolution order:**
+1. Case-insensitive exact match first.
+2. If no exact match, case-insensitive partial match (contains).
+3. If still no match → `blockingMessage` is returned as an error; the tool loop surfaces it back to the model, which must ask the user to clarify.
+
+**In-proposal entity creation rules:**
+- `CreditCard` — may be auto-created in a `createInstallment` proposal if `cardName` doesn't exist. The proposal card labels it "⚠ new card will be created."
+- `Debtor` — may be auto-created in a `createLoan` proposal if `debtorName` doesn't exist. Same label.
+- `SavingsAccount` — NEVER auto-created. If `fundingAccountName` is not found, the tool returns a blocking message asking the user which account to use.
+
+**True-cost preview for installments.** Every `propose_create_installment` card must show:
+- Monthly capital (P/n)
+- First cuota with interest (higher because early balance is larger)
+- Total interest over the full term
+- Total repaid (principal + interest)
+
+This uses German amortization (`computeInstallmentDue` in `installment-utils.ts`). Never omit the cost preview.
+
+**Resulting balance for loan payments.** Every `propose_record_loan_payment` card must show the current outstanding and the balance after this payment. When a debtor has multiple active loans, note which one is being targeted (oldest by creation date) and how many remain.
+
+**Undo scope.** `propose_undo_last` only searches proposals with `status = "approved"` and `action` in the reversible set. Imports are never reversible (re-import the correct file instead). Undo itself is a proposal — the user must approve it. After a successful undo, the original proposal's status is set to `"undone"`.
+
+**Telegram undo button.** After approving a reversible action via Telegram, the webhook automatically sends an "↩ Undo" inline button. Tapping it triggers `propose_undo_last` targeting that specific proposal.
 
 ---
 

@@ -58,6 +58,7 @@ src/
       accounts.ts           — getSavingsAccounts(): lightweight AccountOption[] (id, name, balance) for pickers
     agent/
       types.ts              — ProposalChoice, ProposalDescriptor, AgentTurnResult (channel-agnostic types)
+      prompt.ts             — System-prompt builder: single source of truth for the text sent to the model
       run-agent-turn.ts     — Channel-agnostic tool-use loop: TOOLS, READ_TOOLS, runReadTool(), runAgentTurn(); persists PendingProposal on each proposal tool call
       execute-proposal.ts   — resolveProposal(): looks up PendingProposal, runs action→server-action map, marks approved/dismissed; used by both web and Telegram
     telegram/
