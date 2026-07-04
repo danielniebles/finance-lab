@@ -59,8 +59,9 @@ src/
     agent/
       types.ts              — ProposalChoice, ProposalDescriptor, AgentTurnResult (channel-agnostic types)
       prompt.ts             — System-prompt builder: single source of truth for the text sent to the model
-      run-agent-turn.ts     — Channel-agnostic tool-use loop: TOOLS, READ_TOOLS, runReadTool(), runAgentTurn(); persists PendingProposal on each proposal tool call
-      execute-proposal.ts   — resolveProposal(): looks up PendingProposal, runs action→server-action map, marks approved/dismissed; used by both web and Telegram
+      actions.ts            — PROPOSAL_ACTIONS registry (keyed by exact propose_* tool name) + REVERSIBLE_ACTIONS; consumed by run-agent-turn.ts and execute-proposal.ts; single source of truth for proposal dispatch (ADR-026)
+      run-agent-turn.ts     — Channel-agnostic tool-use loop: TOOLS, READ_TOOLS, runReadTool(), runAgentTurn(); derives PROPOSAL_TOOLS from PROPOSAL_ACTIONS; persists PendingProposal on each proposal tool call
+      execute-proposal.ts   — resolveProposal(): looks up PendingProposal, dispatches via PROPOSAL_ACTIONS registry, marks approved/dismissed; used by both web and Telegram
     telegram/
       api.ts                — Telegram Bot API helpers: sendMessage, answerCallbackQuery, editMessageText, sendChatAction
       render.ts             — toTelegramMessage(): converts ProposalDescriptor → Telegram text + inline_keyboard

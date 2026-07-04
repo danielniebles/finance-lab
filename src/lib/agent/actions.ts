@@ -1,0 +1,382 @@
+/**
+ * PROPOSAL_ACTIONS — single source of truth for proposal tool → server action mapping.
+ *
+ * Keys are EXACT proposal tool names (propose_*). Both the producer (run-agent-turn.ts)
+ * and the consumer (execute-proposal.ts) derive from this object — no string transformation
+ * is needed anywhere, so the three-convention naming bug (ADR-026) cannot recur.
+ *
+ * Adding a new proposal tool: add one entry here; PROPOSAL_TOOLS and the executor both
+ * pick it up automatically.
+ */
+
+import {
+  createVault,
+  updateVault,
+  addVaultEntry,
+  archiveVault,
+} from "@/lib/actions/vaults";
+import {
+  createRecurringExpense,
+  payRecurringExpense,
+} from "@/lib/actions/recurring";
+import {
+  createInstallment,
+  createCard,
+  markPayment,
+  unmarkPaymentBySlot,
+} from "@/lib/actions/installments";
+import {
+  createDebtor,
+  createLoan,
+  recordLoanPayment,
+} from "@/lib/actions/loans";
+import { importFromDrive } from "@/lib/actions/drive";
+import { db } from "@/lib/db";
+import type { VaultKind, VaultGoalType, BatchStatus } from "@/generated/prisma";
+
+// ─── Registry shape ───────────────────────────────────────────────────────────
+
+export type ProposalActionDef = {
+  /**
+   * Runs on approve. Receives the stored params and the proposalId (for bookkeeping).
+   * Returns extra fields to merge back into params (e.g. createdId for undo) — or void.
+   */
+  execute: (
+    params: Record<string, unknown>,
+    ctx: { proposalId: string },
+  ) => Promise<Record<string, unknown> | void>;
+  /**
+   * Optional inverse. Presence = reversible (drives undo eligibility).
+   * Receives the params as stored after execute (includes createdId etc.).
+   */
+  undo?: (params: Record<string, unknown>) => Promise<void>;
+};
+
+// ─── Vault actions ────────────────────────────────────────────────────────────
+
+async function executeCreateVault(
+  params: Record<string, unknown>,
+): Promise<void> {
+  await createVault({
+    name: params.name as string,
+    kind: (params.kind as VaultKind | undefined) ?? "LEISURE",
+    goalType: params.goalType as VaultGoalType,
+    targetAmount:
+      params.targetAmount != null ? Number(params.targetAmount) : null,
+    targetDate:
+      params.targetDate != null
+        ? new Date(params.targetDate as string)
+        : null,
+  });
+}
+
+async function executeUpdateVault(
+  params: Record<string, unknown>,
+): Promise<void> {
+  const { vaultId, ...fields } = params;
+  await updateVault(vaultId as string, {
+    name: fields.name as string | undefined,
+    kind: fields.kind as VaultKind | undefined,
+    goalType: fields.goalType as VaultGoalType | undefined,
+    targetAmount:
+      "targetAmount" in fields
+        ? fields.targetAmount != null
+          ? Number(fields.targetAmount)
+          : null
+        : undefined,
+    targetDate:
+      "targetDate" in fields
+        ? fields.targetDate != null
+          ? new Date(fields.targetDate as string)
+          : null
+        : undefined,
+    color: fields.color as string | undefined,
+    notes: fields.notes as string | undefined,
+  });
+}
+
+async function executeVaultContribution(
+  params: Record<string, unknown>,
+): Promise<void> {
+  await addVaultEntry(
+    params.vaultId as string,
+    Number(params.amount),
+    params.date != null ? new Date(params.date as string) : undefined,
+    params.notes as string | undefined,
+    (params.sourceAccountId as string | undefined) ?? null,
+  );
+}
+
+async function executeVaultWithdrawal(
+  params: Record<string, unknown>,
+): Promise<void> {
+  await addVaultEntry(
+    params.vaultId as string,
+    -Number(params.amount),
+    params.date != null ? new Date(params.date as string) : undefined,
+    params.notes as string | undefined,
+    (params.sourceAccountId as string | undefined) ?? null,
+  );
+}
+
+async function executeArchiveVault(
+  params: Record<string, unknown>,
+): Promise<void> {
+  await archiveVault(params.vaultId as string);
+}
+
+// ─── Recurring actions ────────────────────────────────────────────────────────
+
+async function executeCreateRecurringExpense(
+  params: Record<string, unknown>,
+): Promise<void> {
+  await createRecurringExpense({
+    name: params.name as string,
+    estimatedAmount: Number(params.estimatedAmount),
+    cadenceMonths: Number(params.cadenceMonths),
+    nextDueDate: new Date(params.nextDueDate as string),
+    category: (params.category as string | undefined) ?? null,
+    fundingVaultId: (params.fundingVaultId as string | undefined) ?? null,
+  });
+}
+
+async function executePayRecurring(
+  params: Record<string, unknown>,
+): Promise<void> {
+  await payRecurringExpense(params.id as string, {
+    amount: Number(params.amount),
+    fromVaultId: params.fromVaultId as string | undefined,
+  });
+}
+
+// ─── Drive import action ──────────────────────────────────────────────────────
+
+async function executeImportFromDrive(
+  params: Record<string, unknown>,
+): Promise<void> {
+  const { fileId, fileName, status } = params as {
+    fileId: string;
+    fileName: string;
+    status?: string;
+  };
+  await importFromDrive(fileId, fileName, (status as BatchStatus) ?? undefined);
+}
+
+// ─── Installment actions ──────────────────────────────────────────────────────
+
+async function executeCreateInstallment(
+  params: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const {
+    createCard: newCard,
+    cardId: resolvedCardId,
+    ...installmentParams
+  } = params;
+  let cardId = resolvedCardId as string | null | undefined;
+  let createdCardId: string | undefined;
+
+  if (newCard) {
+    const card = await createCard({ name: (newCard as { name: string }).name });
+    cardId = card.id;
+    createdCardId = card.id;
+  }
+
+  const created = await createInstallment({
+    description: installmentParams.description as string,
+    totalAmount: Number(installmentParams.totalAmount),
+    numInstallments: Number(installmentParams.numInstallments),
+    monthlyInterestRate:
+      installmentParams.monthlyInterestRate != null
+        ? Number(installmentParams.monthlyInterestRate)
+        : null,
+    startDate: new Date(installmentParams.startDate as string),
+    notes: installmentParams.notes as string | undefined,
+    cardId: cardId ?? null,
+    debtorId: installmentParams.debtorId as string | null | undefined,
+    fundingAccountId:
+      installmentParams.fundingAccountId as string | null | undefined,
+  });
+
+  return {
+    cardId,
+    createdId: created.id,
+    ...(createdCardId ? { createdCardId } : {}),
+  };
+}
+
+async function undoCreateInstallment(
+  params: Record<string, unknown>,
+): Promise<void> {
+  if (!params.createdId)
+    throw new Error("Cannot undo: createdId not recorded.");
+  await db.installment.delete({ where: { id: params.createdId as string } });
+  if (params.createdCardId) {
+    const remaining = await db.installment.count({
+      where: { cardId: params.createdCardId as string },
+    });
+    if (remaining === 0) {
+      await db.creditCard.delete({ where: { id: params.createdCardId as string } });
+    }
+  }
+}
+
+async function executeMarkPayment(
+  params: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  await markPayment(
+    params.installmentId as string,
+    Number(params.installmentNum),
+    params.paidAt ? new Date(params.paidAt as string) : new Date(),
+  );
+  return { createdId: `${params.installmentId}:${params.installmentNum}` };
+}
+
+async function undoMarkPayment(
+  params: Record<string, unknown>,
+): Promise<void> {
+  await unmarkPaymentBySlot(
+    params.installmentId as string,
+    Number(params.installmentNum),
+  );
+}
+
+// ─── Loan actions ─────────────────────────────────────────────────────────────
+
+async function executeCreateLoan(
+  params: Record<string, unknown>,
+  ctx: { proposalId: string },
+): Promise<Record<string, unknown>> {
+  const {
+    createDebtor: newDebtor,
+    debtorId: resolvedDebtorId,
+    ...loanParams
+  } = params;
+  let debtorId = resolvedDebtorId as string | null | undefined;
+
+  if (newDebtor) {
+    const debtor = await createDebtor({
+      name: (newDebtor as { name: string }).name,
+    });
+    debtorId = debtor.id;
+    // Store createdDebtorId for potential cascade undo
+    await db.pendingProposal.update({
+      where: { id: ctx.proposalId },
+      data: {
+        params: {
+          ...params,
+          debtorId,
+          createdDebtorId: debtor.id,
+        } as unknown as Record<string, string>,
+      },
+    });
+  }
+
+  const created = await createLoan({
+    debtorId: debtorId as string,
+    accountId: loanParams.accountId as string,
+    amount: Number(loanParams.amount),
+    date: new Date(loanParams.date as string),
+    expectedBy: loanParams.expectedBy
+      ? new Date(loanParams.expectedBy as string)
+      : undefined,
+    notes: loanParams.notes as string | undefined,
+  });
+
+  return { debtorId, createdId: created.id };
+}
+
+async function undoCreateLoan(
+  params: Record<string, unknown>,
+): Promise<void> {
+  if (!params.createdId)
+    throw new Error("Cannot undo: createdId not recorded.");
+  await db.loan.delete({ where: { id: params.createdId as string } });
+  if (params.createdDebtorId) {
+    const debtorLoanCount = await db.loan.count({
+      where: { debtorId: params.createdDebtorId as string },
+    });
+    if (debtorLoanCount === 0) {
+      await db.debtor.delete({
+        where: { id: params.createdDebtorId as string },
+      });
+    }
+  }
+}
+
+async function executeRecordLoanPayment(
+  params: Record<string, unknown>,
+  ctx: { proposalId: string },
+): Promise<Record<string, unknown>> {
+  const created = await recordLoanPayment({
+    loanId: params.loanId as string,
+    amount: Number(params.amount),
+    date: params.date ? new Date(params.date as string) : new Date(),
+    notes: params.notes as string | undefined,
+  });
+  // Store createdId so the proposal row has it after approve
+  await db.pendingProposal.update({
+    where: { id: ctx.proposalId },
+    data: {
+      params: {
+        ...params,
+        createdId: created.id,
+      } as unknown as Record<string, string>,
+    },
+  });
+  return {};
+}
+
+async function undoRecordLoanPayment(
+  params: Record<string, unknown>,
+): Promise<void> {
+  if (!params.createdId)
+    throw new Error("Cannot undo: createdId not recorded.");
+  await db.loanPayment.delete({ where: { id: params.createdId as string } });
+}
+
+// ─── Registry ─────────────────────────────────────────────────────────────────
+
+/**
+ * KEYS ARE EXACT PROPOSAL TOOL NAMES. This is the single source of truth.
+ * Both run-agent-turn.ts (PROPOSAL_TOOLS derivation, PendingProposal.action storage)
+ * and execute-proposal.ts (dispatch) reference this object.
+ *
+ * propose_undo_last is handled specially in resolveProposal (it consumes the registry
+ * rather than having its own registry entry).
+ */
+export const PROPOSAL_ACTIONS: Record<string, ProposalActionDef> = {
+  propose_create_vault: { execute: executeCreateVault },
+  propose_update_vault: { execute: executeUpdateVault },
+  propose_vault_contribution: { execute: executeVaultContribution },
+  propose_vault_withdrawal: { execute: executeVaultWithdrawal },
+  propose_archive_vault: { execute: executeArchiveVault },
+  propose_create_recurring_expense: {
+    execute: executeCreateRecurringExpense,
+  },
+  propose_pay_recurring: { execute: executePayRecurring },
+  propose_import_from_drive: { execute: executeImportFromDrive },
+  propose_create_installment: {
+    execute: executeCreateInstallment,
+    undo: undoCreateInstallment,
+  },
+  propose_mark_installment_paid: {
+    execute: executeMarkPayment,
+    undo: undoMarkPayment,
+  },
+  propose_create_loan: {
+    execute: executeCreateLoan,
+    undo: undoCreateLoan,
+  },
+  propose_record_loan_payment: {
+    execute: executeRecordLoanPayment,
+    undo: undoRecordLoanPayment,
+  },
+};
+
+/**
+ * Tool names that have a defined undo function.
+ * Used by the propose_undo_last resolver to query eligible proposals.
+ */
+export const REVERSIBLE_ACTIONS: string[] = Object.entries(PROPOSAL_ACTIONS)
+  .filter(([, def]) => def.undo !== undefined)
+  .map(([name]) => name);

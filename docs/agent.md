@@ -107,6 +107,8 @@ Tools come in two classes. **Read tools** execute immediately and return data.
 
 ### 4.2 Proposal tools (return an action card; never mutate)
 
+Authoritative mapping: `src/lib/agent/actions.ts`.
+
 | Tool | Approve triggers | Notes |
 |---|---|---|
 | `propose_create_vault(name, kind, goalType, targetAmount?, targetDate?)` | `createVault()` | `targetAmount` + `targetDate` required when `goalType=FIXED_DEADLINE` |

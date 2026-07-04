@@ -17,6 +17,7 @@ import { isDueInMonth } from "@/lib/installment-utils";
 import { formatCOP } from "@/lib/format";
 import type { AgentTurnResult, ProposalDescriptor } from "./types";
 import { buildSystemPrompt } from "./prompt";
+import { PROPOSAL_ACTIONS, REVERSIBLE_ACTIONS } from "./actions";
 
 const anthropic = new Anthropic();
 
@@ -37,19 +38,11 @@ const READ_TOOLS = new Set([
   "list_drive_files",
 ]);
 
+// Derived from the registry so it can never drift. propose_undo_last is handled
+// specially in the executor (consumes the registry, not a direct entry) but is
+// still a recognized proposal tool that persists a PendingProposal row.
 const PROPOSAL_TOOLS = new Set([
-  "propose_create_vault",
-  "propose_update_vault",
-  "propose_vault_contribution",
-  "propose_vault_withdrawal",
-  "propose_archive_vault",
-  "propose_create_recurring_expense",
-  "propose_pay_recurring",
-  "propose_import_from_drive",
-  "propose_create_installment",
-  "propose_mark_installment_paid",
-  "propose_create_loan",
-  "propose_record_loan_payment",
+  ...Object.keys(PROPOSAL_ACTIONS),
   "propose_undo_last",
 ]);
 
@@ -339,6 +332,7 @@ const TOOLS: Anthropic.Tool[] = [
       type: "object",
       properties: {
         fileId: { type: "string", description: "Drive file ID (optional — auto-picks most recent if omitted)" },
+        fileName: { type: "string", description: "The file name from the list_drive_files result; pass it alongside fileId" },
         status: {
           type: "string",
           enum: ["IN_PROGRESS", "FINAL"],
@@ -650,10 +644,26 @@ async function resolveComplexProposal(
     const statusOverride = input.status as string | undefined;
 
     if (!fileId) {
+      // No fileId — auto-pick most recent
       const files = await listDriveFiles();
       if (files.length === 0) return { params: input, title: "Import from Drive", fields: [], blockingMessage: "No files found in the configured Drive folder." };
       fileId = files[0].id;
       fileName = files[0].name;
+    } else if (!fileName) {
+      // fileId provided but fileName missing — recover the real name by looking it up
+      const files = await listDriveFiles();
+      const match = files.find((f) => f.id === fileId);
+      if (match) {
+        fileName = match.name;
+      } else {
+        return {
+          params: {},
+          title: "Import from Drive",
+          fields: [],
+          blockingMessage:
+            "File not found in the Drive folder — the provided file ID may be stale or from a different folder. Please re-list files and try again.",
+        };
+      }
     }
 
     // Guess month from filename pattern like "MoneyLover_2026_07" or similar
@@ -927,15 +937,12 @@ async function resolveComplexProposal(
 
   // ── propose_undo_last ──────────────────────────────────────────────────────
   if (toolName === "propose_undo_last") {
-    const reversibleActions = [
-      "createInstallment", "markPayment", "createLoan", "recordPayment",
-      "createDebtor", "createCard",
-    ];
-
+    // REVERSIBLE_ACTIONS is derived from PROPOSAL_ACTIONS entries that have an
+    // undo function — the full propose_* tool names (ADR-026).
     const lastApproved = await db.pendingProposal.findFirst({
       where: {
         status: "approved",
-        action: { in: reversibleActions },
+        action: { in: REVERSIBLE_ACTIONS },
       },
       orderBy: { resolvedAt: "desc" },
     });
@@ -1065,8 +1072,10 @@ export async function runAgentTurn(args: {
             const title = resolved ? resolved.title : buildProposalTitle(toolBlock.name, toolInput);
             const fields = resolved ? resolved.fields : buildProposalFields(toolInput);
 
-            // Map tool name to action name (drop "propose_" prefix for storage)
-            const actionName = toolBlock.name.replace(/^propose_/, "");
+            // Store the verbatim tool name — no transformation. This is the
+            // canonical action identifier across PendingProposal.action, the
+            // registry, and undo. (ADR-026)
+            const actionName = toolBlock.name;
 
             // Persist a PendingProposal record
             const pendingProposal = await db.pendingProposal.create({

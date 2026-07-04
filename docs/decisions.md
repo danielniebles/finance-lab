@@ -190,3 +190,11 @@
 **Decision:** The full runtime system prompt lives in `src/lib/agent/prompt.ts`, exported as `buildSystemPrompt({ now, context })`. `run-agent-turn.ts` imports and calls it — no inline prompt string remains in the call site. Tool schemas (the `TOOLS` array) stay in `run-agent-turn.ts` by necessity. `docs/agent.md` is now a human-readable description of the agent's behavior, not the source of truth for the words the model sees.
 
 **Why:** The prompt text previously existed both as an inline string in `run-agent-turn.ts` and as prose in `agent.md`, kept in sync by hand. They had already drifted (the doc still referenced `route.ts` after the Telegram refactor moved the prompt). A single code source eliminates the drift: to change the agent's behavior, you edit `prompt.ts`; to understand the intent, you read `agent.md`.
+
+---
+
+## ADR-026 — Proposal actions: identifier = tool name; single Action Registry
+
+**Decision:** The proposal tool name (`propose_*`, verbatim, no transformation) is the canonical action identifier across: the tool schema, `PROPOSAL_TOOLS`, `PendingProposal.action`, the executor, and undo. `src/lib/agent/actions.ts` exports `PROPOSAL_ACTIONS` (the registry, keyed by exact tool name) and `REVERSIBLE_ACTIONS` (derived subset). `run-agent-turn.ts` derives `PROPOSAL_TOOLS` from `Object.keys(PROPOSAL_ACTIONS)` and stores `toolBlock.name` verbatim. `execute-proposal.ts` dispatches via `PROPOSAL_ACTIONS[proposal.action]` with no case mapping. Web and Telegram both approve through `resolveProposal()` — channel unification (ADR-022) is maintained.
+
+**Why (root cause fixed):** Prior to this ADR, three naming conventions coexisted: the producer stripped `propose_` (stored `create_vault`), the executor switch used `propose_*` for vault/recurring cases but camelCase for Drive/installments/loans (`importFromDrive`, `createInstallment`, `createLoan`, `recordPayment`, `undoProposal`). Zero cases matched → every approval threw "No handler for action." The second bug: `fileName` was absent from the `propose_import_from_drive` tool schema, so the confirmation card showed the raw file ID and `ImportBatch.filename` was wrong. The registry eliminates the transform at the source, so the mismatch class is structurally impossible. `fileName` is now an optional schema field, with a fallback `listDriveFiles()` lookup when omitted.
