@@ -17,6 +17,7 @@ import {
   editMessageText,
 } from "@/lib/telegram/api";
 import { toTelegramMessage } from "@/lib/telegram/render";
+import { REVERSIBLE_ACTIONS } from "@/lib/agent/actions";
 
 // ─── Minimal Telegram Update types ───────────────────────────────────────────
 
@@ -129,7 +130,7 @@ async function handleTextMessage(chatId: number, text: string): Promise<void> {
   // Save assistant text
   if (result.text) {
     await saveMessage("assistant", result.text, "telegram");
-    await sendMessage(chatId, result.text, { parse_mode: "Markdown" });
+    await sendMessage(chatId, result.text);
   }
 
   // Send each proposal as a separate message with inline keyboard
@@ -137,18 +138,14 @@ async function handleTextMessage(chatId: number, text: string): Promise<void> {
     const { text: proposalText, reply_markup } = toTelegramMessage(proposal);
     await sendMessage(chatId, proposalText, {
       reply_markup,
-      parse_mode: "Markdown",
+      parse_mode: "HTML",
     });
   }
 }
 
 // ─── Callback query handler ───────────────────────────────────────────────────
 
-// Actions where an undo button is offered after approval
-const REVERSIBLE_ACTIONS = new Set([
-  "createInstallment", "markPayment", "createLoan", "recordPayment",
-  "createDebtor", "createCard",
-]);
+// Actions where an undo button is offered after approval — sourced from the registry (ADR-026).
 
 async function handleCallbackQuery(cbq: TelegramCallbackQuery): Promise<void> {
   const data = cbq.data ?? "";
@@ -174,11 +171,11 @@ async function handleCallbackQuery(cbq: TelegramCallbackQuery): Promise<void> {
       const { text: proposalText, reply_markup } = toTelegramMessage(proposal);
       await sendMessage(chatId, proposalText, {
         reply_markup,
-        parse_mode: "Markdown",
+        parse_mode: "HTML",
       });
     }
     if (undoResult.text) {
-      await sendMessage(chatId, undoResult.text, { parse_mode: "Markdown" });
+      await sendMessage(chatId, undoResult.text);
     }
     return;
   }
@@ -217,7 +214,7 @@ async function handleCallbackQuery(cbq: TelegramCallbackQuery): Promise<void> {
         where: { id: proposalId },
         select: { action: true },
       });
-      if (proposal && REVERSIBLE_ACTIONS.has(proposal.action)) {
+      if (proposal && REVERSIBLE_ACTIONS.includes(proposal.action)) {
         await sendMessage(chatId, "Action approved.", {
           reply_markup: {
             inline_keyboard: [[
