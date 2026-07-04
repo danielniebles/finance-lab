@@ -182,23 +182,6 @@
       "count": 1
     }
   },
-  "src/lib/agent/run-agent-turn.ts": {
-    "complexity": {
-      "count": 4
-    },
-    "max-depth": {
-      "count": 4
-    },
-    "max-lines-per-function": {
-      "count": 2
-    },
-    "sonarjs/cognitive-complexity": {
-      "count": 2
-    },
-    "sonarjs/no-duplicate-string": {
-      "count": 1
-    }
-  },
   "src/lib/parse-moneylover.ts": {
     "complexity": {
       "count": 1

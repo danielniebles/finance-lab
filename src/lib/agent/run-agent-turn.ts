@@ -21,6 +21,10 @@ import { PROPOSAL_ACTIONS, REVERSIBLE_ACTIONS } from "./actions";
 
 const anthropic = new Anthropic();
 
+// ─── Shared schema constants ───────────────────────────────────────────────────
+
+const YEAR_DESC = "4-digit year";
+
 // ─── Tool definitions ─────────────────────────────────────────────────────────
 
 const READ_TOOLS = new Set([
@@ -67,7 +71,7 @@ const TOOLS: Anthropic.Tool[] = [
       type: "object",
       properties: {
         month: { type: "number", description: "Month number (1–12)" },
-        year: { type: "number", description: "4-digit year" },
+        year: { type: "number", description: YEAR_DESC },
       },
       required: ["month", "year"],
     },
@@ -80,7 +84,7 @@ const TOOLS: Anthropic.Tool[] = [
       type: "object",
       properties: {
         month: { type: "number", description: "Month number (1–12)" },
-        year: { type: "number", description: "4-digit year" },
+        year: { type: "number", description: YEAR_DESC },
         category: {
           type: "string",
           description: "Optional: filter by app category name (case-insensitive partial match)",
@@ -130,7 +134,7 @@ const TOOLS: Anthropic.Tool[] = [
       type: "object",
       properties: {
         month: { type: "number", description: "Month number (1–12)" },
-        year: { type: "number", description: "4-digit year" },
+        year: { type: "number", description: YEAR_DESC },
       },
       required: ["month", "year"],
     },
@@ -259,7 +263,7 @@ const TOOLS: Anthropic.Tool[] = [
       type: "object",
       properties: {
         month: { type: "number", description: "Month number (1-12)" },
-        year: { type: "number", description: "4-digit year" },
+        year: { type: "number", description: YEAR_DESC },
       },
       required: ["month", "year"],
     },
@@ -272,7 +276,7 @@ const TOOLS: Anthropic.Tool[] = [
       type: "object",
       properties: {
         month: { type: "number", description: "Month number (1–12)" },
-        year: { type: "number", description: "4-digit year" },
+        year: { type: "number", description: YEAR_DESC },
       },
       required: ["month", "year"],
     },
@@ -422,114 +426,128 @@ const TOOLS: Anthropic.Tool[] = [
 
 // ─── Read tool executor ───────────────────────────────────────────────────────
 
+function fetchTrends(input: Record<string, unknown>): Promise<unknown> {
+  const n = input.n ? Math.min(Number(input.n), 12) : 6;
+  return getTrends(n);
+}
+
+async function fetchOverview(): Promise<unknown> {
+  const [snapshot, healthScore] = await Promise.all([
+    getFinancialSnapshot(),
+    getHealthScore(),
+  ]);
+  return { snapshot, healthScore };
+}
+
+async function fetchInstallments(): Promise<unknown> {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  const [installments, monthSummary] = await Promise.all([
+    getAllInstallments(),
+    getMonthSummary(month, year),
+  ]);
+  return { installments, monthSummary };
+}
+
+async function fetchTransactions(input: Record<string, unknown>): Promise<unknown> {
+  const month = Number(input.month);
+  const year = Number(input.year);
+  const category = input.category as string | undefined;
+
+  const batch = await db.importBatch.findFirst({
+    where: { month, year },
+  });
+  if (!batch) return { transactions: [] };
+
+  const rows = await db.transaction.findMany({
+    where: {
+      batchId: batch.id,
+      ...(category
+        ? {
+            moneyLoverCategory: {
+              mapping: {
+                appCategory: {
+                  name: { contains: category, mode: "insensitive" },
+                },
+              },
+            },
+          }
+        : {}),
+    },
+    include: {
+      moneyLoverCategory: {
+        include: { mapping: { include: { appCategory: true } } },
+      },
+    },
+    orderBy: { date: "asc" },
+    take: 200,
+  });
+
+  return {
+    transactions: rows.map((t) => ({
+      id: t.id,
+      date: t.date,
+      amount: t.amount,
+      category: t.moneyLoverCategory.name,
+      appCategory:
+        t.moneyLoverCategory.mapping?.appCategory?.name ?? null,
+      note: t.note,
+      wallet: t.wallet,
+    })),
+  };
+}
+
+async function runReadToolExpenses(
+  name: string,
+  input: Record<string, unknown>,
+): Promise<unknown | null> {
+  switch (name) {
+    case "get_overview":
+      return fetchOverview();
+    case "get_available_months":
+      return getImportBatches();
+    case "get_monthly_analysis":
+      return getMonthlyAnalysis(Number(input.month), Number(input.year));
+    case "get_transactions":
+      return fetchTransactions(input);
+    case "get_trends":
+      return fetchTrends(input);
+    case "get_installments":
+      return fetchInstallments();
+    default:
+      return null;
+  }
+}
+
+async function runReadToolFinancial(
+  name: string,
+  input: Record<string, unknown>,
+): Promise<unknown | null> {
+  switch (name) {
+    case "get_loans":
+      return getLoansOverview();
+    case "get_vaults":
+      return getVaults();
+    case "get_vault_obligations":
+      return getVaultObligations(Number(input.month), Number(input.year));
+    case "get_recurring_expenses":
+      return getRecurringExpenses(Number(input.month), Number(input.year));
+    case "get_forecast":
+      return getForecast(Number(input.month), Number(input.year));
+    case "list_drive_files":
+      return listDriveFiles();
+    default:
+      return null;
+  }
+}
+
 async function runReadTool(
   name: string,
   input: Record<string, unknown>,
 ): Promise<unknown> {
-  switch (name) {
-    case "get_overview": {
-      const [snapshot, healthScore] = await Promise.all([
-        getFinancialSnapshot(),
-        getHealthScore(),
-      ]);
-      return { snapshot, healthScore };
-    }
-    case "get_available_months": {
-      return getImportBatches();
-    }
-    case "get_monthly_analysis": {
-      const month = Number(input.month);
-      const year = Number(input.year);
-      return getMonthlyAnalysis(month, year);
-    }
-    case "get_transactions": {
-      const month = Number(input.month);
-      const year = Number(input.year);
-      const category = input.category as string | undefined;
-
-      const batch = await db.importBatch.findFirst({
-        where: { month, year },
-      });
-      if (!batch) return { transactions: [] };
-
-      const rows = await db.transaction.findMany({
-        where: {
-          batchId: batch.id,
-          ...(category
-            ? {
-                moneyLoverCategory: {
-                  mapping: {
-                    appCategory: {
-                      name: { contains: category, mode: "insensitive" },
-                    },
-                  },
-                },
-              }
-            : {}),
-        },
-        include: {
-          moneyLoverCategory: {
-            include: { mapping: { include: { appCategory: true } } },
-          },
-        },
-        orderBy: { date: "asc" },
-        take: 200,
-      });
-
-      return {
-        transactions: rows.map((t) => ({
-          id: t.id,
-          date: t.date,
-          amount: t.amount,
-          category: t.moneyLoverCategory.name,
-          appCategory:
-            t.moneyLoverCategory.mapping?.appCategory?.name ?? null,
-          note: t.note,
-          wallet: t.wallet,
-        })),
-      };
-    }
-    case "get_trends": {
-      const n = input.n ? Math.min(Number(input.n), 12) : 6;
-      return getTrends(n);
-    }
-    case "get_installments": {
-      const now = new Date();
-      const month = now.getMonth() + 1;
-      const year = now.getFullYear();
-      const [installments, monthSummary] = await Promise.all([
-        getAllInstallments(),
-        getMonthSummary(month, year),
-      ]);
-      return { installments, monthSummary };
-    }
-    case "get_loans": {
-      return getLoansOverview();
-    }
-    case "get_vaults": {
-      return getVaults();
-    }
-    case "get_vault_obligations": {
-      const month = Number(input.month);
-      const year = Number(input.year);
-      return getVaultObligations(month, year);
-    }
-    case "get_recurring_expenses": {
-      const month = Number(input.month);
-      const year = Number(input.year);
-      return getRecurringExpenses(month, year);
-    }
-    case "get_forecast": {
-      const month = Number(input.month);
-      const year = Number(input.year);
-      return getForecast(month, year);
-    }
-    case "list_drive_files": {
-      return listDriveFiles();
-    }
-    default:
-      return { error: `Unknown read tool: ${name}` };
-  }
+  const result = await runReadToolExpenses(name, input) ?? await runReadToolFinancial(name, input);
+  return result ?? { error: `Unknown read tool: ${name}` };
 }
 
 // ─── Proposal helpers ─────────────────────────────────────────────────────────
@@ -560,46 +578,42 @@ function formatParamValue(key: string, value: unknown): string {
   return String(value);
 }
 
-function buildProposalTitle(name: string, input: Record<string, unknown>): string {
-  const fmt = (v: unknown) =>
-    typeof v === "number"
-      ? `$${new Intl.NumberFormat("es-CO").format(Math.round(v))} COP`
-      : String(v ?? "");
+const fmt = (v: unknown): string =>
+  typeof v === "number"
+    ? `$${new Intl.NumberFormat("es-CO").format(Math.round(v))} COP`
+    : String(v ?? "");
 
-  switch (name) {
-    case "propose_create_vault":
-      return `Create vault: ${input.name ?? "?"}`;
-    case "propose_update_vault":
-      return `Update vault ${input.vaultId}`;
-    case "propose_vault_contribution":
-      return input.sourceAccountId
-        ? `Contribute ${fmt(input.amount)} to vault ${input.vaultId} from account ${input.sourceAccountId}`
-        : `Contribute ${fmt(input.amount)} to vault ${input.vaultId}`;
-    case "propose_vault_withdrawal":
-      return input.sourceAccountId
-        ? `Withdraw ${fmt(input.amount)} from vault ${input.vaultId} (returns to account ${input.sourceAccountId})`
-        : `Withdraw ${fmt(input.amount)} from vault ${input.vaultId}`;
-    case "propose_archive_vault":
-      return `Archive vault ${input.vaultId}`;
-    case "propose_create_recurring_expense":
-      return `Add recurring expense: ${input.name ?? "?"}, ${fmt(input.estimatedAmount)} every ${input.cadenceMonths}mo`;
-    case "propose_pay_recurring":
-      return `Pay recurring expense ${input.id}: ${fmt(input.amount)}${input.fromVaultId ? ` from vault ${input.fromVaultId}` : ""}`;
-    case "propose_import_from_drive":
-      return `Import from Drive: ${input.fileName ?? input.fileId ?? "latest file"}`;
-    case "propose_create_installment":
-      return `Create installment: ${input.description ?? "?"} — ${fmt(input.totalAmount)} × ${input.numInstallments}`;
-    case "propose_mark_installment_paid":
-      return `Mark cuota paid: ${input.installmentName ?? "?"}`;
-    case "propose_create_loan":
-      return `Create loan: ${fmt(input.amount)} → ${input.debtorName ?? "?"}`;
-    case "propose_record_loan_payment":
-      return `Record payment: ${fmt(input.amount)} from ${input.debtorName ?? "?"}`;
-    case "propose_undo_last":
-      return `Undo: ${input.originalAction ?? "last action"}`;
-    default:
-      return name;
-  }
+type TitleBuilder = (input: Record<string, unknown>) => string;
+
+const TITLE_BUILDERS: Record<string, TitleBuilder> = {
+  propose_create_vault: (i) => `Create vault: ${i.name ?? "?"}`,
+  propose_update_vault: (i) => `Update vault ${i.vaultId}`,
+  propose_vault_contribution: (i) =>
+    i.sourceAccountId
+      ? `Contribute ${fmt(i.amount)} to vault ${i.vaultId} from account ${i.sourceAccountId}`
+      : `Contribute ${fmt(i.amount)} to vault ${i.vaultId}`,
+  propose_vault_withdrawal: (i) =>
+    i.sourceAccountId
+      ? `Withdraw ${fmt(i.amount)} from vault ${i.vaultId} (returns to account ${i.sourceAccountId})`
+      : `Withdraw ${fmt(i.amount)} from vault ${i.vaultId}`,
+  propose_archive_vault: (i) => `Archive vault ${i.vaultId}`,
+  propose_create_recurring_expense: (i) =>
+    `Add recurring expense: ${i.name ?? "?"}, ${fmt(i.estimatedAmount)} every ${i.cadenceMonths}mo`,
+  propose_pay_recurring: (i) =>
+    `Pay recurring expense ${i.id}: ${fmt(i.amount)}${i.fromVaultId ? ` from vault ${i.fromVaultId}` : ""}`,
+  propose_import_from_drive: (i) =>
+    `Import from Drive: ${i.fileName ?? i.fileId ?? "latest file"}`,
+  propose_create_installment: (i) =>
+    `Create installment: ${i.description ?? "?"} — ${fmt(i.totalAmount)} × ${i.numInstallments}`,
+  propose_mark_installment_paid: (i) => `Mark cuota paid: ${i.installmentName ?? "?"}`,
+  propose_create_loan: (i) => `Create loan: ${fmt(i.amount)} → ${i.debtorName ?? "?"}`,
+  propose_record_loan_payment: (i) =>
+    `Record payment: ${fmt(i.amount)} from ${i.debtorName ?? "?"}`,
+  propose_undo_last: (i) => `Undo: ${i.originalAction ?? "last action"}`,
+};
+
+function buildProposalTitle(name: string, input: Record<string, unknown>): string {
+  return TITLE_BUILDERS[name]?.(input) ?? name;
 }
 
 function buildProposalFields(
@@ -628,6 +642,375 @@ type ResolvedProposal = {
   blockingMessage?: string;
 };
 
+type DriveFileResolution =
+  | { ok: true; fileId: string; fileName: string }
+  | { ok: false; error: ResolvedProposal };
+
+async function resolveDriveFile(
+  input: Record<string, unknown>,
+): Promise<DriveFileResolution> {
+  const fileId = input.fileId as string | undefined;
+  const fileName = input.fileName as string | undefined;
+
+  if (!fileId) {
+    const files = await listDriveFiles();
+    if (files.length === 0) {
+      return { ok: false, error: { params: input, title: "Import from Drive", fields: [], blockingMessage: "No files found in the configured Drive folder." } };
+    }
+    return { ok: true, fileId: files[0].id, fileName: files[0].name };
+  }
+
+  if (!fileName) {
+    const files = await listDriveFiles();
+    const match = files.find((f) => f.id === fileId);
+    if (match) {
+      return { ok: true, fileId, fileName: match.name };
+    }
+    return {
+      ok: false,
+      error: {
+        params: {},
+        title: "Import from Drive",
+        fields: [],
+        blockingMessage:
+          "File not found in the Drive folder — the provided file ID may be stale or from a different folder. Please re-list files and try again.",
+      },
+    };
+  }
+
+  return { ok: true, fileId, fileName };
+}
+
+function detectDrivePeriod(
+  fileName: string,
+  statusOverride: string | undefined,
+  currentMonth: number,
+  currentYear: number,
+): { detectedLabel: string; resolvedStatus: string } {
+  const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const monthMatch = fileName.match(/(\d{4})[_-](\d{2})/);
+  let detectedLabel = fileName;
+  if (monthMatch) {
+    const y = parseInt(monthMatch[1]);
+    const m = parseInt(monthMatch[2]);
+    detectedLabel = `${MONTH_NAMES[m - 1]} ${y}`;
+  }
+  const resolvedStatus = statusOverride ?? (
+    monthMatch && parseInt(monthMatch[1]) === currentYear && parseInt(monthMatch[2]) === currentMonth
+      ? "IN_PROGRESS"
+      : "FINAL"
+  );
+  return { detectedLabel, resolvedStatus };
+}
+
+async function resolveImportFromDrive(
+  input: Record<string, unknown>,
+  currentMonth: number,
+  currentYear: number,
+): Promise<ResolvedProposal> {
+  const statusOverride = input.status as string | undefined;
+
+  const resolution = await resolveDriveFile(input);
+  if (!resolution.ok) return resolution.error;
+  const { fileId, fileName } = resolution;
+
+  const { detectedLabel, resolvedStatus } = detectDrivePeriod(fileName, statusOverride, currentMonth, currentYear);
+
+  const params = { fileId, fileName: fileName ?? fileId, status: resolvedStatus };
+  const title = `Import from Drive: ${fileName ?? fileId}`;
+  const fields = [
+    { label: "File", value: fileName ?? fileId ?? "?" },
+    { label: "Detected period", value: detectedLabel },
+    { label: "Batch status", value: resolvedStatus === "IN_PROGRESS" ? "IN PROGRESS (mid-month)" : "FINAL" },
+  ];
+  return { params, title, fields };
+}
+
+async function resolveCreateInstallment(
+  input: Record<string, unknown>,
+  currentMonth: number,
+  currentYear: number,
+): Promise<ResolvedProposal> {
+  const description = input.description as string;
+  const totalAmount = Number(input.totalAmount);
+  const numInstallments = Number(input.numInstallments);
+  const monthlyInterestRate = input.monthlyInterestRate != null ? Number(input.monthlyInterestRate) : 0;
+  const startDate = input.startDate as string;
+  const cardName = input.cardName as string | undefined;
+  const fundingAccountName = input.fundingAccountName as string | undefined;
+
+  // Resolve card
+  let cardId: string | null = null;
+  let createsCard = false;
+  if (cardName) {
+    const cards = await getCardSummaries(currentMonth, currentYear);
+    const found = cards.find((c) => c.name.toLowerCase() === cardName.toLowerCase());
+    if (found) {
+      cardId = found.id;
+    } else {
+      createsCard = true;
+    }
+  }
+
+  // Resolve funding account
+  let fundingAccountId: string | null = null;
+  if (fundingAccountName) {
+    const overview = await getLoansOverview();
+    const found = overview.accounts.find(
+      (a) => a.name.toLowerCase() === fundingAccountName.toLowerCase(),
+    );
+    if (found) fundingAccountId = found.id;
+  }
+
+  // True-cost preview (German amortization)
+  const monthlyCapital = Math.round(totalAmount / numInstallments);
+  const firstCuotaTotal = computeInstallmentDue(totalAmount, numInstallments, 1, monthlyInterestRate);
+  let totalInterest = 0;
+  for (let k = 1; k <= numInstallments; k++) {
+    totalInterest += computeInstallmentDue(totalAmount, numInstallments, k, monthlyInterestRate) - monthlyCapital;
+  }
+  const totalRepaid = totalAmount + totalInterest;
+
+  const params: Record<string, unknown> = {
+    description,
+    totalAmount,
+    numInstallments,
+    monthlyInterestRate: monthlyInterestRate || null,
+    startDate,
+    cardId,
+    fundingAccountId,
+    ...(createsCard && cardName ? { createCard: { name: cardName } } : {}),
+  };
+
+  const title = `Create installment: ${description} — ${formatCOP(totalAmount)} × ${numInstallments}`;
+  const fields: { label: string; value: string }[] = [
+    { label: "Item", value: description },
+    { label: "Total amount", value: formatCOP(totalAmount) },
+    { label: "Monthly capital", value: formatCOP(monthlyCapital) },
+    { label: "First cuota (with interest)", value: formatCOP(firstCuotaTotal) },
+    { label: "Total interest", value: formatCOP(totalInterest) },
+    { label: "Total repaid", value: formatCOP(totalRepaid) },
+    { label: "Installments", value: String(numInstallments) },
+    { label: "Card", value: cardName ? `${cardName}${createsCard ? " ⚠ new card will be created" : ""}` : "—" },
+    { label: "Start date", value: startDate },
+  ];
+
+  return { params, title, fields };
+}
+
+async function resolveMarkInstallmentPaid(
+  input: Record<string, unknown>,
+  currentMonth: number,
+  currentYear: number,
+): Promise<ResolvedProposal> {
+  const installmentName = input.installmentName as string;
+  const targetMonth = input.month ? Number(input.month) : currentMonth;
+  const targetYear = input.year ? Number(input.year) : currentYear;
+
+  const installments = await getAllInstallments();
+  const found = installments.find((i) =>
+    i.description.toLowerCase().includes(installmentName.toLowerCase()),
+  );
+
+  if (!found) {
+    return {
+      params: input,
+      title: "Mark cuota paid",
+      fields: [],
+      blockingMessage: `No installment found matching "${installmentName}". Call get_installments to see available installments.`,
+    };
+  }
+
+  // Find the correct slot k for the target month
+  let installmentNum: number | null = null;
+  for (let k = 1; k <= found.numInstallments; k++) {
+    if (isDueInMonth(found.startDate, k, targetMonth, targetYear)) {
+      installmentNum = k;
+      break;
+    }
+  }
+
+  if (installmentNum === null) {
+    return {
+      params: input,
+      title: "Mark cuota paid",
+      fields: [],
+      blockingMessage: `No cuota found for "${found.description}" in ${targetMonth}/${targetYear}.`,
+    };
+  }
+
+  const amount = computeInstallmentDue(found.totalAmount, found.numInstallments, installmentNum, found.monthlyInterestRate ?? undefined);
+  const paidAt = new Date().toISOString();
+
+  const params: Record<string, unknown> = {
+    installmentId: found.id,
+    installmentNum,
+    paidAt,
+  };
+
+  const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const title = `Mark cuota ${installmentNum}/${found.numInstallments} paid: ${found.description}`;
+  const fields: { label: string; value: string }[] = [
+    { label: "Installment", value: found.description },
+    { label: "Cuota", value: `${installmentNum} / ${found.numInstallments}` },
+    { label: "Month", value: `${MONTH_NAMES[targetMonth - 1]} ${targetYear}` },
+    { label: "Amount due", value: formatCOP(amount) },
+  ];
+
+  return { params, title, fields };
+}
+
+async function resolveCreateLoan(input: Record<string, unknown>): Promise<ResolvedProposal> {
+  const amount = Number(input.amount);
+  const debtorName = input.debtorName as string;
+  const fundingAccountName = input.fundingAccountName as string;
+  const date = (input.date as string | undefined) ?? new Date().toISOString().slice(0, 10);
+  const expectedBy = input.expectedBy as string | undefined;
+  const notes = input.notes as string | undefined;
+
+  const overview = await getLoansOverview();
+  const accountFound = overview.accounts.find(
+    (a) => a.name.toLowerCase() === fundingAccountName.toLowerCase(),
+  );
+
+  if (!accountFound) {
+    return {
+      params: input,
+      title: "Create loan",
+      fields: [],
+      blockingMessage: `Savings account "${fundingAccountName}" not found. Available accounts: ${overview.accounts.map((a) => a.name).join(", ")}. Ask the user which account to use.`,
+    };
+  }
+
+  const debtorFound = overview.debtors.find(
+    (d) => d.name.toLowerCase() === debtorName.toLowerCase(),
+  );
+  const createsDebtor = !debtorFound;
+  const debtorId = debtorFound?.id ?? null;
+
+  const params: Record<string, unknown> = {
+    amount,
+    debtorId,
+    accountId: accountFound.id,
+    date,
+    expectedBy: expectedBy ?? null,
+    notes: notes ?? null,
+    ...(createsDebtor ? { createDebtor: { name: debtorName } } : {}),
+  };
+
+  const title = `Create loan: ${formatCOP(amount)} → ${debtorName}`;
+  const fields: { label: string; value: string }[] = [
+    { label: "Amount", value: formatCOP(amount) },
+    { label: "Debtor", value: `${debtorName}${createsDebtor ? " ⚠ new debtor will be created" : ""}` },
+    { label: "From account", value: fundingAccountName },
+    { label: "Expected by", value: expectedBy ?? "—" },
+    { label: "Notes", value: notes ?? "—" },
+  ];
+
+  return { params, title, fields };
+}
+
+async function resolveRecordLoanPayment(input: Record<string, unknown>): Promise<ResolvedProposal> {
+  const debtorName = input.debtorName as string;
+  const amount = Number(input.amount);
+  const date = (input.date as string | undefined) ?? new Date().toISOString().slice(0, 10);
+  const notes = input.notes as string | undefined;
+
+  const overview = await getLoansOverview();
+  const debtor = overview.debtors.find(
+    (d) => d.name.toLowerCase() === debtorName.toLowerCase(),
+  );
+
+  if (!debtor) {
+    return {
+      params: input,
+      title: "Record loan payment",
+      fields: [],
+      blockingMessage: `Debtor "${debtorName}" not found. Call get_loans to see debtors.`,
+    };
+  }
+
+  const activeLoans = debtor.loans
+    .filter((l) => l.isActive)
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  if (activeLoans.length === 0) {
+    return {
+      params: input,
+      title: "Record loan payment",
+      fields: [],
+      blockingMessage: `No active loans found for "${debtorName}".`,
+    };
+  }
+
+  // Target oldest active loan
+  const targetLoan = activeLoans[0];
+  const resultingBalance = Math.max(0, targetLoan.remaining - amount);
+
+  const params: Record<string, unknown> = {
+    loanId: targetLoan.id,
+    debtorName,
+    amount,
+    date,
+    notes: notes ?? null,
+  };
+
+  const title = `Record payment: ${formatCOP(amount)} from ${debtorName}`;
+  const fields: { label: string; value: string }[] = [
+    { label: "Debtor", value: debtorName },
+    { label: "Amount", value: formatCOP(amount) },
+    { label: "Loan", value: targetLoan.notes ?? `Loan of ${formatCOP(targetLoan.amount)}` },
+    { label: "Current outstanding", value: formatCOP(targetLoan.remaining) },
+    { label: "Resulting balance", value: formatCOP(resultingBalance) },
+    { label: "Date", value: date },
+    ...(notes ? [{ label: "Notes", value: notes }] : []),
+  ];
+
+  if (activeLoans.length > 1) {
+    fields.push({ label: "Note", value: `${debtorName} has ${activeLoans.length} active loans — payment applied to oldest.` });
+  }
+
+  return { params, title, fields };
+}
+
+async function resolveUndoLast(): Promise<ResolvedProposal> {
+  // REVERSIBLE_ACTIONS is derived from PROPOSAL_ACTIONS entries that have an
+  // undo function — the full propose_* tool names (ADR-026).
+  const lastApproved = await db.pendingProposal.findFirst({
+    where: {
+      status: "approved",
+      action: { in: REVERSIBLE_ACTIONS },
+    },
+    orderBy: { resolvedAt: "desc" },
+  });
+
+  if (!lastApproved) {
+    return {
+      params: {},
+      title: "Undo last action",
+      fields: [],
+      blockingMessage: "No reversible recent action found.",
+    };
+  }
+
+  const resolvedAtLabel = lastApproved.resolvedAt
+    ? new Date(lastApproved.resolvedAt).toLocaleDateString("es-CO", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "unknown time";
+
+  const params: Record<string, unknown> = {
+    targetProposalId: lastApproved.id,
+    originalAction: lastApproved.action,
+  };
+
+  const title = `Undo: ${lastApproved.action} from ${resolvedAtLabel}`;
+  const fields: { label: string; value: string }[] = [
+    { label: "Reversing", value: `${lastApproved.action} from ${resolvedAtLabel}` },
+    { label: "Original title", value: lastApproved.title },
+  ];
+
+  return { params, title, fields };
+}
+
 async function resolveComplexProposal(
   toolName: string,
   input: Record<string, unknown>,
@@ -637,344 +1020,160 @@ async function resolveComplexProposal(
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 
-  // ── propose_import_from_drive ──────────────────────────────────────────────
-  if (toolName === "propose_import_from_drive") {
-    let fileId = input.fileId as string | undefined;
-    let fileName = input.fileName as string | undefined;
-    const statusOverride = input.status as string | undefined;
-
-    if (!fileId) {
-      // No fileId — auto-pick most recent
-      const files = await listDriveFiles();
-      if (files.length === 0) return { params: input, title: "Import from Drive", fields: [], blockingMessage: "No files found in the configured Drive folder." };
-      fileId = files[0].id;
-      fileName = files[0].name;
-    } else if (!fileName) {
-      // fileId provided but fileName missing — recover the real name by looking it up
-      const files = await listDriveFiles();
-      const match = files.find((f) => f.id === fileId);
-      if (match) {
-        fileName = match.name;
-      } else {
-        return {
-          params: {},
-          title: "Import from Drive",
-          fields: [],
-          blockingMessage:
-            "File not found in the Drive folder — the provided file ID may be stale or from a different folder. Please re-list files and try again.",
-        };
-      }
-    }
-
-    // Guess month from filename pattern like "MoneyLover_2026_07" or similar
-    const monthMatch = fileName?.match(/(\d{4})[_-](\d{2})/);
-    let detectedLabel = fileName ?? fileId;
-    if (monthMatch) {
-      const y = parseInt(monthMatch[1]);
-      const m = parseInt(monthMatch[2]);
-      const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-      detectedLabel = `${MONTH_NAMES[m - 1]} ${y}`;
-    }
-
-    const resolvedStatus = statusOverride ?? (
-      monthMatch && parseInt(monthMatch[1]) === currentYear && parseInt(monthMatch[2]) === currentMonth
-        ? "IN_PROGRESS"
-        : "FINAL"
-    );
-
-    const params = { fileId, fileName: fileName ?? fileId, status: resolvedStatus };
-    const title = `Import from Drive: ${fileName ?? fileId}`;
-    const fields = [
-      { label: "File", value: fileName ?? fileId ?? "?" },
-      { label: "Detected period", value: detectedLabel },
-      { label: "Batch status", value: resolvedStatus === "IN_PROGRESS" ? "IN PROGRESS (mid-month)" : "FINAL" },
-    ];
-    return { params, title, fields };
-  }
-
-  // ── propose_create_installment ──────────────────────────────────────────────
-  if (toolName === "propose_create_installment") {
-    const description = input.description as string;
-    const totalAmount = Number(input.totalAmount);
-    const numInstallments = Number(input.numInstallments);
-    const monthlyInterestRate = input.monthlyInterestRate != null ? Number(input.monthlyInterestRate) : 0;
-    const startDate = input.startDate as string;
-    const cardName = input.cardName as string | undefined;
-    const fundingAccountName = input.fundingAccountName as string | undefined;
-
-    // Resolve card
-    let cardId: string | null = null;
-    let createsCard = false;
-    if (cardName) {
-      const cards = await getCardSummaries(currentMonth, currentYear);
-      const found = cards.find((c) => c.name.toLowerCase() === cardName.toLowerCase());
-      if (found) {
-        cardId = found.id;
-      } else {
-        createsCard = true;
-      }
-    }
-
-    // Resolve funding account
-    let fundingAccountId: string | null = null;
-    if (fundingAccountName) {
-      const overview = await getLoansOverview();
-      const found = overview.accounts.find(
-        (a) => a.name.toLowerCase() === fundingAccountName.toLowerCase(),
-      );
-      if (found) fundingAccountId = found.id;
-    }
-
-    // True-cost preview (German amortization)
-    const monthlyCapital = Math.round(totalAmount / numInstallments);
-    const firstCuotaTotal = computeInstallmentDue(totalAmount, numInstallments, 1, monthlyInterestRate);
-    let totalInterest = 0;
-    for (let k = 1; k <= numInstallments; k++) {
-      totalInterest += computeInstallmentDue(totalAmount, numInstallments, k, monthlyInterestRate) - monthlyCapital;
-    }
-    const totalRepaid = totalAmount + totalInterest;
-
-    const params: Record<string, unknown> = {
-      description,
-      totalAmount,
-      numInstallments,
-      monthlyInterestRate: monthlyInterestRate || null,
-      startDate,
-      cardId,
-      fundingAccountId,
-      ...(createsCard && cardName ? { createCard: { name: cardName } } : {}),
-    };
-
-    const title = `Create installment: ${description} — ${formatCOP(totalAmount)} × ${numInstallments}`;
-    const fields: { label: string; value: string }[] = [
-      { label: "Item", value: description },
-      { label: "Total amount", value: formatCOP(totalAmount) },
-      { label: "Monthly capital", value: formatCOP(monthlyCapital) },
-      { label: "First cuota (with interest)", value: formatCOP(firstCuotaTotal) },
-      { label: "Total interest", value: formatCOP(totalInterest) },
-      { label: "Total repaid", value: formatCOP(totalRepaid) },
-      { label: "Installments", value: String(numInstallments) },
-      { label: "Card", value: cardName ? `${cardName}${createsCard ? " ⚠ new card will be created" : ""}` : "—" },
-      { label: "Start date", value: startDate },
-    ];
-
-    return { params, title, fields };
-  }
-
-  // ── propose_mark_installment_paid ──────────────────────────────────────────
-  if (toolName === "propose_mark_installment_paid") {
-    const installmentName = input.installmentName as string;
-    const targetMonth = input.month ? Number(input.month) : currentMonth;
-    const targetYear = input.year ? Number(input.year) : currentYear;
-
-    const installments = await getAllInstallments();
-    const found = installments.find((i) =>
-      i.description.toLowerCase().includes(installmentName.toLowerCase()),
-    );
-
-    if (!found) {
-      return {
-        params: input,
-        title: "Mark cuota paid",
-        fields: [],
-        blockingMessage: `No installment found matching "${installmentName}". Call get_installments to see available installments.`,
-      };
-    }
-
-    // Find the correct slot k for the target month
-    let installmentNum: number | null = null;
-    for (let k = 1; k <= found.numInstallments; k++) {
-      if (isDueInMonth(found.startDate, k, targetMonth, targetYear)) {
-        installmentNum = k;
-        break;
-      }
-    }
-
-    if (installmentNum === null) {
-      return {
-        params: input,
-        title: "Mark cuota paid",
-        fields: [],
-        blockingMessage: `No cuota found for "${found.description}" in ${targetMonth}/${targetYear}.`,
-      };
-    }
-
-    const amount = computeInstallmentDue(found.totalAmount, found.numInstallments, installmentNum, found.monthlyInterestRate ?? undefined);
-    const paidAt = new Date().toISOString();
-
-    const params: Record<string, unknown> = {
-      installmentId: found.id,
-      installmentNum,
-      paidAt,
-    };
-
-    const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const title = `Mark cuota ${installmentNum}/${found.numInstallments} paid: ${found.description}`;
-    const fields: { label: string; value: string }[] = [
-      { label: "Installment", value: found.description },
-      { label: "Cuota", value: `${installmentNum} / ${found.numInstallments}` },
-      { label: "Month", value: `${MONTH_NAMES[targetMonth - 1]} ${targetYear}` },
-      { label: "Amount due", value: formatCOP(amount) },
-    ];
-
-    return { params, title, fields };
-  }
-
-  // ── propose_create_loan ────────────────────────────────────────────────────
-  if (toolName === "propose_create_loan") {
-    const amount = Number(input.amount);
-    const debtorName = input.debtorName as string;
-    const fundingAccountName = input.fundingAccountName as string;
-    const date = (input.date as string | undefined) ?? new Date().toISOString().slice(0, 10);
-    const expectedBy = input.expectedBy as string | undefined;
-    const notes = input.notes as string | undefined;
-
-    const overview = await getLoansOverview();
-    const accountFound = overview.accounts.find(
-      (a) => a.name.toLowerCase() === fundingAccountName.toLowerCase(),
-    );
-
-    if (!accountFound) {
-      return {
-        params: input,
-        title: "Create loan",
-        fields: [],
-        blockingMessage: `Savings account "${fundingAccountName}" not found. Available accounts: ${overview.accounts.map((a) => a.name).join(", ")}. Ask the user which account to use.`,
-      };
-    }
-
-    const debtorFound = overview.debtors.find(
-      (d) => d.name.toLowerCase() === debtorName.toLowerCase(),
-    );
-    const createsDebtor = !debtorFound;
-    const debtorId = debtorFound?.id ?? null;
-
-    const params: Record<string, unknown> = {
-      amount,
-      debtorId,
-      accountId: accountFound.id,
-      date,
-      expectedBy: expectedBy ?? null,
-      notes: notes ?? null,
-      ...(createsDebtor ? { createDebtor: { name: debtorName } } : {}),
-    };
-
-    const title = `Create loan: ${formatCOP(amount)} → ${debtorName}`;
-    const fields: { label: string; value: string }[] = [
-      { label: "Amount", value: formatCOP(amount) },
-      { label: "Debtor", value: `${debtorName}${createsDebtor ? " ⚠ new debtor will be created" : ""}` },
-      { label: "From account", value: fundingAccountName },
-      { label: "Expected by", value: expectedBy ?? "—" },
-      { label: "Notes", value: notes ?? "—" },
-    ];
-
-    return { params, title, fields };
-  }
-
-  // ── propose_record_loan_payment ────────────────────────────────────────────
-  if (toolName === "propose_record_loan_payment") {
-    const debtorName = input.debtorName as string;
-    const amount = Number(input.amount);
-    const date = (input.date as string | undefined) ?? new Date().toISOString().slice(0, 10);
-    const notes = input.notes as string | undefined;
-
-    const overview = await getLoansOverview();
-    const debtor = overview.debtors.find(
-      (d) => d.name.toLowerCase() === debtorName.toLowerCase(),
-    );
-
-    if (!debtor) {
-      return {
-        params: input,
-        title: "Record loan payment",
-        fields: [],
-        blockingMessage: `Debtor "${debtorName}" not found. Call get_loans to see debtors.`,
-      };
-    }
-
-    const activeLoans = debtor.loans
-      .filter((l) => l.isActive)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-
-    if (activeLoans.length === 0) {
-      return {
-        params: input,
-        title: "Record loan payment",
-        fields: [],
-        blockingMessage: `No active loans found for "${debtorName}".`,
-      };
-    }
-
-    // Target oldest active loan
-    const targetLoan = activeLoans[0];
-    const resultingBalance = Math.max(0, targetLoan.remaining - amount);
-
-    const params: Record<string, unknown> = {
-      loanId: targetLoan.id,
-      debtorName,
-      amount,
-      date,
-      notes: notes ?? null,
-    };
-
-    const title = `Record payment: ${formatCOP(amount)} from ${debtorName}`;
-    const fields: { label: string; value: string }[] = [
-      { label: "Debtor", value: debtorName },
-      { label: "Amount", value: formatCOP(amount) },
-      { label: "Loan", value: targetLoan.notes ?? `Loan of ${formatCOP(targetLoan.amount)}` },
-      { label: "Current outstanding", value: formatCOP(targetLoan.remaining) },
-      { label: "Resulting balance", value: formatCOP(resultingBalance) },
-      { label: "Date", value: date },
-      ...(notes ? [{ label: "Notes", value: notes }] : []),
-    ];
-
-    if (activeLoans.length > 1) {
-      fields.push({ label: "Note", value: `${debtorName} has ${activeLoans.length} active loans — payment applied to oldest.` });
-    }
-
-    return { params, title, fields };
-  }
-
-  // ── propose_undo_last ──────────────────────────────────────────────────────
-  if (toolName === "propose_undo_last") {
-    // REVERSIBLE_ACTIONS is derived from PROPOSAL_ACTIONS entries that have an
-    // undo function — the full propose_* tool names (ADR-026).
-    const lastApproved = await db.pendingProposal.findFirst({
-      where: {
-        status: "approved",
-        action: { in: REVERSIBLE_ACTIONS },
-      },
-      orderBy: { resolvedAt: "desc" },
-    });
-
-    if (!lastApproved) {
-      return {
-        params: {},
-        title: "Undo last action",
-        fields: [],
-        blockingMessage: "No reversible recent action found.",
-      };
-    }
-
-    const resolvedAtLabel = lastApproved.resolvedAt
-      ? new Date(lastApproved.resolvedAt).toLocaleDateString("es-CO", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
-      : "unknown time";
-
-    const params: Record<string, unknown> = {
-      targetProposalId: lastApproved.id,
-      originalAction: lastApproved.action,
-    };
-
-    const title = `Undo: ${lastApproved.action} from ${resolvedAtLabel}`;
-    const fields: { label: string; value: string }[] = [
-      { label: "Reversing", value: `${lastApproved.action} from ${resolvedAtLabel}` },
-      { label: "Original title", value: lastApproved.title },
-    ];
-
-    return { params, title, fields };
-  }
-
+  if (toolName === "propose_import_from_drive") return resolveImportFromDrive(input, currentMonth, currentYear);
+  if (toolName === "propose_create_installment") return resolveCreateInstallment(input, currentMonth, currentYear);
+  if (toolName === "propose_mark_installment_paid") return resolveMarkInstallmentPaid(input, currentMonth, currentYear);
+  if (toolName === "propose_create_loan") return resolveCreateLoan(input);
+  if (toolName === "propose_record_loan_payment") return resolveRecordLoanPayment(input);
+  if (toolName === "propose_undo_last") return resolveUndoLast();
   return null;
+}
+
+// ─── Tool block processors ────────────────────────────────────────────────────
+
+async function processReadToolBlock(
+  toolBlock: ToolUseBlock,
+  toolInput: Record<string, unknown>,
+): Promise<ToolResultBlockParam> {
+  try {
+    const data = await runReadTool(toolBlock.name, toolInput);
+    return {
+      type: "tool_result",
+      tool_use_id: toolBlock.id,
+      content: JSON.stringify(data),
+    };
+  } catch (err) {
+    return {
+      type: "tool_result",
+      tool_use_id: toolBlock.id,
+      content: `Error executing tool: ${err instanceof Error ? err.message : String(err)}`,
+      is_error: true,
+    };
+  }
+}
+
+async function processProposalToolBlock(
+  toolBlock: ToolUseBlock,
+  toolInput: Record<string, unknown>,
+  channel: string,
+  proposals: ProposalDescriptor[],
+): Promise<ToolResultBlockParam> {
+  // Run complex resolution (name lookups, previews) for new tools
+  const resolved = await resolveComplexProposal(toolBlock.name, toolInput);
+
+  // If resolution produced a blocking message, return it as an error result
+  if (resolved?.blockingMessage) {
+    return {
+      type: "tool_result",
+      tool_use_id: toolBlock.id,
+      content: resolved.blockingMessage,
+      is_error: true,
+    };
+  }
+
+  // Build final params, title, fields
+  const finalParams = resolved ? resolved.params : toolInput;
+  const title = resolved ? resolved.title : buildProposalTitle(toolBlock.name, toolInput);
+  const fields = resolved ? resolved.fields : buildProposalFields(toolInput);
+
+  // Store the verbatim tool name — no transformation. This is the
+  // canonical action identifier across PendingProposal.action, the
+  // registry, and undo. (ADR-026)
+  const actionName = toolBlock.name;
+
+  // Persist a PendingProposal record
+  const pendingProposal = await db.pendingProposal.create({
+    data: {
+      action: actionName,
+      params: finalParams as unknown as Record<string, string>,
+      title,
+      channel,
+    },
+  });
+
+  const descriptor: ProposalDescriptor = {
+    id: pendingProposal.id,
+    action: actionName,
+    params: finalParams,
+    title,
+    fields,
+    reasoning: "",
+    choices: [
+      { id: "approve", label: "Approve", style: "primary" },
+      { id: "dismiss", label: "Dismiss" },
+    ],
+  };
+  proposals.push(descriptor);
+
+  return {
+    type: "tool_result",
+    tool_use_id: toolBlock.id,
+    content: "Proposal surfaced to the user for approval.",
+  };
+}
+
+async function processToolUseBlocks(
+  blocks: Anthropic.Messages.ContentBlock[],
+  channel: string,
+  proposals: ProposalDescriptor[],
+): Promise<{ toolResults: ToolResultBlockParam[]; lastTool: string | null }> {
+  const toolResults: ToolResultBlockParam[] = [];
+  let lastTool: string | null = null;
+
+  for (const block of blocks) {
+    if (block.type !== "tool_use") continue;
+    const toolBlock = block as ToolUseBlock;
+    const toolInput = toolBlock.input as Record<string, unknown>;
+
+    if (READ_TOOLS.has(toolBlock.name)) {
+      lastTool = toolBlock.name;
+      toolResults.push(await processReadToolBlock(toolBlock, toolInput));
+    } else if (PROPOSAL_TOOLS.has(toolBlock.name)) {
+      lastTool = toolBlock.name;
+      toolResults.push(await processProposalToolBlock(toolBlock, toolInput, channel, proposals));
+    } else {
+      toolResults.push({
+        type: "tool_result",
+        tool_use_id: toolBlock.id,
+        content: `Unknown tool: ${toolBlock.name}`,
+        is_error: true,
+      });
+    }
+  }
+
+  return { toolResults, lastTool };
+}
+
+function deduplicateHistory(
+  inputMessages: { role: "user" | "assistant"; content: string }[],
+): { role: "user" | "assistant"; content: string }[] {
+  let history = [...inputMessages];
+  let trailingUsers = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].role === "user") trailingUsers++;
+    else break;
+  }
+  if (trailingUsers > 1) {
+    history = [
+      ...history.slice(0, history.length - trailingUsers),
+      history[history.length - 1],
+    ];
+  }
+  return history;
+}
+
+function collectTextBlocks(
+  blocks: Anthropic.Messages.ContentBlock[],
+  onTextDelta?: (delta: string) => void,
+): string {
+  let text = "";
+  for (const block of blocks) {
+    if (block.type === "text") {
+      text += block.text;
+      if (onTextDelta) onTextDelta(block.text);
+    }
+  }
+  return text;
 }
 
 // ─── Channel-agnostic agent turn ─────────────────────────────────────────────
@@ -992,18 +1191,7 @@ export async function runAgentTurn(args: {
 
   // Guard against orphaned consecutive user messages.
   // Keep the most recent user message; strip extra trailing user messages.
-  let history = [...inputMessages];
-  let trailingUsers = 0;
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i].role === "user") trailingUsers++;
-    else break;
-  }
-  if (trailingUsers > 1) {
-    history = [
-      ...history.slice(0, history.length - trailingUsers),
-      history[history.length - 1],
-    ];
-  }
+  const history = deduplicateHistory(inputMessages);
 
   const messages: MessageParam[] = history.map((m) => ({
     role: m.role as "user" | "assistant",
@@ -1026,109 +1214,15 @@ export async function runAgentTurn(args: {
       });
 
       if (res.stop_reason === "tool_use") {
-        const toolResults: ToolResultBlockParam[] = [];
-
-        for (const block of res.content) {
-          if (block.type !== "tool_use") continue;
-          const toolBlock = block as ToolUseBlock;
-          const toolInput = toolBlock.input as Record<string, unknown>;
-
-          if (READ_TOOLS.has(toolBlock.name)) {
-            lastTool = toolBlock.name;
-            try {
-              const data = await runReadTool(toolBlock.name, toolInput);
-              toolResults.push({
-                type: "tool_result",
-                tool_use_id: toolBlock.id,
-                content: JSON.stringify(data),
-              });
-            } catch (err) {
-              toolResults.push({
-                type: "tool_result",
-                tool_use_id: toolBlock.id,
-                content: `Error executing tool: ${err instanceof Error ? err.message : String(err)}`,
-                is_error: true,
-              });
-            }
-          } else if (PROPOSAL_TOOLS.has(toolBlock.name)) {
-            lastTool = toolBlock.name;
-
-            // Run complex resolution (name lookups, previews) for new tools
-            const resolved = await resolveComplexProposal(toolBlock.name, toolInput);
-
-            // If resolution produced a blocking message, return it as an error result
-            if (resolved?.blockingMessage) {
-              toolResults.push({
-                type: "tool_result",
-                tool_use_id: toolBlock.id,
-                content: resolved.blockingMessage,
-                is_error: true,
-              });
-              continue;
-            }
-
-            // Build final params, title, fields
-            const finalParams = resolved ? resolved.params : toolInput;
-            const title = resolved ? resolved.title : buildProposalTitle(toolBlock.name, toolInput);
-            const fields = resolved ? resolved.fields : buildProposalFields(toolInput);
-
-            // Store the verbatim tool name — no transformation. This is the
-            // canonical action identifier across PendingProposal.action, the
-            // registry, and undo. (ADR-026)
-            const actionName = toolBlock.name;
-
-            // Persist a PendingProposal record
-            const pendingProposal = await db.pendingProposal.create({
-              data: {
-                action: actionName,
-                params: finalParams as unknown as Record<string, string>,
-                title,
-                channel,
-              },
-            });
-
-            const descriptor: ProposalDescriptor = {
-              id: pendingProposal.id,
-              action: actionName,
-              params: finalParams,
-              title,
-              fields,
-              reasoning: "",
-              choices: [
-                { id: "approve", label: "Approve", style: "primary" },
-                { id: "dismiss", label: "Dismiss" },
-              ],
-            };
-            proposals.push(descriptor);
-
-            toolResults.push({
-              type: "tool_result",
-              tool_use_id: toolBlock.id,
-              content: "Proposal surfaced to the user for approval.",
-            });
-          } else {
-            toolResults.push({
-              type: "tool_result",
-              tool_use_id: toolBlock.id,
-              content: `Unknown tool: ${toolBlock.name}`,
-              is_error: true,
-            });
-          }
-        }
-
+        const { toolResults, lastTool: lt } = await processToolUseBlocks(res.content, channel, proposals);
+        lastTool = lt ?? lastTool;
         messages.push({ role: "assistant", content: res.content });
         messages.push({ role: "user", content: toolResults });
         continue;
       }
 
       // end_turn — collect text blocks
-      for (const block of res.content) {
-        if (block.type === "text") {
-          fullText += block.text;
-          if (onTextDelta) onTextDelta(block.text);
-        }
-      }
-
+      fullText += collectTextBlocks(res.content, onTextDelta);
       break;
     }
   } catch (err) {
