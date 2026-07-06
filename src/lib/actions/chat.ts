@@ -11,7 +11,7 @@ export async function getMessages() {
 export async function saveMessage(
   role: "user" | "assistant",
   content: string,
-  channel?: "web" | "telegram",
+  channel?: "web" | "telegram" | "shortcut",
 ) {
   return db.chatMessage.create({ data: { role, content, channel: channel ?? null } });
 }

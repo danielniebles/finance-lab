@@ -6,13 +6,14 @@
 //   TELEGRAM_WEBHOOK_SECRET  — random string; must match the secret_token sent to setWebhook
 
 import { after, NextRequest } from "next/server";
-import { db } from "@/lib/db";
-import { saveMessage } from "@/lib/actions/chat";
 import { runAgentTurn } from "@/lib/agent/run-agent-turn";
+import {
+  runTurnAndDeliverToTelegram,
+  saveAssistantTurn,
+} from "@/lib/agent/deliver-to-telegram";
 import { resolveProposal } from "@/lib/agent/execute-proposal";
 import {
   sendMessage,
-  sendChatAction,
   answerCallbackQuery,
   editMessageText,
 } from "@/lib/telegram/api";
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   after(async () => {
     try {
       if (update.message?.text) {
-        await handleTextMessage(chatId, update.message.text);
+        await handleTextMessage(update.message.text);
       } else if (update.callback_query) {
         await handleCallbackQuery(update.callback_query);
       }
@@ -98,78 +99,13 @@ export async function POST(req: NextRequest): Promise<Response> {
 }
 
 // ─── Message handler ──────────────────────────────────────────────────────────
+// Thin wrapper: the shared helper does history load, saveMessage, runAgentTurn,
+// and delivery (ADR-028). Delivery is always Telegram — chatId is always equal
+// to TELEGRAM_ALLOWED_CHAT_ID by construction (the allowlist check already ran
+// in POST() before this is ever called), so the helper resolves it internally.
 
-async function handleTextMessage(chatId: number, text: string): Promise<void> {
-  // Signal typing immediately
-  await sendChatAction(chatId, "typing");
-
-  // Load recent shared history (web + telegram)
-  const historyRows = await db.chatMessage.findMany({
-    orderBy: { createdAt: "asc" },
-    take: 20,
-  });
-
-  const history = historyRows.map((m) => ({
-    role: m.role as "user" | "assistant",
-    content: m.content,
-  }));
-
-  // Append the incoming user message to history before passing to agent
-  history.push({ role: "user", content: text });
-
-  // Save user message
-  await saveMessage("user", text, "telegram");
-
-  // Run agent turn (buffered — no streaming callback for Telegram)
-  const result = await runAgentTurn({
-    messages: history,
-    context: undefined,
-    channel: "telegram",
-  });
-
-  // Persist a single coherent assistant turn (text + proposal summary), so a
-  // turn that only proposed (no text) still threads into the shared history.
-  await saveAssistantTurn(result.text, result.proposals, "telegram");
-
-  // Send assistant text to Telegram
-  if (result.text) {
-    await sendMessage(chatId, result.text);
-  }
-
-  // Send each proposal as a separate message with inline keyboard
-  for (const proposal of result.proposals) {
-    const { text: proposalText, reply_markup } = toTelegramMessage(proposal);
-    await sendMessage(chatId, proposalText, {
-      reply_markup,
-      parse_mode: "HTML",
-    });
-  }
-}
-
-// ─── History threading ────────────────────────────────────────────────────────
-// A turn whose only output is a proposal (no text) was previously dropped from
-// ChatMessage entirely, so the model couldn't see what it had already proposed
-// and re-asked / drifted next turn. Always persist a combined record.
-
-function buildAssistantRecord(
-  text: string | undefined,
-  proposals: { title: string }[],
-): string {
-  const proposalSummary = proposals
-    .map((p) => `[Proposed: ${p.title} — awaiting your approval]`)
-    .join("\n");
-  return [text, proposalSummary].filter(Boolean).join("\n\n");
-}
-
-async function saveAssistantTurn(
-  text: string | undefined,
-  proposals: { title: string }[],
-  channel: "telegram",
-): Promise<void> {
-  const assistantRecord = buildAssistantRecord(text, proposals);
-  if (assistantRecord) {
-    await saveMessage("assistant", assistantRecord, channel);
-  }
+async function handleTextMessage(text: string): Promise<void> {
+  await runTurnAndDeliverToTelegram(text, { channel: "telegram" });
 }
 
 // ─── Callback query handler ───────────────────────────────────────────────────
@@ -183,7 +119,6 @@ async function handleUndoCallback(cbq: TelegramCallbackQuery, originalProposalId
   if (chatId == null) return;
 
   // Trigger the undo proposal directly without needing an agent turn
-  const { runAgentTurn } = await import("@/lib/agent/run-agent-turn");
   const undoResult = await runAgentTurn({
     messages: [{ role: "user", content: `Undo the last action (proposal id: ${originalProposalId})` }],
     channel: "telegram",
@@ -195,7 +130,6 @@ async function handleUndoCallback(cbq: TelegramCallbackQuery, originalProposalId
 
   // Send the undo proposal card
   for (const proposal of undoResult.proposals) {
-    const { toTelegramMessage } = await import("@/lib/telegram/render");
     const { text: proposalText, reply_markup } = toTelegramMessage(proposal);
     await sendMessage(chatId, proposalText, {
       reply_markup,

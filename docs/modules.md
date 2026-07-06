@@ -26,6 +26,8 @@ src/
         resolve/route.ts    — POST handler: { proposalId, choiceId } → resolveProposal() → { ok, message }
       telegram/
         route.ts            — Telegram webhook: verifies secret token + allowlist; dispatches message and callback_query updates
+      ingest/
+        route.ts            — External ingest webhook (ADR-028): bearer-auth POST { text }, 200 { ok: true } immediately, then runs the shared delivery helper in after()
   components/
     app-sidebar.tsx         — Sidebar nav + theme toggle
     overview/               — OverviewDashboard (BudgetBarsPanel, TopUnplannedPanel), ExpenseDonut, ForecastPanel
@@ -66,6 +68,7 @@ src/
       proposals/            — complex proposal resolvers, split by domain: shared.ts (ResolvedProposal type + buildResolvedProposal/blockingProposal helpers), drive.ts, installments.ts, loans.ts, undo.ts, index.ts (RESOLVER_REGISTRY + resolveComplexProposal() dispatch, re-exports every resolver)
       run-agent-turn.ts     — Channel-agnostic tool-use loop orchestrator: derives PROPOSAL_TOOLS from PROPOSAL_ACTIONS, processReadToolBlock/processProposalToolBlock/processToolUseBlocks, persists PendingProposal on each proposal tool call, runAgentTurn(); previously a 1,200+ line god-file mixing tool dispatch/resolution/formatting/orchestration, split into the sibling files above (tools.ts, read-tools.ts, formatting.ts, proposals/)
       execute-proposal.ts   — resolveProposal(): looks up PendingProposal, dispatches via PROPOSAL_ACTIONS registry, marks approved/dismissed; used by both web and Telegram
+      deliver-to-telegram.ts — runTurnAndDeliverToTelegram(text, opts?): shared helper (ADR-028) — loads shared history, saveMessage, runAgentTurn({channel:"telegram"}), persists combined assistant turn, delivers text + proposal cards to TELEGRAM_ALLOWED_CHAT_ID; used by both the Telegram webhook (handleTextMessage) and /api/ingest
     telegram/
       api.ts                — Telegram Bot API helpers: sendMessage, answerCallbackQuery, editMessageText, sendChatAction
       render.ts             — toTelegramMessage(): converts ProposalDescriptor → Telegram text + inline_keyboard
@@ -136,8 +139,8 @@ src/
 ---
 
 ### `src/app/(app)/chat`
-**Responsibility:** Full-screen AI advisor backed by `claude-sonnet-4-6`. Uses a channel-agnostic tool-use loop (11 read tools + 9 proposal tools, including the ADR-027 `propose_account_adjustment`/`propose_transfer` pair), orchestrated by `src/lib/agent/run-agent-turn.ts` and split across `src/lib/agent/{tools,read-tools,formatting}.ts` and `src/lib/agent/proposals/`. Conversation history is persisted in `ChatMessage` (shared with Telegram). Both the web route (`src/app/api/chat/route.ts`) and the Telegram route persist a combined assistant-turn record — text plus a `[Proposed: ...]` summary line per proposal — instead of only the text reply, so a turn whose sole output was a proposal still threads into history (ADR-027; previously such turns vanished from the 20-message window, causing the model to re-ask). The floating chat panel is available on every page, module-context-aware. Proposal tools persist a `PendingProposal` record and surface action cards (`ActionCard`) that the user must approve before mutations occur (ADR-015). Approval calls `POST /api/proposals/resolve` which runs the unified `resolveProposal()` (ADR-022).
-**Key files:** `chat/page.tsx`, `components/chat/chat-provider.tsx` (NDJSON streaming + proposal state), `chat-messages.tsx`, `chat-input.tsx`, `floating-chat.tsx`, `action-card.tsx`, `src/app/api/chat/route.ts` (thin streaming wrapper), `src/app/api/proposals/resolve/route.ts` (web approve path), `src/lib/agent/run-agent-turn.ts` (tool-use loop orchestrator), `src/lib/agent/tools.ts` (tool JSON schemas), `src/lib/agent/read-tools.ts` (read-tool dispatch), `src/lib/agent/formatting.ts` (proposal display formatting), `src/lib/agent/proposals/` (complex resolvers by domain), `src/lib/agent/execute-proposal.ts` (unified write path)
+**Responsibility:** Full-screen AI advisor backed by `claude-sonnet-4-6`. Uses a channel-agnostic tool-use loop (11 read tools + 9 proposal tools, including the ADR-027 `propose_account_adjustment`/`propose_transfer` pair), orchestrated by `src/lib/agent/run-agent-turn.ts` and split across `src/lib/agent/{tools,read-tools,formatting}.ts` and `src/lib/agent/proposals/`. Conversation history is persisted in `ChatMessage` (shared across web, Telegram, and Shortcut ingest). The web route (`src/app/api/chat/route.ts`) persists a combined assistant-turn record — text plus a `[Proposed: ...]` summary line per proposal — instead of only the text reply, so a turn whose sole output was a proposal still threads into history (ADR-027; previously such turns vanished from the 20-message window, causing the model to re-ask). The Telegram and Shortcut-ingest entry points share this same behavior via `runTurnAndDeliverToTelegram()` (ADR-028) rather than duplicating it. The floating chat panel is available on every page, module-context-aware. Proposal tools persist a `PendingProposal` record and surface action cards (`ActionCard`) that the user must approve before mutations occur (ADR-015). Approval calls `POST /api/proposals/resolve` which runs the unified `resolveProposal()` (ADR-022).
+**Key files:** `chat/page.tsx`, `components/chat/chat-provider.tsx` (NDJSON streaming + proposal state), `chat-messages.tsx`, `chat-input.tsx`, `floating-chat.tsx`, `action-card.tsx`, `src/app/api/chat/route.ts` (thin streaming wrapper), `src/app/api/proposals/resolve/route.ts` (web approve path), `src/lib/agent/run-agent-turn.ts` (tool-use loop orchestrator), `src/lib/agent/tools.ts` (tool JSON schemas), `src/lib/agent/read-tools.ts` (read-tool dispatch), `src/lib/agent/formatting.ts` (proposal display formatting), `src/lib/agent/proposals/` (complex resolvers by domain), `src/lib/agent/execute-proposal.ts` (unified write path), `src/lib/agent/deliver-to-telegram.ts` (shared Telegram-delivery helper, ADR-028)
 **Dependencies:** All agent read queries, vault + recurring write actions, Anthropic SDK, Prisma (PendingProposal)
 **Exports:** `ChatPage` (route), `FloatingChat`, `ActionCard`
 **Transport:** `application/x-ndjson` — one JSON object per line: `{"type":"text","delta":"..."}` or `{"type":"proposal","proposalId":"...","action":"...","params":{...},"label":"..."}`
@@ -145,9 +148,16 @@ src/
 ---
 
 ### `src/app/api/telegram`
-**Responsibility:** Telegram webhook for the multi-channel agent (ADR-022). Receives `message` and `callback_query` updates from Telegram, verifies the secret token and the hard-allowlisted `chat_id`, and dispatches to the shared agent core. Text messages → `runAgentTurn()` → `sendMessage()`; inline keyboard taps → `resolveProposal()` → `answerCallbackQuery` + `editMessageText`. Both the main text-message path and the undo callback path persist a combined assistant-turn record (text + proposal summary) via `saveAssistantTurn()`, not just the text reply (ADR-027). Uses `after()` (Next.js) for fast-ack + async work pattern (Vercel-compatible).
-**Key files:** `src/app/api/telegram/route.ts`, `src/lib/telegram/api.ts`, `src/lib/telegram/render.ts`
+**Responsibility:** Telegram webhook for the multi-channel agent (ADR-022). Receives `message` and `callback_query` updates from Telegram, verifies the secret token and the hard-allowlisted `chat_id`, and dispatches to the shared agent core. Text messages are a thin wrapper over the shared `runTurnAndDeliverToTelegram()` helper (ADR-028, also used by `/api/ingest`); inline keyboard taps → `resolveProposal()` → `answerCallbackQuery` + `editMessageText`. Both the main text-message path (inside the shared helper) and the undo callback path persist a combined assistant-turn record (text + proposal summary) via `saveAssistantTurn()`, not just the text reply (ADR-027). Uses `after()` (Next.js) for fast-ack + async work pattern (Vercel-compatible).
+**Key files:** `src/app/api/telegram/route.ts`, `src/lib/agent/deliver-to-telegram.ts` (shared helper), `src/lib/telegram/api.ts`, `src/lib/telegram/render.ts`
 **Env vars required:** `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET`
+
+---
+
+### `src/app/api/ingest`
+**Responsibility:** External text ingress for the multi-channel agent (ADR-028) — a third channel over `runAgentTurn()`, for clients that aren't the web app or Telegram (e.g. an iPhone Shortcut forwarding a bank notification). `POST /api/ingest` requires `Authorization: Bearer <INGEST_SECRET>`; missing/mismatched → `401` with no side effects. Body `{ text: string }`; missing/empty/whitespace-only → `400`. On success, returns `200 { ok: true }` immediately and runs `runTurnAndDeliverToTelegram(text, { channel: "shortcut" })` inside `after()`, so the reply/proposal is delivered to Telegram exactly like a normal Telegram message — same shared history, same propose-then-confirm gate. No idempotency guard (the Shortcut fires once per message, unlike Telegram's retry-prone webhook).
+**Key files:** `src/app/api/ingest/route.ts`, `src/app/api/ingest/route.test.ts`, `src/lib/agent/deliver-to-telegram.ts` (shared helper)
+**Env vars required:** `INGEST_SECRET`
 
 ---
 

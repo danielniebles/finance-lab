@@ -272,7 +272,7 @@ model ChatMessage {
   id        String   @id @default(cuid())
   role      String   // "user" | "assistant"
   content   String
-  channel   String?  // "web" | "telegram" — null = legacy/unknown
+  channel   String?  // "web" | "telegram" | "shortcut" — null = legacy/unknown
   createdAt DateTime @default(now())
 }
 

@@ -53,10 +53,11 @@ The agent should:
 
 ## 2b. Channels
 
-The agent core is channel-agnostic. `runAgentTurn()` knows nothing about React or Telegram — it emits neutral `ProposalDescriptor` objects and streams text via an `onTextDelta` callback. Two channels are currently wired:
+The agent core is channel-agnostic. `runAgentTurn()` knows nothing about React or Telegram — it emits neutral `ProposalDescriptor` objects and streams text via an `onTextDelta` callback. Three channels are currently wired:
 
 - **Web:** the NDJSON stream in `/api/chat` serializes proposals as `{type:"proposal", proposalId, ...}`; `ActionCard` renders them; approval calls `POST /api/proposals/resolve`.
 - **Telegram:** the webhook at `/api/telegram` calls `runAgentTurn()` (buffered, no streaming), sends text and proposal messages with inline keyboard buttons; button taps call `resolveProposal()` directly.
+- **Shortcut/HTTP ingest:** `POST /api/ingest` (bearer `INGEST_SECRET`) accepts `{ text }` from an external client (e.g. an iPhone Shortcut forwarding a bank message), runs the shared agent-turn helper (`runTurnAndDeliverToTelegram`, also used by the Telegram webhook), and delivers the reply/proposal to Telegram. Propose-then-confirm is unchanged — approval still happens in Telegram.
 
 Propose-then-confirm (§2) is preserved on every channel — the user must tap Approve before any mutation occurs.
 

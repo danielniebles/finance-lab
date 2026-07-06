@@ -296,14 +296,14 @@ Ledger entry for a vault. Positive = contribution, negative = withdrawal.
 ---
 
 ### ChatMessage
-Persisted conversation history for the AI advisor. Up to 20 recent messages are sent to Claude on each request. History is shared across channels (web + Telegram) for continuity.
+Persisted conversation history for the AI advisor. Up to 20 recent messages are sent to Claude on each request. History is shared across channels (web + Telegram + Shortcut ingest) for continuity.
 
 | Field | Type | Description |
 |---|---|---|
 | id | String (cuid) | Primary key |
 | role | String | "user" or "assistant" |
 | content | String | Full message text |
-| channel | String? | "web" or "telegram" — null = legacy/unknown. For filtering/debugging; history is shared by default. |
+| channel | String? | "web" \| "telegram" \| "shortcut" — null = legacy/unknown. For filtering/debugging; history is shared by default. |
 | createdAt | DateTime | Message timestamp |
 
 ---
