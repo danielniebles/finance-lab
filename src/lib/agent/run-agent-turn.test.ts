@@ -104,6 +104,8 @@ import {
   resolveMarkInstallmentPaid,
   resolveCreateLoan,
   resolveRecordLoanPayment,
+  resolveAccountAdjustment,
+  resolveTransfer,
   resolveUndoLast,
   resolveComplexProposal,
   RESOLVER_REGISTRY,
@@ -160,6 +162,20 @@ const BANCOLOMBIA_ACCOUNT = {
   id: "a1",
   name: BANCOLOMBIA_NAME,
   accountType: "BANK" as const,
+  color: null,
+  includeInAvailable: true,
+  balance: 0,
+  loansOut: 0,
+  entries: [],
+  vaultEntries: [],
+};
+
+const NU_NAME = "Nu";
+
+const NU_ACCOUNT = {
+  id: "a2",
+  name: NU_NAME,
+  accountType: "DIGITAL" as const,
   color: null,
   includeInAvailable: true,
   balance: 0,
@@ -984,6 +1000,123 @@ describe("resolveRecordLoanPayment — loan targeting and balance math", () => {
     // Overpaying — remaining should floor at 0, not go negative.
     const result = await resolveRecordLoanPayment({ debtorName: "Juan", amount: 500_000 });
     expect(result.fields).toContainEqual({ label: "Resulting balance", value: formatCOP(0) });
+  });
+});
+
+// ─── resolveAccountAdjustment ─────────────────────────────────────────────────
+
+describe("resolveAccountAdjustment", () => {
+  it("returns a blocking message when the account isn't found (never auto-created)", async () => {
+    vi.mocked(getLoansOverview).mockResolvedValue(
+      makeLoansOverview({ accounts: [BANCOLOMBIA_ACCOUNT] }),
+    );
+
+    const result = await resolveAccountAdjustment({
+      accountName: "Nequi",
+      amount: -700_000,
+    });
+    expect(result.blockingMessage).toMatch(/Savings account "Nequi" not found/);
+    expect(result.blockingMessage).toContain(BANCOLOMBIA_NAME);
+    expect(result.params).toEqual({ accountName: "Nequi", amount: -700_000 });
+  });
+
+  it("resolves the account by case-insensitive exact match and keeps the signed amount", async () => {
+    vi.mocked(getLoansOverview).mockResolvedValue(
+      makeLoansOverview({ accounts: [BANCOLOMBIA_ACCOUNT] }),
+    );
+
+    const result = await resolveAccountAdjustment({
+      accountName: "bancolombia",
+      amount: -700_000,
+      notes: "Prima mamá",
+    });
+
+    expect(result.blockingMessage).toBeUndefined();
+    expect(result.params.accountId).toBe(BANCOLOMBIA_ACCOUNT.id);
+    expect(result.params.amount).toBe(-700_000);
+    expect(result.params.notes).toBe("Prima mamá");
+    expect(result.fields).toContainEqual({ label: "Notes", value: "Prima mamá" });
+  });
+
+  it("labels a negative amount as a Debit and a positive amount as a Credit in the title", async () => {
+    vi.mocked(getLoansOverview).mockResolvedValue(
+      makeLoansOverview({ accounts: [BANCOLOMBIA_ACCOUNT] }),
+    );
+
+    const debit = await resolveAccountAdjustment({
+      accountName: BANCOLOMBIA_NAME,
+      amount: -700_000,
+    });
+    expect(debit.title).toContain("Debit");
+    expect(debit.title).toContain(BANCOLOMBIA_NAME);
+
+    const credit = await resolveAccountAdjustment({
+      accountName: BANCOLOMBIA_NAME,
+      amount: 200_000,
+    });
+    expect(credit.title).toContain("Credit");
+  });
+
+  it("defaults date to today when omitted", async () => {
+    vi.mocked(getLoansOverview).mockResolvedValue(
+      makeLoansOverview({ accounts: [BANCOLOMBIA_ACCOUNT] }),
+    );
+
+    const result = await resolveAccountAdjustment({
+      accountName: BANCOLOMBIA_NAME,
+      amount: -100_000,
+    });
+    const today = new Date().toISOString().slice(0, 10);
+    expect(result.params.date).toBe(today);
+  });
+});
+
+// ─── resolveTransfer ───────────────────────────────────────────────────────────
+
+describe("resolveTransfer", () => {
+  it("returns a blocking message naming the missing fromAccount (never auto-created)", async () => {
+    vi.mocked(getLoansOverview).mockResolvedValue(
+      makeLoansOverview({ accounts: [NU_ACCOUNT] }),
+    );
+
+    const result = await resolveTransfer({
+      fromAccountName: "Bancolombia",
+      toAccountName: NU_NAME,
+      amount: 500_000,
+    });
+    expect(result.blockingMessage).toMatch(/Savings account "Bancolombia" not found/);
+    expect(result.blockingMessage).toContain(NU_NAME);
+  });
+
+  it("returns a blocking message naming the missing toAccount (never auto-created)", async () => {
+    vi.mocked(getLoansOverview).mockResolvedValue(
+      makeLoansOverview({ accounts: [BANCOLOMBIA_ACCOUNT] }),
+    );
+
+    const result = await resolveTransfer({
+      fromAccountName: BANCOLOMBIA_NAME,
+      toAccountName: "Nequi",
+      amount: 500_000,
+    });
+    expect(result.blockingMessage).toMatch(/Savings account "Nequi" not found/);
+    expect(result.blockingMessage).toContain(BANCOLOMBIA_NAME);
+  });
+
+  it("resolves both accounts to their ids on success", async () => {
+    vi.mocked(getLoansOverview).mockResolvedValue(
+      makeLoansOverview({ accounts: [BANCOLOMBIA_ACCOUNT, NU_ACCOUNT] }),
+    );
+
+    const result = await resolveTransfer({
+      fromAccountName: BANCOLOMBIA_NAME,
+      toAccountName: NU_NAME,
+      amount: 500_000,
+    });
+    expect(result.blockingMessage).toBeUndefined();
+    expect(result.params.fromAccountId).toBe(BANCOLOMBIA_ACCOUNT.id);
+    expect(result.params.toAccountId).toBe(NU_ACCOUNT.id);
+    expect(result.params.amount).toBe(500_000);
+    expect(result.title).toBe(`Transfer ${formatCOP(500_000)}: ${BANCOLOMBIA_NAME} → ${NU_NAME}`);
   });
 });
 

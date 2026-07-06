@@ -127,9 +127,12 @@ async function handleTextMessage(chatId: number, text: string): Promise<void> {
     channel: "telegram",
   });
 
-  // Save assistant text
+  // Persist a single coherent assistant turn (text + proposal summary), so a
+  // turn that only proposed (no text) still threads into the shared history.
+  await saveAssistantTurn(result.text, result.proposals, "telegram");
+
+  // Send assistant text to Telegram
   if (result.text) {
-    await saveMessage("assistant", result.text, "telegram");
     await sendMessage(chatId, result.text);
   }
 
@@ -143,40 +146,113 @@ async function handleTextMessage(chatId: number, text: string): Promise<void> {
   }
 }
 
+// ─── History threading ────────────────────────────────────────────────────────
+// A turn whose only output is a proposal (no text) was previously dropped from
+// ChatMessage entirely, so the model couldn't see what it had already proposed
+// and re-asked / drifted next turn. Always persist a combined record.
+
+function buildAssistantRecord(
+  text: string | undefined,
+  proposals: { title: string }[],
+): string {
+  const proposalSummary = proposals
+    .map((p) => `[Proposed: ${p.title} — awaiting your approval]`)
+    .join("\n");
+  return [text, proposalSummary].filter(Boolean).join("\n\n");
+}
+
+async function saveAssistantTurn(
+  text: string | undefined,
+  proposals: { title: string }[],
+  channel: "telegram",
+): Promise<void> {
+  const assistantRecord = buildAssistantRecord(text, proposals);
+  if (assistantRecord) {
+    await saveMessage("assistant", assistantRecord, channel);
+  }
+}
+
 // ─── Callback query handler ───────────────────────────────────────────────────
 
 // Actions where an undo button is offered after approval — sourced from the registry (ADR-026).
+
+async function handleUndoCallback(cbq: TelegramCallbackQuery, originalProposalId: string): Promise<void> {
+  await answerCallbackQuery(cbq.id, "Running undo...");
+
+  const chatId = cbq.message?.chat?.id;
+  if (chatId == null) return;
+
+  // Trigger the undo proposal directly without needing an agent turn
+  const { runAgentTurn } = await import("@/lib/agent/run-agent-turn");
+  const undoResult = await runAgentTurn({
+    messages: [{ role: "user", content: `Undo the last action (proposal id: ${originalProposalId})` }],
+    channel: "telegram",
+  });
+
+  // Persist this turn too — same combined text+proposal-summary record as
+  // the main text-message path, so an undo turn threads into history.
+  await saveAssistantTurn(undoResult.text, undoResult.proposals, "telegram");
+
+  // Send the undo proposal card
+  for (const proposal of undoResult.proposals) {
+    const { toTelegramMessage } = await import("@/lib/telegram/render");
+    const { text: proposalText, reply_markup } = toTelegramMessage(proposal);
+    await sendMessage(chatId, proposalText, {
+      reply_markup,
+      parse_mode: "HTML",
+    });
+  }
+  if (undoResult.text) {
+    await sendMessage(chatId, undoResult.text);
+  }
+}
+
+/** After an approved reversible action, send a follow-up message with an ↩ Undo button. */
+async function sendUndoButtonIfReversible(chatId: number, proposalId: string): Promise<void> {
+  const { db } = await import("@/lib/db");
+  const proposal = await db.pendingProposal.findUnique({
+    where: { id: proposalId },
+    select: { action: true },
+  });
+  if (proposal && REVERSIBLE_ACTIONS.includes(proposal.action)) {
+    await sendMessage(chatId, "Action approved.", {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "↩ Undo", callback_data: `undo:${proposalId}` },
+        ]],
+      },
+    });
+  }
+}
+
+async function handleResolveCallback(
+  cbq: TelegramCallbackQuery,
+  proposalId: string,
+  choiceId: "approve" | "dismiss",
+): Promise<void> {
+  const result = await resolveProposal({ proposalId, choiceId });
+
+  await answerCallbackQuery(cbq.id, result.message);
+
+  // Edit the message to reflect the resolved state and remove the buttons
+  const chatId = cbq.message?.chat?.id;
+  const messageId = cbq.message?.message_id;
+  if (chatId == null || messageId == null) return;
+
+  const resolvedText = choiceId === "approve" ? "✅ Approved" : "❌ Dismissed";
+  await editMessageText(chatId, messageId, resolvedText, { reply_markup: undefined });
+
+  if (choiceId === "approve" && result.ok) {
+    await sendUndoButtonIfReversible(chatId, proposalId);
+  }
+}
 
 async function handleCallbackQuery(cbq: TelegramCallbackQuery): Promise<void> {
   const data = cbq.data ?? "";
 
   // Handle undo callback: "undo:{proposalId}"
   if (data.startsWith("undo:")) {
-    const originalProposalId = data.slice(5);
-    await answerCallbackQuery(cbq.id, "Running undo...");
-
-    const chatId = cbq.message?.chat?.id;
-    if (chatId == null) return;
-
-    // Trigger the undo proposal directly without needing an agent turn
-    const { runAgentTurn } = await import("@/lib/agent/run-agent-turn");
-    const undoResult = await runAgentTurn({
-      messages: [{ role: "user", content: `Undo the last action (proposal id: ${originalProposalId})` }],
-      channel: "telegram",
-    });
-
-    // Send the undo proposal card
-    for (const proposal of undoResult.proposals) {
-      const { toTelegramMessage } = await import("@/lib/telegram/render");
-      const { text: proposalText, reply_markup } = toTelegramMessage(proposal);
-      await sendMessage(chatId, proposalText, {
-        reply_markup,
-        parse_mode: "HTML",
-      });
-    }
-    if (undoResult.text) {
-      await sendMessage(chatId, undoResult.text);
-    }
+    await handleUndoCallback(cbq, data.slice(5));
     return;
   }
 
@@ -195,34 +271,5 @@ async function handleCallbackQuery(cbq: TelegramCallbackQuery): Promise<void> {
     return;
   }
 
-  const result = await resolveProposal({ proposalId, choiceId });
-
-  await answerCallbackQuery(cbq.id, result.message);
-
-  // Edit the message to reflect the resolved state and remove the buttons
-  const chatId = cbq.message?.chat?.id;
-  const messageId = cbq.message?.message_id;
-  if (chatId != null && messageId != null) {
-    const resolvedText = choiceId === "approve" ? "✅ Approved" : "❌ Dismissed";
-    await editMessageText(chatId, messageId, resolvedText, { reply_markup: undefined });
-
-    // For approved reversible actions, send a follow-up with an undo button
-    if (choiceId === "approve" && result.ok) {
-      // Look up the proposal to check its action
-      const { db } = await import("@/lib/db");
-      const proposal = await db.pendingProposal.findUnique({
-        where: { id: proposalId },
-        select: { action: true },
-      });
-      if (proposal && REVERSIBLE_ACTIONS.includes(proposal.action)) {
-        await sendMessage(chatId, "Action approved.", {
-          reply_markup: {
-            inline_keyboard: [[
-              { text: "↩ Undo", callback_data: `undo:${proposalId}` },
-            ]],
-          },
-        });
-      }
-    }
-  }
+  await handleResolveCallback(cbq, proposalId, choiceId);
 }

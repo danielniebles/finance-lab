@@ -8,11 +8,13 @@ import type { ResolvedProposal } from "./shared";
 import { resolveImportFromDrive } from "./drive";
 import { resolveCreateInstallment, resolveMarkInstallmentPaid } from "./installments";
 import { resolveCreateLoan, resolveRecordLoanPayment } from "./loans";
+import { resolveAccountAdjustment, resolveTransfer } from "./accounts";
 import { resolveUndoLast } from "./undo";
 
 export { resolveDriveFile, detectDrivePeriod, resolveImportFromDrive } from "./drive";
 export { resolveCreateInstallment, resolveMarkInstallmentPaid } from "./installments";
 export { resolveCreateLoan, resolveRecordLoanPayment } from "./loans";
+export { resolveAccountAdjustment, resolveTransfer } from "./accounts";
 export { resolveUndoLast } from "./undo";
 export type { ResolvedProposal, ProposalField } from "./shared";
 
@@ -35,6 +37,8 @@ export const RESOLVER_REGISTRY: Record<string, ComplexResolver> = {
   propose_mark_installment_paid: (input, month, year) => resolveMarkInstallmentPaid(input, month, year),
   propose_create_loan: (input) => resolveCreateLoan(input),
   propose_record_loan_payment: (input) => resolveRecordLoanPayment(input),
+  propose_account_adjustment: (input) => resolveAccountAdjustment(input),
+  propose_transfer: (input) => resolveTransfer(input),
   propose_undo_last: () => resolveUndoLast(),
 };
 

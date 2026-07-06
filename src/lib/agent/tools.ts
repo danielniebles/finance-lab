@@ -372,6 +372,39 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
 
+  // ── Savings account tools ──
+  {
+    name: "propose_account_adjustment",
+    description:
+      "Propose a direct debit/credit/correction on a savings account you control — money entering or leaving the account with no repayment expected (e.g. a gift, a direct expense, a balance correction). Signed amount: negative = money out, positive = money in. Call get_loans first to resolve the account name. Savings accounts CANNOT be auto-created — ask the user which account to use if not found. Do NOT use for money expected back from a debtor (use propose_create_loan) or for vault balances (use propose_vault_contribution/propose_vault_withdrawal). Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        accountName: { type: "string", description: "Savings account name (must exist)" },
+        amount: { type: "number", description: "Signed amount in COP: negative = withdrawal/spend/gift out, positive = deposit/credit in" },
+        date: { type: "string", description: "ISO date (YYYY-MM-DD), defaults to today" },
+        notes: { type: "string", description: "Notes (optional)" },
+      },
+      required: ["accountName", "amount"],
+    },
+  },
+  {
+    name: "propose_transfer",
+    description:
+      "Propose moving money between two of the user's savings accounts. Call get_loans first to resolve both account names. Both accounts must exist — savings accounts CANNOT be auto-created. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        fromAccountName: { type: "string", description: "Source savings account name (must exist)" },
+        toAccountName: { type: "string", description: "Destination savings account name (must exist)" },
+        amount: { type: "number", description: "Transfer amount in COP (positive)" },
+        date: { type: "string", description: "ISO date (YYYY-MM-DD), defaults to today" },
+        notes: { type: "string", description: "Notes (optional)" },
+      },
+      required: ["fromAccountName", "toAccountName", "amount"],
+    },
+  },
+
   // ── Undo tool ──
   {
     name: "propose_undo_last",

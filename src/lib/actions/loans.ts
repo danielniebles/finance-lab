@@ -54,8 +54,9 @@ export async function createEntry(data: {
   date: Date;
   notes?: string;
 }) {
-  await db.accountEntry.create({ data });
+  const created = await db.accountEntry.create({ data });
   revalidatePath(PATH);
+  return created;
 }
 
 export async function deleteEntry(id: string) {
@@ -72,8 +73,9 @@ export async function createTransfer(data: {
   date: Date;
   notes?: string;
 }) {
-  await db.transfer.create({ data });
+  const created = await db.transfer.create({ data });
   revalidatePath(PATH);
+  return created;
 }
 
 export async function deleteTransfer(id: string) {

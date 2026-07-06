@@ -50,9 +50,15 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        // Persist assistant response
-        if (result.text) {
-          await saveMessage("assistant", result.text);
+        // Persist a single coherent assistant turn (text + proposal summary),
+        // so a turn that only proposed (no text) still threads into the
+        // shared history the next Telegram/web turn reads back.
+        const proposalSummary = result.proposals
+          .map((p) => `[Proposed: ${p.title} — awaiting your approval]`)
+          .join("\n");
+        const assistantRecord = [result.text, proposalSummary].filter(Boolean).join("\n\n");
+        if (assistantRecord) {
+          await saveMessage("assistant", assistantRecord);
         }
 
         controller.close();

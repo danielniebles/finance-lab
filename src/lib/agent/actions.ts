@@ -29,10 +29,16 @@ import {
   createDebtor,
   createLoan,
   recordLoanPayment,
+  createEntry,
+  deleteEntry,
+  createTransfer,
+  deleteTransfer,
 } from "@/lib/actions/loans";
 import { importFromDrive } from "@/lib/actions/drive";
 import { db } from "@/lib/db";
-import type { VaultKind, VaultGoalType, BatchStatus } from "@/generated/prisma";
+import type { VaultKind, VaultGoalType, BatchStatus, EntryType } from "@/generated/prisma";
+
+const CREATED_ID_MISSING_MSG = "Cannot undo: createdId not recorded.";
 
 // ─── Registry shape ───────────────────────────────────────────────────────────
 
@@ -208,7 +214,7 @@ async function undoCreateInstallment(
   params: Record<string, unknown>,
 ): Promise<void> {
   if (!params.createdId)
-    throw new Error("Cannot undo: createdId not recorded.");
+    throw new Error(CREATED_ID_MISSING_MSG);
   await db.installment.delete({ where: { id: params.createdId as string } });
   if (params.createdCardId) {
     const remaining = await db.installment.count({
@@ -289,7 +295,7 @@ async function undoCreateLoan(
   params: Record<string, unknown>,
 ): Promise<void> {
   if (!params.createdId)
-    throw new Error("Cannot undo: createdId not recorded.");
+    throw new Error(CREATED_ID_MISSING_MSG);
   await db.loan.delete({ where: { id: params.createdId as string } });
   if (params.createdDebtorId) {
     const debtorLoanCount = await db.loan.count({
@@ -330,8 +336,50 @@ async function undoRecordLoanPayment(
   params: Record<string, unknown>,
 ): Promise<void> {
   if (!params.createdId)
-    throw new Error("Cannot undo: createdId not recorded.");
+    throw new Error(CREATED_ID_MISSING_MSG);
   await db.loanPayment.delete({ where: { id: params.createdId as string } });
+}
+
+// ─── Account actions ──────────────────────────────────────────────────────────
+
+async function executeAccountAdjustment(
+  params: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const created = await createEntry({
+    accountId: params.accountId as string,
+    type: "ADJUSTMENT" as EntryType,
+    amount: Number(params.amount),
+    date: new Date(params.date as string),
+    notes: (params.notes as string | undefined) ?? undefined,
+  });
+  return { createdId: created.id };
+}
+
+async function undoAccountAdjustment(
+  params: Record<string, unknown>,
+): Promise<void> {
+  if (!params.createdId)
+    throw new Error(CREATED_ID_MISSING_MSG);
+  await deleteEntry(params.createdId as string);
+}
+
+async function executeTransfer(
+  params: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const created = await createTransfer({
+    fromAccountId: params.fromAccountId as string,
+    toAccountId: params.toAccountId as string,
+    amount: Number(params.amount),
+    date: new Date(params.date as string),
+    notes: (params.notes as string | undefined) ?? undefined,
+  });
+  return { createdId: created.id };
+}
+
+async function undoTransfer(params: Record<string, unknown>): Promise<void> {
+  if (!params.createdId)
+    throw new Error(CREATED_ID_MISSING_MSG);
+  await deleteTransfer(params.createdId as string);
 }
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
@@ -370,6 +418,14 @@ export const PROPOSAL_ACTIONS: Record<string, ProposalActionDef> = {
   propose_record_loan_payment: {
     execute: executeRecordLoanPayment,
     undo: undoRecordLoanPayment,
+  },
+  propose_account_adjustment: {
+    execute: executeAccountAdjustment,
+    undo: undoAccountAdjustment,
+  },
+  propose_transfer: {
+    execute: executeTransfer,
+    undo: undoTransfer,
   },
 };
 

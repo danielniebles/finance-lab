@@ -123,7 +123,9 @@ Authoritative mapping: `src/lib/agent/actions.ts`.
 | `propose_mark_installment_paid(installmentName, month?, year?)` | `markPayment()` | Mark the cuota due in the given month as paid. Resolves installment by name and slot by month. |
 | `propose_create_loan(amount, debtorName, fundingAccountName, date?, expectedBy?, notes?)` | `createLoan()` | Create a loan record. If debtor doesn't exist, creates them in the proposal. Savings accounts must exist — ask user if not found. |
 | `propose_record_loan_payment(debtorName, amount, date?, notes?)` | `recordLoanPayment()` | Record a repayment from a debtor. Targets oldest active loan when multiple exist. Shows resulting outstanding balance. |
-| `propose_undo_last()` | reverse of last approved action | Proposes reversal of the most recent approved conversational write. Reversible: createInstallment, markPayment, createLoan, recordPayment, createDebtor, createCard. Imports are NOT reversible. |
+| `propose_account_adjustment(accountName, amount, date?, notes?)` | `createEntry()` (type ADJUSTMENT) | Direct debit/credit/correction on a savings account — no repayment expected. Signed amount: negative = money out, positive = money in. Account must exist — ask user if not found. |
+| `propose_transfer(fromAccountName, toAccountName, amount, date?, notes?)` | `createTransfer()` | Move money between two of the user's savings accounts. Both accounts must exist — ask user if either is not found. |
+| `propose_undo_last()` | reverse of last approved action | Proposes reversal of the most recent approved conversational write. Reversible: createInstallment, markPayment, createLoan, recordPayment, createDebtor, createCard, accountAdjustment, transfer. Imports are NOT reversible. |
 
 ---
 
@@ -254,6 +256,20 @@ This uses German amortization (`computeInstallmentDue` in `installment-utils.ts`
 **Undo scope.** `propose_undo_last` only searches proposals with `status = "approved"` and `action` in the reversible set. Imports are never reversible (re-import the correct file instead). Undo itself is a proposal — the user must approve it. After a successful undo, the original proposal's status is set to `"undone"`.
 
 **Telegram undo button.** After approving a reversible action via Telegram, the webhook automatically sends an "↩ Undo" inline button. Tapping it triggers `propose_undo_last` targeting that specific proposal.
+
+---
+
+## 5e. Domain rules: Savings-account adjustments vs. vaults, ask-XOR-propose (ADR-027)
+
+**A savings account is not a vault.** `propose_account_adjustment` and `propose_transfer` operate on `SavingsAccount` balances (the loans/liquidity model). `propose_vault_*` tools operate on a vault's own ledger (§5) — a separate concept with its own balance that is never part of `totalSavings`. Never treat a savings account id as a vault id or vice versa.
+
+**Gift / direct expense ≠ loan.** Money leaving an account with no repayment expected (a gift, a direct purchase, a balance correction) is `propose_account_adjustment` with a negative amount. `propose_create_loan` is reserved for money expected back from a named debtor — the presence of a debtor is what makes it a loan, not the act of money leaving an account.
+
+**Savings accounts are never auto-created.** Same rule as §5d for `fundingAccountName`: if `accountName` / `fromAccountName` / `toAccountName` doesn't resolve against `get_loans()`, the tool returns a `blockingMessage` listing the real accounts — never invent or silently create one.
+
+**Ask XOR propose — one turn is never both.** If any required field is missing or the request is ambiguous, the agent asks exactly ONE concise clarifying question and emits no proposal tool call that turn. Only once every field is known does it emit exactly one proposal, with no accompanying question. This was previously violated (a turn could both ask and propose, confusing the user) and is now an explicit `prompt.ts` rule.
+
+**History threading.** Telegram (`route.ts`) and web (`chat/route.ts`) both persist a combined assistant-turn record — `[text, proposalSummary].filter(Boolean).join("\n\n")` — instead of only `result.text`. A turn whose sole output is a proposal (no text) still lands in `ChatMessage`, so the next turn's history shows what was already proposed instead of the model re-asking or drifting to a different tool.
 
 ---
 
