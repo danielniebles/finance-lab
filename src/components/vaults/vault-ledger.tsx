@@ -115,7 +115,7 @@ export function VaultLedger({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:w-[480px] sm:max-w-[480px] flex flex-col gap-0 p-0"
+        className="w-full sm:w-120 sm:max-w-120 flex flex-col gap-0 p-0"
       >
         <SheetHeader className="border-b border-border/60 px-5 pt-5 pb-4">
           <SheetTitle className="font-heading text-base font-semibold">

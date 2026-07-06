@@ -68,7 +68,7 @@ export function ChatInput({
           onInput={handleInput}
           placeholder="Ask about your finances…"
           rows={1}
-          className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground min-h-[2rem] max-h-[7.5rem] leading-relaxed"
+          className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground min-h-8 max-h-30 leading-relaxed"
           disabled={disabled}
         />
         <Button

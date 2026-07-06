@@ -1,0 +1,38 @@
+// Shared shape + helpers for complex proposal resolvers. Every resolver in
+// this directory follows "validate → fetch → build { params, title, fields }"
+// (or bail out with a blockingMessage); this factors that shape into one
+// type + two small builders instead of each domain file hand-rolling the
+// return object. Split out of run-agent-turn.ts (see docs/backlog.md
+// god-file item).
+
+export type ProposalField = { label: string; value: string };
+
+export type ResolvedProposal = {
+  params: Record<string, unknown>;
+  title: string;
+  fields: ProposalField[];
+  /** If set, return this as a plain text tool result instead of creating a proposal */
+  blockingMessage?: string;
+};
+
+/** Assemble a successful resolution — the common case for every resolver. */
+export function buildResolvedProposal(
+  params: Record<string, unknown>,
+  title: string,
+  fields: ProposalField[],
+): ResolvedProposal {
+  return { params, title, fields };
+}
+
+/**
+ * Assemble a blocking resolution — the "validate" step failed (name not
+ * found, no eligible record, etc.). `params` defaults to the raw input so
+ * the tool_result echoes back what the model sent.
+ */
+export function blockingProposal(
+  title: string,
+  blockingMessage: string,
+  params: Record<string, unknown> = {},
+): ResolvedProposal {
+  return { params, title, fields: [], blockingMessage };
+}

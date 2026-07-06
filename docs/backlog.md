@@ -159,3 +159,15 @@ This generalizes beyond primas: the same trigger question applies to recurring-e
 **Deferred / open items from this domain:**
 - **Voucher OCR** — photographing receipts to auto-categorize without MoneyLover export. Requires a separate ingestion pipeline.
 - **One-off expense logger** — recording an expense directly in Finance Lab (not via MoneyLover import). Needs a transaction form + category mapping UI outside the import flow.
+
+---
+
+### Backend layer — findings from 2026-07-03 review (measured against the `backend-nextjs` standard)
+
+Identified while writing the shared backend-layer standard; recorded here so the tech-lead picks them up on the next backend pass in this repo. Address opportunistically as each file is touched (touch-it-clean-it), not as a big-bang refactor.
+
+- **Server actions lack Zod validation (highest-value gap).** No `lib/actions/*` file validates its input with a schema. A `"use server"` action is a public POST endpoint, so each should parse/validate input at the top and infer its input type from that schema. Add per action as it's touched.
+- **✅ RESOLVED (2026-07-04) — `src/lib/agent/run-agent-turn.ts` god-file split.** Was a 1,242-line file mixing tool dispatch, proposal resolution, formatting, and turn orchestration. Split into `agent/tools.ts` (TOOLS schema array), `agent/read-tools.ts` (read-tool dispatch registry), `agent/formatting.ts` (title/field formatting), `agent/proposals/{shared,drive,installments,loans,undo,index}.ts` (complex resolvers + `RESOLVER_REGISTRY` dispatch, mirroring `PROPOSAL_ACTIONS`'s registry shape), leaving `run-agent-turn.ts` (~250 lines) as the thin tool-use-loop orchestrator. The `resolve*` "validate → fetch → build result" shape is now factored into `buildResolvedProposal()`/`blockingProposal()` in `proposals/shared.ts`. Behavior-preserving: the 96-test characterization suite (`run-agent-turn.test.ts`) passed unmodified in assertions, only import paths updated. Reviewer follow-up applied: the test now imports every resolver via the `proposals` barrel (not per-domain files) to match production, and a new test asserts `RESOLVER_REGISTRY`'s keys stay a subset of `PROPOSAL_ACTIONS`'s.
+- **Inconsistent error handling.** Actions mix thrown errors with ad-hoc `{ error }` returns. Converge on one contract (a typed result *or* throw-to-`error.tsx`), and never leak DB/internal error detail to the client — map to a safe message and log the detail server-side.
+- **Revalidation is on the pre-16 model.** `revalidatePath` is used throughout (~56 call sites). When adopting the Next 16 caching model, migrate to tag-based `cacheTag`/`updateTag`. Not urgent — do it as one deliberate caching migration, not piecemeal.
+- **Auth / user-scoping — intentionally absent** while the app is single-user (see the multi-currency / multi-user note above). When multi-user is ever introduced, every action and query must authenticate and scope to the owning user; an unscoped query becomes a data leak at that point.

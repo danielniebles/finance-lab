@@ -1,6 +1,6 @@
 # Finance Lab Agent
 
-> This file documents the agent's behavior for humans. The operative system prompt lives in `src/lib/agent/prompt.ts` (single source of truth). Tool schemas live in the `TOOLS` array in `src/lib/agent/run-agent-turn.ts`. Keep this doc descriptive, not authoritative.
+> This file documents the agent's behavior for humans. The operative system prompt lives in `src/lib/agent/prompt.ts` (single source of truth). Tool schemas live in the `TOOLS` array in `src/lib/agent/tools.ts`; the tool-use loop is orchestrated by `src/lib/agent/run-agent-turn.ts` (split into `read-tools.ts`, `formatting.ts`, and `proposals/` — see `docs/modules.md`). Keep this doc descriptive, not authoritative.
 
 ---
 

@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import sonarjs from "eslint-plugin-sonarjs";
+import tailwind from "eslint-plugin-tailwindcss";
 
 
 const eslintConfig = defineConfig([
@@ -42,8 +43,10 @@ const eslintConfig = defineConfig([
       ],
       "sonarjs/cognitive-complexity": ["error", 15],
       "sonarjs/no-duplicate-string": ["error", { threshold: 5 }],
+      "tailwindcss/no-unnecessary-arbitrary-value": "error"
     },
-    plugins: { sonarjs },
+    plugins: { sonarjs, tailwindcss: tailwind },
+    settings: { tailwindcss: { cssConfigPath: "src/app/globals.css" } }
   },
 ]);
 
