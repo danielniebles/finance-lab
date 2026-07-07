@@ -6,7 +6,7 @@
 // a realistic proposal id.
 
 import { describe, it, expect } from "vitest";
-import { toTelegramMessage, toTelegramEditOptionsMessage } from "./render";
+import { toTelegramMessage, toTelegramEditOptionsMessage, toTelegramAutoRecordMessage } from "./render";
 import type { ProposalDescriptor } from "@/lib/agent/types";
 
 // A realistic cuid (~25 chars) — proposalId length assumption stated in the
@@ -91,6 +91,42 @@ describe("toTelegramEditOptionsMessage", () => {
     expect(reply_markup.inline_keyboard[0][0].callback_data).toBe(`${REALISTIC_PROPOSAL_ID}:e:0:0`);
     expect(reply_markup.inline_keyboard[1][0].callback_data).toBe(`${REALISTIC_PROPOSAL_ID}:e:0:1`);
     expect(reply_markup.inline_keyboard[2][0].callback_data).toBe(`${REALISTIC_PROPOSAL_ID}:e:0:2`);
+  });
+});
+
+describe("toTelegramAutoRecordMessage", () => {
+  const NOTICE = {
+    proposalId: REALISTIC_PROPOSAL_ID,
+    amountText: "-$45.000",
+    appCategoryName: "Pets",
+    wallet: "Investments",
+    ruleMatchType: "ACCOUNT",
+    ruleMatchValue: "61793614704",
+  };
+
+  it("includes the amount, category, wallet, and rule in the message text", () => {
+    const { text } = toTelegramAutoRecordMessage(NOTICE);
+
+    expect(text).toContain("-$45.000");
+    expect(text).toContain("Pets");
+    expect(text).toContain("Investments");
+    expect(text).toContain("61793614704");
+  });
+
+  it("reuses the eopen:0 callback format for the Editar button (no new callback format)", () => {
+    const { reply_markup } = toTelegramAutoRecordMessage(NOTICE);
+    const buttons = reply_markup.inline_keyboard.flat();
+
+    const editButton = buttons.find((b) => b.text.includes("Editar"));
+    expect(editButton?.callback_data).toBe(`${REALISTIC_PROPOSAL_ID}:eopen:0`);
+  });
+
+  it("reuses the undo:{proposalId} callback format for the Deshacer button", () => {
+    const { reply_markup } = toTelegramAutoRecordMessage(NOTICE);
+    const buttons = reply_markup.inline_keyboard.flat();
+
+    const undoButton = buttons.find((b) => b.text.includes("Deshacer"));
+    expect(undoButton?.callback_data).toBe(`undo:${REALISTIC_PROPOSAL_ID}`);
   });
 });
 

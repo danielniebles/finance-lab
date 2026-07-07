@@ -15,7 +15,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, ToolResultBlockParam, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
 import { db } from "@/lib/db";
 import { saveMessage } from "@/lib/actions/chat";
-import type { AgentTurnResult, ProposalDescriptor } from "./types";
+import type { AgentTurnResult, AutoRecordedNotice, ProposalDescriptor } from "./types";
 import { buildSystemPrompt } from "./prompt";
 import { PROPOSAL_ACTIONS } from "./actions";
 import { TOOLS } from "./tools";
@@ -61,9 +61,10 @@ async function processProposalToolBlock(
   toolInput: Record<string, unknown>,
   channel: string,
   proposals: ProposalDescriptor[],
+  autoRecorded: AutoRecordedNotice[],
 ): Promise<ToolResultBlockParam> {
   // Run complex resolution (name lookups, previews) for new tools
-  const resolved = await resolveComplexProposal(toolBlock.name, toolInput);
+  const resolved = await resolveComplexProposal(toolBlock.name, toolInput, channel);
 
   // If resolution produced a blocking message, return it as an error result
   if (resolved?.blockingMessage) {
@@ -72,6 +73,21 @@ async function processProposalToolBlock(
       tool_use_id: toolBlock.id,
       content: resolved.blockingMessage,
       is_error: true,
+    };
+  }
+
+  // Counterparty-rule auto-record (ADR-033): the resolver already performed
+  // the write (createTransaction + rule bump + an already-approved
+  // PendingProposal). Short-circuit — no normal card, no second proposal row.
+  if (resolved?.autoRecorded) {
+    autoRecorded.push({
+      proposalId: resolved.autoRecorded.proposalId,
+      transactionId: resolved.autoRecorded.transactionId,
+    });
+    return {
+      type: "tool_result",
+      tool_use_id: toolBlock.id,
+      content: resolved.autoRecorded.message,
     };
   }
 
@@ -125,6 +141,7 @@ async function processToolUseBlocks(
   blocks: Anthropic.Messages.ContentBlock[],
   channel: string,
   proposals: ProposalDescriptor[],
+  autoRecorded: AutoRecordedNotice[],
 ): Promise<{ toolResults: ToolResultBlockParam[]; lastTool: string | null }> {
   const toolResults: ToolResultBlockParam[] = [];
   let lastTool: string | null = null;
@@ -139,7 +156,9 @@ async function processToolUseBlocks(
       toolResults.push(await processReadToolBlock(toolBlock, toolInput));
     } else if (PROPOSAL_TOOLS.has(toolBlock.name)) {
       lastTool = toolBlock.name;
-      toolResults.push(await processProposalToolBlock(toolBlock, toolInput, channel, proposals));
+      toolResults.push(
+        await processProposalToolBlock(toolBlock, toolInput, channel, proposals, autoRecorded),
+      );
     } else {
       toolResults.push({
         type: "tool_result",
@@ -208,6 +227,7 @@ export async function runAgentTurn(args: {
   }));
 
   const proposals: ProposalDescriptor[] = [];
+  const autoRecorded: AutoRecordedNotice[] = [];
   let fullText = "";
   let lastTool: string | null = null;
 
@@ -223,7 +243,12 @@ export async function runAgentTurn(args: {
       });
 
       if (res.stop_reason === "tool_use") {
-        const { toolResults, lastTool: lt } = await processToolUseBlocks(res.content, channel, proposals);
+        const { toolResults, lastTool: lt } = await processToolUseBlocks(
+          res.content,
+          channel,
+          proposals,
+          autoRecorded,
+        );
         lastTool = lt ?? lastTool;
         messages.push({ role: "assistant", content: res.content });
         messages.push({ role: "user", content: toolResults });
@@ -247,5 +272,5 @@ export async function runAgentTurn(args: {
     });
   }
 
-  return { text: fullText, proposals };
+  return { text: fullText, proposals, autoRecorded };
 }

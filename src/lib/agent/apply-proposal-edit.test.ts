@@ -14,7 +14,12 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+vi.mock("@/lib/actions/transactions", () => ({
+  updateTransactionCategory: vi.fn(),
+}));
+
 import { db } from "@/lib/db";
+import { updateTransactionCategory } from "@/lib/actions/transactions";
 import { applyProposalEdit } from "./apply-proposal-edit";
 
 const CATEGORY_EDITABLE = [
@@ -134,5 +139,80 @@ describe("applyProposalEdit", () => {
 
     expect(result.descriptor?.fields.some((f) => f.label === "AppCategoryId")).toBe(false);
     expect(result.descriptor?.fields.some((f) => f.label === "Wallet")).toBe(true);
+  });
+});
+
+// ─── Editing an already-auto-recorded transaction (ADR-033) ─────────────────
+
+describe("applyProposalEdit — approved auto-record case", () => {
+  it("accepts an edit on an approved, reversible proposal that carries a createdId", async () => {
+    vi.mocked(db.pendingProposal.findUnique).mockResolvedValue(
+      makePendingProposal({
+        status: "approved",
+        params: { ...makePendingProposal().params, createdId: "txn-1" },
+      }) as never,
+    );
+
+    const result = await applyProposalEdit("prop-1", "appCategoryId", "cat-2");
+
+    expect(result.ok).toBe(true);
+    expect(db.pendingProposal.update).toHaveBeenCalled();
+  });
+
+  it("also patches the LIVE transaction's category via updateTransactionCategory", async () => {
+    vi.mocked(db.pendingProposal.findUnique).mockResolvedValue(
+      makePendingProposal({
+        status: "approved",
+        params: { ...makePendingProposal().params, createdId: "txn-1" },
+      }) as never,
+    );
+
+    await applyProposalEdit("prop-1", "appCategoryId", "cat-2");
+
+    expect(updateTransactionCategory).toHaveBeenCalledWith("txn-1", "cat-2");
+  });
+
+  it("still rejects an approved proposal with NO createdId (not the auto-record case)", async () => {
+    vi.mocked(db.pendingProposal.findUnique).mockResolvedValue(
+      makePendingProposal({ status: "approved" }) as never, // no createdId in params
+    );
+
+    const result = await applyProposalEdit("prop-1", "appCategoryId", "cat-2");
+
+    expect(result.ok).toBe(false);
+    expect(db.pendingProposal.update).not.toHaveBeenCalled();
+    expect(updateTransactionCategory).not.toHaveBeenCalled();
+  });
+
+  it("still rejects a dismissed/undone proposal even if it happens to carry a createdId", async () => {
+    vi.mocked(db.pendingProposal.findUnique).mockResolvedValue(
+      makePendingProposal({
+        status: "undone",
+        params: { ...makePendingProposal().params, createdId: "txn-1" },
+      }) as never,
+    );
+
+    const result = await applyProposalEdit("prop-1", "appCategoryId", "cat-2");
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/already undone/);
+  });
+
+  it("does not patch the live entity for an action other than propose_add_transaction", async () => {
+    vi.mocked(db.pendingProposal.findUnique).mockResolvedValue(
+      makePendingProposal({
+        action: "propose_create_installment",
+        status: "approved",
+        params: { ...makePendingProposal().params, createdId: "inst-1" },
+      }) as never,
+    );
+
+    const result = await applyProposalEdit("prop-1", "appCategoryId", "cat-2");
+
+    // propose_create_installment IS reversible (has undo) and carries a
+    // createdId, so the edit itself succeeds — but there's no live-entity
+    // sync wired for this action, so updateTransactionCategory must not fire.
+    expect(result.ok).toBe(true);
+    expect(updateTransactionCategory).not.toHaveBeenCalled();
   });
 });

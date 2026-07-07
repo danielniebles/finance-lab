@@ -7,9 +7,42 @@ export type ProposalDecision = {
   choiceId: "approve" | "dismiss";
 };
 
-export async function resolveProposal(
-  d: ProposalDecision,
-): Promise<{ ok: boolean; message: string }> {
+export type ResolveProposalResult = {
+  ok: boolean;
+  message: string;
+  /**
+   * Learn-from-correction nudge (ADR-033, Part 3): set when a
+   * propose_add_transaction with an extracted counterparty was approved but
+   * had NO CounterpartyRule match at all — offered as a plain follow-up chat
+   * suggestion rather than a second interactive card, kept deliberately
+   * lightweight per the handoff. Undefined in every other case (unchanged
+   * behavior for every action that isn't propose_add_transaction, and for a
+   * transaction with no extractable counterparty).
+   */
+  learnRuleNudge?: string;
+};
+
+/**
+ * Builds the "remember this?" nudge text when an approved transaction had an
+ * extractable counterparty but matched no existing rule. Only fires on the
+ * genuinely-unmatched case (`hadCounterpartyMatch === false`), not merely
+ * "wasn't auto-recorded" — a match with autoRecord:false already has a rule,
+ * there's nothing to learn.
+ */
+function buildLearnRuleNudge(action: string, params: Record<string, unknown>): string | undefined {
+  if (action !== "propose_add_transaction" || params.hadCounterpartyMatch !== false) {
+    return undefined;
+  }
+  const counterparty =
+    (params.counterpartyAccount as string | undefined) ??
+    (params.counterpartyMerchant as string | undefined) ??
+    (params.counterpartySender as string | undefined);
+  if (!counterparty) return undefined;
+
+  return `💡 ¿Quieres que recuerde esto? La próxima transacción a/de "${counterparty}" se registraría automáticamente con la misma categoría y wallet. Dime "sí, recuérdalo" si quieres crear la regla.`;
+}
+
+export async function resolveProposal(d: ProposalDecision): Promise<ResolveProposalResult> {
   const { proposalId, choiceId } = d;
 
   const proposal = await db.pendingProposal.findUnique({
@@ -65,7 +98,11 @@ export async function resolveProposal(
     revalidatePath("/installments");
     revalidatePath("/expenses");
 
-    return { ok: true, message: "Approved" };
+    return {
+      ok: true,
+      message: "Approved",
+      learnRuleNudge: buildLearnRuleNudge(proposal.action, params),
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return { ok: false, message };

@@ -102,6 +102,12 @@ export const TOOLS: Anthropic.Tool[] = [
       "Get all AppCategories (id, name, budgetType). Call this before proposing a transaction to guess the best category and build the editable option shortlist.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
+  {
+    name: "get_counterparty_rules",
+    description:
+      "Get all counterparty rules (dictionary mapping a known account/merchant/sender to a category + wallet). Call this before proposing an update/delete to resolve a rule's id, or to check for an existing rule before creating a new one.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
 
   // ── Proposal tools ──
   {
@@ -415,7 +421,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "propose_add_transaction",
     description:
-      "Propose adding a single expense/income transaction (bot-captured, e.g. from a bank notification or typed in chat). Signed amount: negative = expense, positive = income. Call get_categories first to guess the best appCategoryName — the category is always editable directly on the resulting card, so never ask a clarifying question about it; an unresolved or omitted category name falls back to a reasonable default. Emits an action card — does NOT mutate.",
+      "Propose adding a single expense/income transaction (bot-captured, e.g. from a bank notification or typed in chat). Signed amount: negative = expense, positive = income. Call get_categories first to guess the best appCategoryName — the category is always editable directly on the resulting card, so never ask a clarifying question about it; an unresolved or omitted category name falls back to a reasonable default. Also extract the counterparty (destination account, merchant, or sender) when the message names one — this is consulted internally against your known counterparty rules; if it matches a rule with auto-record enabled, the transaction is recorded automatically instead of producing a card, and the rule's own category/wallet are used instead of your guess. You do not need to call get_counterparty_rules for this — it happens automatically. Emits an action card (or, on a rule match, records automatically) — you never mutate data directly either way.",
     input_schema: {
       type: "object",
       properties: {
@@ -425,10 +431,99 @@ export const TOOLS: Anthropic.Tool[] = [
           type: "string",
           description: "Best-guess AppCategory name (optional — call get_categories to pick a real one). Never blocks; editable on the card.",
         },
-        wallet: { type: "string", description: "Account/wallet label, e.g. bank name (optional)" },
+        wallet: { type: "string", description: "Account/wallet label, e.g. bank name (optional). Overridden if a counterparty rule matches." },
         note: { type: "string", description: "Merchant or note (optional)" },
+        counterpartyAccount: {
+          type: "string",
+          description: "Destination/source account number mentioned in the message (e.g. \"transferencia a la cuenta 61793614704\"). A transfer to a named account is a payment to whatever that account represents — never assume it's a self-transfer.",
+        },
+        counterpartyMerchant: {
+          type: "string",
+          description: "Merchant name for a card purchase (e.g. \"RAPPI\").",
+        },
+        counterpartySender: {
+          type: "string",
+          description: "Sender name for an inbound transfer.",
+        },
+        direction: {
+          type: "string",
+          enum: ["expense", "income"],
+          description: "Whether this is money out (expense) or in (income) — used to match rules with a direction restriction. Defaults from the sign of amount if omitted.",
+        },
       },
       required: ["amount"],
+    },
+  },
+
+  // ── Counterparty rule tools ──
+  {
+    name: "propose_create_counterparty_rule",
+    description:
+      "Propose creating a counterparty rule: a known account/merchant/sender is auto-mapped to a category and routed to a wallet. Call get_categories first to resolve appCategoryName to a real category — an unresolved name BLOCKS (never guesses), since a wrong category here would silently misroute every future matching transaction. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        matchType: {
+          type: "string",
+          enum: ["ACCOUNT", "MERCHANT", "SENDER", "KEYWORD"],
+          description: "What kind of value to match on",
+        },
+        matchValue: {
+          type: "string",
+          description: "The raw value to match (e.g. account number, merchant name, sender name). Normalized on save.",
+        },
+        direction: {
+          type: "string",
+          enum: ["EXPENSE", "INCOME", "ANY"],
+          description: "Restrict the rule to expenses, income, or either (default ANY)",
+        },
+        appCategoryName: {
+          type: "string",
+          description: "AppCategory name to route matches to (must exist — call get_categories first)",
+        },
+        wallet: { type: "string", description: "Wallet label to route to (overrides the message's stated account)" },
+        autoRecord: { type: "boolean", description: "Auto-record on match instead of proposing a card (default true)" },
+        recurring: { type: "boolean", description: "Hint: this is a recurring inflow/outflow (default false)" },
+        expectedAmount: { type: "number", description: "Optional expected amount in COP, for recurring validation" },
+        notes: { type: "string", description: "Optional notes" },
+      },
+      required: ["matchType", "matchValue", "appCategoryName", "wallet"],
+    },
+  },
+  {
+    name: "propose_update_counterparty_rule",
+    description:
+      "Propose updating an existing counterparty rule's fields. Call get_counterparty_rules first to resolve the ruleId. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ruleId: { type: "string", description: "CounterpartyRule ID to update" },
+        matchType: { type: "string", enum: ["ACCOUNT", "MERCHANT", "SENDER", "KEYWORD"] },
+        matchValue: { type: "string" },
+        direction: { type: "string", enum: ["EXPENSE", "INCOME", "ANY"] },
+        appCategoryName: {
+          type: "string",
+          description: "New AppCategory name (must exist — call get_categories first)",
+        },
+        wallet: { type: "string" },
+        autoRecord: { type: "boolean" },
+        recurring: { type: "boolean" },
+        expectedAmount: { type: "number" },
+        notes: { type: "string" },
+      },
+      required: ["ruleId"],
+    },
+  },
+  {
+    name: "propose_delete_counterparty_rule",
+    description:
+      "Propose deleting a counterparty rule. Call get_counterparty_rules first to resolve the ruleId. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ruleId: { type: "string", description: "CounterpartyRule ID to delete" },
+      },
+      required: ["ruleId"],
     },
   },
 

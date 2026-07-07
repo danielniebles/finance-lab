@@ -44,3 +44,15 @@ export async function deleteTransaction(id: string) {
   await db.transaction.delete({ where: { id } });
   revalidateAll();
 }
+
+/**
+ * Patches the category on an already-created transaction — used by
+ * applyProposalEdit's approved-and-reversible case (ADR-033): editing an
+ * auto-recorded transaction's category from the Telegram notification needs
+ * to update the LIVE row, not just a pending proposal's draft params, since
+ * the write already happened.
+ */
+export async function updateTransactionCategory(id: string, appCategoryId: string) {
+  await db.transaction.update({ where: { id }, data: { appCategoryId } });
+  revalidateAll();
+}

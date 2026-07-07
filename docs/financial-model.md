@@ -201,6 +201,18 @@ Each phase ends by registering its agent tools and updating `agent.md` §4 + the
 
 ---
 
+## 7b. Transactions rollout phasing
+
+A separate, later track from the Phase A–D roadmap above — the bot-captured-expenses migration away from being purely MoneyLover-import-driven. See `.handoff/transactions/HANDOFF.md` and `.handoff/transactions-phase2-rules/HANDOFF.md`.
+
+- **Phase 1 — Manual capture** *(shipped, ADR-030/031)*: `propose_add_transaction`, editable category card (approve-then-confirm), expense-record-only (no balance coupling), wallet as a plain string label. Runs alongside MoneyLover import.
+- **Phase 2 — Counterparty rules + wallet routing** *(shipped, ADR-032/033)*: a dictionary (`CounterpartyRule`) mapping a known account/merchant/sender to a category + wallet. A confident match with `autoRecord: true` records the transaction immediately (reversible, notified) instead of a card; the rule's wallet overrides whatever account the bank message stated. Learned from corrections, or managed via a settings page (CRUD layer shipped; page itself a Frontend follow-up).
+- **Phase 3 — Recurring-inflow validation** *(not started)*: uses the `recurring`/`expectedAmount` fields already on `CounterpartyRule` to validate cadence/amount ("expected ~X this month; arrived / missing"), tying into the income-plan/forecast.
+- **Phase 4 — Import dedup + bot-primary cutover** *(not started)*: promotes live bot capture (Telegram + Shortcut ingest) to the primary expense-capture path, with the weekly MoneyLover import demoted to a backfill that dedups against bot-captured rows.
+- **Deferred**: a first-class Wallet/Account model (balances per wallet, reconciled with `SavingsAccount`) — `wallet` stays a plain string label through every phase above.
+
+---
+
 ## 8. ADR bookkeeping
 
 `docs/decisions.md` records through **ADR-021** (vault funding revision + account-sourced contributions). Continue:

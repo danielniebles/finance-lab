@@ -23,7 +23,7 @@ model ImportBatch {
   importedAt   DateTime      @default(now())
   periodStart  DateTime
   periodEnd    DateTime
-  month        Int           // 1–12
+  month        Int // 1–12
   year         Int
   status       BatchStatus   @default(FINAL)
   transactions Transaction[]
@@ -39,11 +39,12 @@ model MoneyLoverCategory {
 }
 
 model AppCategory {
-  id           String            @id @default(cuid())
-  name         String            @unique
-  mappings     CategoryMapping[]
-  budgetItems  BudgetItem[]
-  transactions Transaction[]
+  id                String             @id @default(cuid())
+  name              String             @unique
+  mappings          CategoryMapping[]
+  budgetItems       BudgetItem[]
+  transactions      Transaction[]
+  counterpartyRules CounterpartyRule[]
 }
 
 model BudgetItem {
@@ -89,6 +90,38 @@ enum BudgetType {
   VARIABLE
 }
 
+enum RuleMatchType {
+  ACCOUNT
+  MERCHANT
+  SENDER
+  KEYWORD
+}
+
+enum RuleDirection {
+  EXPENSE
+  INCOME
+  ANY
+}
+
+model CounterpartyRule {
+  id             String        @id @default(cuid())
+  matchType      RuleMatchType
+  matchValue     String // normalized on write: digits-only for ACCOUNT, trimmed+uppercased for MERCHANT/SENDER/KEYWORD
+  direction      RuleDirection @default(ANY)
+  appCategoryId  String
+  appCategory    AppCategory   @relation(fields: [appCategoryId], references: [id])
+  wallet         String // wallet LABEL to route to — overrides the message's stated account
+  autoRecord     Boolean       @default(true)
+  recurring      Boolean       @default(false)
+  expectedAmount Float?
+  notes          String?
+  matchCount     Int           @default(0)
+  lastMatchedAt  DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([matchType, matchValue])
+}
+
 // ─── Module 2: Installment Tracker ────────────────────────────────────────────
 
 model CreditCard {
@@ -106,9 +139,9 @@ model Installment {
   description         String
   totalAmount         Float
   numInstallments     Int
-  monthlyAmount       Float                // stored via computeMonthlyAmount()
-  monthlyInterestRate Float?               // null = no interest; stored as % m.v. (mensual vencido)
-  startDate           DateTime             // date of first payment (e.g. 2025-11-10)
+  monthlyAmount       Float // stored via computeMonthlyAmount()
+  monthlyInterestRate Float? // null = no interest; stored as % m.v. (mensual vencido)
+  startDate           DateTime // date of first payment (e.g. 2025-11-10)
   notes               String?
   createdAt           DateTime             @default(now())
   payments            InstallmentPayment[]
@@ -124,7 +157,7 @@ model InstallmentPayment {
   id             String      @id @default(cuid())
   installmentId  String
   installment    Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
-  installmentNum Int         // 1-based, which payment in the sequence
+  installmentNum Int // 1-based, which payment in the sequence
   paidAt         DateTime
 }
 
@@ -134,7 +167,7 @@ model SavingsAccount {
   id                 String         @id @default(cuid())
   name               String         @unique
   accountType        AccountType
-  color              String?        // hex color for UI dot
+  color              String? // hex color for UI dot
   includeInAvailable Boolean        @default(true)
   entries            AccountEntry[]
   loansGiven         Loan[]
@@ -155,7 +188,7 @@ model AccountEntry {
   accountId String
   account   SavingsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   type      EntryType
-  amount    Float          // positive or negative
+  amount    Float // positive or negative
   date      DateTime
   notes     String?
 }
@@ -199,12 +232,12 @@ model Loan {
 }
 
 model LoanPayment {
-  id      String   @id @default(cuid())
-  loanId  String
-  loan    Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
-  amount  Float
-  date    DateTime
-  notes   String?
+  id     String   @id @default(cuid())
+  loanId String
+  loan   Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  amount Float
+  date   DateTime
+  notes  String?
 }
 
 // ─── Module 4: Vaults ─────────────────────────────────────────────────────────
@@ -221,25 +254,25 @@ enum VaultGoalType {
 }
 
 model Vault {
-  id                String              @id @default(cuid())
-  name              String              @unique
-  kind              VaultKind           @default(LEISURE)
-  goalType          VaultGoalType       @default(FIXED_DEADLINE)
-  targetAmount      Float?              // required when goalType = FIXED_DEADLINE
-  targetDate        DateTime?           // required when goalType = FIXED_DEADLINE
+  id                String             @id @default(cuid())
+  name              String             @unique
+  kind              VaultKind          @default(LEISURE)
+  goalType          VaultGoalType      @default(FIXED_DEADLINE)
+  targetAmount      Float? // required when goalType = FIXED_DEADLINE
+  targetDate        DateTime? // required when goalType = FIXED_DEADLINE
   color             String?
   notes             String?
-  archivedAt        DateTime?           // set when goal met/abandoned; keeps history
-  createdAt         DateTime            @default(now())
+  archivedAt        DateTime? // set when goal met/abandoned; keeps history
+  createdAt         DateTime           @default(now())
   entries           VaultEntry[]
-  recurringExpenses RecurringExpense[]  @relation("VaultRecurring")
+  recurringExpenses RecurringExpense[] @relation("VaultRecurring")
 }
 
 model VaultEntry {
   id              String          @id @default(cuid())
   vaultId         String
   vault           Vault           @relation(fields: [vaultId], references: [id], onDelete: Cascade)
-  amount          Float           // positive = contribution, negative = withdrawal
+  amount          Float // positive = contribution, negative = withdrawal
   date            DateTime        @default(now())
   notes           String?
   createdAt       DateTime        @default(now())
@@ -250,18 +283,18 @@ model VaultEntry {
 // ─── Module 5: Recurring Expenses ────────────────────────────────────────────
 
 model RecurringExpense {
-  id             String                    @id @default(cuid())
-  name           String
+  id              String                    @id @default(cuid())
+  name            String
   estimatedAmount Float
-  cadenceMonths  Int
-  nextDueDate    DateTime
-  category       String?
-  fundingVaultId String?
-  fundingVault   Vault?                    @relation("VaultRecurring", fields: [fundingVaultId], references: [id], onDelete: SetNull)
-  active         Boolean                   @default(true)
-  notes          String?
-  createdAt      DateTime                  @default(now())
-  payments       RecurringExpensePayment[]
+  cadenceMonths   Int
+  nextDueDate     DateTime
+  category        String?
+  fundingVaultId  String?
+  fundingVault    Vault?                    @relation("VaultRecurring", fields: [fundingVaultId], references: [id], onDelete: SetNull)
+  active          Boolean                   @default(true)
+  notes           String?
+  createdAt       DateTime                  @default(now())
+  payments        RecurringExpensePayment[]
 }
 
 model RecurringExpensePayment {
@@ -279,9 +312,9 @@ model RecurringExpensePayment {
 
 model ChatMessage {
   id        String   @id @default(cuid())
-  role      String   // "user" | "assistant"
+  role      String // "user" | "assistant"
   content   String
-  channel   String?  // "web" | "telegram" | "shortcut" — null = legacy/unknown
+  channel   String? // "web" | "telegram" | "shortcut" — null = legacy/unknown
   createdAt DateTime @default(now())
 }
 
@@ -291,8 +324,8 @@ model PendingProposal {
   params     Json
   title      String
   status     String    @default("pending") // pending | approved | dismissed | expired | undone
-  channel    String                        // "web" | "telegram"
-  editable   Json?                         // option list for index→id resolution (editable proposal fields; unused until the Telegram/tool pass lands)
+  channel    String // "web" | "telegram"
+  editable   Json? // option list for index→id resolution (editable proposal fields; unused until the Telegram/tool pass lands)
   createdAt  DateTime  @default(now())
   resolvedAt DateTime?
 }

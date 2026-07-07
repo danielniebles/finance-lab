@@ -32,6 +32,21 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+// ADR-033: resolveAddTransaction now consults CounterpartyRule matches and,
+// on a confident auto-record match, calls into auto-record-transaction.ts's
+// side effect (createTransaction + bumpCounterpartyRuleMatch + a
+// PendingProposal.create). Mocked here so the existing resolveAddTransaction
+// tests (which never populate counterparty fields, so lookupRuleFromInput
+// short-circuits before calling matchCounterpartyRule at all) keep working
+// unmodified, while the new auto-record-branch tests can control the match.
+vi.mock("@/lib/actions/transactions", () => ({
+  createTransaction: vi.fn(),
+}));
+vi.mock("@/lib/queries/counterparty-rules", () => ({
+  matchCounterpartyRule: vi.fn().mockResolvedValue(null),
+  bumpCounterpartyRuleMatch: vi.fn(),
+}));
+
 vi.mock("@/lib/actions/chat", () => ({
   saveMessage: vi.fn().mockResolvedValue(undefined),
 }));
@@ -88,10 +103,13 @@ import { getLoansOverview } from "@/lib/queries/loans";
 import { getAllInstallments, getCardSummaries } from "@/lib/queries/installments";
 import { getCategories } from "@/lib/queries/expenses";
 import { listDriveFiles } from "@/lib/actions/drive";
+import { createTransaction } from "@/lib/actions/transactions";
+import { matchCounterpartyRule } from "@/lib/queries/counterparty-rules";
 import type { LoansOverview } from "@/lib/queries/loans";
 import type { InstallmentRow } from "@/lib/queries/installments";
 import type { CategoryOption } from "@/lib/queries/expenses";
 import type { DriveFile } from "@/lib/actions/drive";
+import type { CounterpartyRuleRow } from "@/lib/queries/counterparty-rules";
 
 import {
   formatParamKey,
@@ -1126,6 +1144,8 @@ describe("resolveTransfer", () => {
 
 // ─── resolveAddTransaction ────────────────────────────────────────────────────
 
+const TEST_TXN_DATE = "2026-07-06";
+
 function makeCategory(overrides?: Partial<CategoryOption>): CategoryOption {
   return { id: "cat-1", name: "Groceries", budgetType: "VARIABLE", ...overrides };
 }
@@ -1226,7 +1246,7 @@ describe("resolveAddTransaction", () => {
 
     const result = await resolveAddTransaction({
       amount: -11_956,
-      date: "2026-07-06",
+      date: TEST_TXN_DATE,
       appCategoryName: "Going Out",
       wallet: "Bancolombia",
       note: "Uber Rides",
@@ -1234,10 +1254,14 @@ describe("resolveAddTransaction", () => {
 
     expect(result.params).toEqual({
       amount: -11_956,
-      date: "2026-07-06",
+      date: TEST_TXN_DATE,
       appCategoryId: GOING_OUT.id,
       wallet: "Bancolombia",
       note: "Uber Rides",
+      hadCounterpartyMatch: false,
+      counterpartyAccount: null,
+      counterpartyMerchant: null,
+      counterpartySender: null,
     });
     expect(result.title).toBe(`Add expense: Bancolombia — ${formatCOP(11_956)}`);
     expect(result.fields.some((f) => f.label.toLowerCase().includes("categor"))).toBe(false);
@@ -1257,6 +1281,194 @@ describe("resolveAddTransaction", () => {
     const today = new Date().toISOString().slice(0, 10);
     expect(result.params.date).toBe(today);
     expect(result.params.wallet).toBe("—");
+  });
+});
+
+// ─── resolveAddTransaction — counterparty-rule auto-record (ADR-033) ─────────
+
+function makeRule(overrides?: Partial<CounterpartyRuleRow>): CounterpartyRuleRow {
+  return {
+    id: "rule-1",
+    matchType: "ACCOUNT",
+    matchValue: "61793614704",
+    direction: "ANY",
+    appCategoryId: "cat-pets",
+    appCategoryName: "Pets",
+    wallet: "Investments",
+    autoRecord: true,
+    recurring: false,
+    expectedAmount: null,
+    notes: null,
+    matchCount: 3,
+    lastMatchedAt: null,
+    createdAt: new Date("2026-06-01"),
+    ...overrides,
+  };
+}
+
+describe("resolveAddTransaction — counterparty-rule auto-record", () => {
+  beforeEach(() => {
+    vi.mocked(createTransaction).mockResolvedValue({ id: "txn-1" } as never);
+    vi.mocked(db.pendingProposal.create).mockResolvedValue({ id: "proposal-1" } as never);
+  });
+
+  it("does not consult matchCounterpartyRule when no counterparty field is provided", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory()]);
+
+    await resolveAddTransaction({ amount: -5_000 });
+
+    expect(matchCounterpartyRule).not.toHaveBeenCalled();
+  });
+
+  it("auto-records on a confident, autoRecord-eligible match — no normal card fields", async () => {
+    vi.mocked(matchCounterpartyRule).mockResolvedValue(makeRule());
+
+    const result = await resolveAddTransaction(
+      {
+        amount: -45_000,
+        date: TEST_TXN_DATE,
+        counterpartyAccount: "617-9361 4704",
+        appCategoryName: "Groceries", // the model's guess — the RULE overrides this
+        wallet: "Bancolombia", // the message's stated account — the RULE overrides this too
+      },
+      "telegram", // auto-record is scoped to channels that deliver to Telegram
+    );
+
+    expect(result.autoRecorded).toBeDefined();
+    expect(result.autoRecorded?.transactionId).toBe("txn-1");
+    expect(result.autoRecorded?.proposalId).toBe("proposal-1");
+    expect(createTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ appCategoryId: "cat-pets", wallet: "Investments" }),
+    );
+  });
+
+  it("passes the extracted direction through to matchCounterpartyRule", async () => {
+    vi.mocked(matchCounterpartyRule).mockResolvedValue(null);
+    vi.mocked(getCategories).mockResolvedValue([makeCategory()]);
+
+    await resolveAddTransaction({
+      amount: 200_000,
+      counterpartySender: "Juan",
+      direction: "income",
+    });
+
+    expect(matchCounterpartyRule).toHaveBeenCalledWith({
+      account: undefined,
+      merchant: undefined,
+      sender: "Juan",
+      direction: "INCOME",
+    });
+  });
+
+  it("falls back to a normal card when there is no rule match", async () => {
+    vi.mocked(matchCounterpartyRule).mockResolvedValue(null);
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT]);
+
+    const result = await resolveAddTransaction({
+      amount: -5_000,
+      counterpartyAccount: "999999",
+    });
+
+    expect(result.autoRecorded).toBeUndefined();
+    expect(result.editable).toHaveLength(1);
+    expect(result.params.hadCounterpartyMatch).toBe(false);
+  });
+
+  it("falls back to a normal card when the matched rule has autoRecord: false", async () => {
+    vi.mocked(matchCounterpartyRule).mockResolvedValue(makeRule({ autoRecord: false }));
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT]);
+
+    const result = await resolveAddTransaction({
+      amount: -5_000,
+      counterpartyAccount: "61793614704",
+    });
+
+    expect(result.autoRecorded).toBeUndefined();
+    expect(createTransaction).not.toHaveBeenCalled();
+    // A match DID occur (just not auto-recorded) — hadCounterpartyMatch is
+    // still true, so the learn-from-correction nudge won't fire for it.
+    expect(result.params.hadCounterpartyMatch).toBe(true);
+  });
+
+  it("falls back to a normal card when the amount/date are not confident, even with a matching rule", async () => {
+    vi.mocked(matchCounterpartyRule).mockResolvedValue(makeRule());
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT]);
+
+    const result = await resolveAddTransaction({
+      amount: NaN,
+      counterpartyAccount: "61793614704",
+    });
+
+    expect(result.autoRecorded).toBeUndefined();
+    expect(createTransaction).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Channel gating (reconcile pass: scope auto-record to Telegram only) ─────
+// Daniel's explicit decision: the web chat channel has no rendering at all
+// for an auto-recorded transaction (no NDJSON event, no card UI), so a
+// confident rule match on `channel: "web"` must fall through to the normal
+// editable card, exactly as if no rule had matched at all — same params
+// shape as any other card, still carrying `hadCounterpartyMatch: true`
+// since a rule WAS found (just not used to auto-record).
+
+describe("resolveAddTransaction — auto-record channel gating", () => {
+  beforeEach(() => {
+    vi.mocked(createTransaction).mockResolvedValue({ id: "txn-1" } as never);
+    vi.mocked(db.pendingProposal.create).mockResolvedValue({ id: "proposal-1" } as never);
+  });
+
+  it("does NOT auto-record on channel: \"web\" even with a confident, autoRecord-eligible match", async () => {
+    vi.mocked(matchCounterpartyRule).mockResolvedValue(makeRule());
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT]);
+
+    const result = await resolveAddTransaction(
+      {
+        amount: -45_000,
+        date: TEST_TXN_DATE,
+        counterpartyAccount: "617-9361 4704",
+        wallet: "Bancolombia",
+      },
+      "web",
+    );
+
+    expect(result.autoRecorded).toBeUndefined();
+    expect(createTransaction).not.toHaveBeenCalled();
+    expect(result.editable).toHaveLength(1);
+    expect(result.params.hadCounterpartyMatch).toBe(true);
+  });
+
+  it("still auto-records on channel: \"telegram\" with the same confident match", async () => {
+    vi.mocked(matchCounterpartyRule).mockResolvedValue(makeRule());
+
+    const result = await resolveAddTransaction(
+      {
+        amount: -45_000,
+        date: TEST_TXN_DATE,
+        counterpartyAccount: "617-9361 4704",
+        wallet: "Bancolombia",
+      },
+      "telegram",
+    );
+
+    expect(result.autoRecorded).toBeDefined();
+    expect(createTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ appCategoryId: "cat-pets", wallet: "Investments" }),
+    );
+  });
+
+  it("defaults to channel \"web\" (no auto-record) when no channel argument is passed", async () => {
+    vi.mocked(matchCounterpartyRule).mockResolvedValue(makeRule());
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT]);
+
+    const result = await resolveAddTransaction({
+      amount: -45_000,
+      date: TEST_TXN_DATE,
+      counterpartyAccount: "617-9361 4704",
+    });
+
+    expect(result.autoRecorded).toBeUndefined();
+    expect(createTransaction).not.toHaveBeenCalled();
   });
 });
 

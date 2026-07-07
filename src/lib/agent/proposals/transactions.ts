@@ -1,15 +1,20 @@
 // Transaction proposal resolver (propose_add_transaction). Mirrors the shape
 // of proposals/accounts.ts: name resolution against real data, blockingProposal
-// / buildResolvedProposal from ./shared. The one addition over accounts.ts:
+// / buildResolvedProposal from ./shared. Two additions over accounts.ts:
 // this resolver also builds the `editable` shortlist for the category field
 // (ADR-031) — category is never a blocking field here, since the whole point
 // of the one-shot bank-message flow (Part D / prompt.ts) is zero clarifying
-// questions for category; an unresolved guess just falls back to a default.
+// questions for category; an unresolved guess just falls back to a default —
+// and it consults CounterpartyRule matches (ADR-033): on a confident,
+// autoRecord-eligible match, it short-circuits into the auto-record path
+// instead of building a normal editable card.
 
 import { getCategories, type CategoryOption } from "@/lib/queries/expenses";
+import { matchCounterpartyRule } from "@/lib/queries/counterparty-rules";
 import { formatCOP } from "@/lib/format";
 import { blockingProposal, buildResolvedProposal, type ResolvedProposal } from "./shared";
 import type { EditableOption } from "../types";
+import { autoRecordFromRule, isConfidentTransaction } from "../auto-record-transaction";
 
 const OTHER_OPTION: EditableOption = { id: "__other__", label: "Otra…" };
 const SHORTLIST_SIZE = 5; // resolved guess + up to 4 more, then __other__
@@ -50,14 +55,49 @@ function buildCategoryShortlist(
   return [...options, OTHER_OPTION];
 }
 
-export async function resolveAddTransaction(
-  input: Record<string, unknown>,
-): Promise<ResolvedProposal> {
-  const amount = Number(input.amount);
-  const date = (input.date as string | undefined) ?? new Date().toISOString().slice(0, 10);
+/**
+ * Looks up a CounterpartyRule from whichever extraction fields the model
+ * populated on this turn (counterpartyAccount/Merchant/Sender + direction).
+ * Returns null immediately if no candidate field is present at all — the
+ * common case for a typed-in-chat transaction with no bank-message
+ * counterparty to extract.
+ */
+async function lookupRuleFromInput(input: Record<string, unknown>, amount: number) {
+  const account = input.counterpartyAccount as string | undefined;
+  const merchant = input.counterpartyMerchant as string | undefined;
+  const sender = input.counterpartySender as string | undefined;
+  if (!account && !merchant && !sender) return null;
+
+  const direction =
+    (input.direction as "expense" | "income" | undefined) ?? (amount < 0 ? "expense" : "income");
+
+  return matchCounterpartyRule({
+    account,
+    merchant,
+    sender,
+    direction: direction === "income" ? "INCOME" : "EXPENSE",
+  });
+}
+
+type NormalCardArgs = {
+  input: Record<string, unknown>;
+  amount: number;
+  date: string;
+  wallet: string;
+  note: string | undefined;
+  hadCounterpartyMatch: boolean;
+};
+
+/**
+ * Builds the normal Phase 1 editable proposal card — the fallback path when
+ * there's no confident, autoRecord-eligible rule match. Split out of
+ * resolveAddTransaction to keep that function's cyclomatic complexity under
+ * budget; this is pure "assemble params/title/fields/editable" with no
+ * additional branching of its own beyond the category guess/blocking check.
+ */
+async function buildNormalTransactionCard(args: NormalCardArgs): Promise<ResolvedProposal> {
+  const { input, amount, date, wallet, note, hadCounterpartyMatch } = args;
   const appCategoryName = input.appCategoryName as string | undefined;
-  const wallet = (input.wallet as string | undefined) ?? "—";
-  const note = input.note as string | undefined;
 
   const categories = await getCategories();
   if (categories.length === 0) {
@@ -75,6 +115,15 @@ export async function resolveAddTransaction(
     appCategoryId: guess.id,
     wallet,
     note: note ?? null,
+    // Not rendered on the card (formatting.ts skipKeys) — read back after
+    // approval by execute-proposal.ts's learn-from-correction nudge (ADR-033)
+    // to decide whether to offer "remember this" (only when there was no
+    // rule at all, not merely "not auto-recorded") and to know which
+    // counterparty value to suggest remembering.
+    hadCounterpartyMatch,
+    counterpartyAccount: input.counterpartyAccount ?? null,
+    counterpartyMerchant: input.counterpartyMerchant ?? null,
+    counterpartySender: input.counterpartySender ?? null,
   };
 
   const direction = amount < 0 ? "expense" : "income";
@@ -96,4 +145,56 @@ export async function resolveAddTransaction(
       options: editable,
     },
   ]);
+}
+
+// Channels whose reply/notification actually reaches Telegram — auto-record
+// is scoped to these (Daniel's explicit decision, reconcile pass). The web
+// chat channel has no rendering at all for an auto-recorded transaction (no
+// NDJSON event, no card UI) — building that is an explicit, separate
+// follow-up. `runAgentTurn`'s channel is normalized to "telegram" for BOTH
+// the live Telegram webhook AND the /api/ingest "shortcut" entry point
+// (see deliver-to-telegram.ts, which always calls runAgentTurn with
+// `channel: "telegram"` regardless of its own opts.channel) — so gating on
+// "telegram" here already covers both real delivery paths; "web" is the only
+// other value this function ever receives.
+const AUTO_RECORD_CHANNELS = new Set(["telegram"]);
+
+export async function resolveAddTransaction(
+  input: Record<string, unknown>,
+  channel = "web",
+): Promise<ResolvedProposal> {
+  const amount = Number(input.amount);
+  const date = (input.date as string | undefined) ?? new Date().toISOString().slice(0, 10);
+  const wallet = (input.wallet as string | undefined) ?? "—";
+  const note = input.note as string | undefined;
+
+  const rule = await lookupRuleFromInput(input, amount);
+
+  // Confident, autoRecord-eligible match → the counterparty-rule exception
+  // (ADR-033): create the transaction immediately instead of a normal card.
+  // The rule's category/wallet OVERRIDE the message's guessed category and
+  // stated account — "transfer to account X" is a payment to whatever the
+  // rule says, never a self-transfer. Scoped to channels that actually
+  // deliver to Telegram (see AUTO_RECORD_CHANNELS) — on "web" this falls
+  // through to the normal editable card below, exactly as if no rule had
+  // matched, since the web chat UI has no rendering for an auto-recorded
+  // notice yet.
+  if (
+    rule &&
+    rule.autoRecord &&
+    isConfidentTransaction(amount, date) &&
+    AUTO_RECORD_CHANNELS.has(channel)
+  ) {
+    const result = await autoRecordFromRule({ amount, date, note, rule, channel });
+    return { params: {}, title: "", fields: [], autoRecorded: result };
+  }
+
+  return buildNormalTransactionCard({
+    input,
+    amount,
+    date,
+    wallet,
+    note,
+    hadCounterpartyMatch: rule != null,
+  });
 }

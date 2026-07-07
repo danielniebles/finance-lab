@@ -19,7 +19,12 @@ import {
   answerCallbackQuery,
   editMessageText,
 } from "@/lib/telegram/api";
-import { toTelegramMessage, toTelegramEditOptionsMessage } from "@/lib/telegram/render";
+import {
+  toTelegramMessage,
+  toTelegramEditOptionsMessage,
+  toTelegramAutoRecordMessage,
+} from "@/lib/telegram/render";
+import { formatCOP } from "@/lib/format";
 import { REVERSIBLE_ACTIONS } from "@/lib/agent/actions";
 import type { ProposalDescriptor, EditableField } from "@/lib/agent/types";
 
@@ -198,6 +203,44 @@ async function editMessageWithProposal(
   await editMessageText(chatId, messageId, text, { reply_markup });
 }
 
+/**
+ * Re-renders an edited, already-approved auto-record proposal (ADR-033) via
+ * the dedicated "✅ Registrado… [✏️ Editar] [↩︎ Deshacer]" notice view instead
+ * of the generic card — matching what the original notification looked like
+ * before the edit. Field-mapping mirrors deliver-to-telegram.ts's
+ * sendAutoRecordNotification (the template for the FIRST notice): amount/
+ * wallet come straight from params, category name is resolved from
+ * editable[0].options by the selected appCategoryId, and ruleMatchType/
+ * ruleMatchValue were denormalized onto params at auto-record creation time
+ * (see auto-record-transaction.ts).
+ */
+async function editMessageWithAutoRecordNotice(
+  chatId: number,
+  messageId: number,
+  proposal: ProposalDescriptor,
+): Promise<void> {
+  const params = proposal.params as {
+    amount: number;
+    appCategoryId: string;
+    wallet: string;
+    ruleMatchType?: string;
+    ruleMatchValue?: string;
+  };
+  const categoryName =
+    proposal.editable?.[0]?.options.find((o) => o.id === params.appCategoryId)?.label ?? "?";
+
+  const { text, reply_markup } = toTelegramAutoRecordMessage({
+    proposalId: proposal.id,
+    amountText: formatCOP(params.amount),
+    appCategoryName: categoryName,
+    wallet: params.wallet,
+    ruleMatchType: params.ruleMatchType ?? "?",
+    ruleMatchValue: params.ruleMatchValue ?? "?",
+  });
+
+  await editMessageText(chatId, messageId, text, { reply_markup });
+}
+
 async function handleEditOpenCallback(
   cbq: TelegramCallbackQuery,
   proposalId: string,
@@ -285,7 +328,11 @@ async function handleEditApplyCallback(
   }
 
   await answerCallbackQuery(cbq.id, "Updated.");
-  await editMessageWithProposal(chatId, messageId, result.descriptor, "card");
+  if (result.isAutoRecorded) {
+    await editMessageWithAutoRecordNotice(chatId, messageId, result.descriptor);
+  } else {
+    await editMessageWithProposal(chatId, messageId, result.descriptor, "card");
+  }
 }
 
 async function handleResolveCallback(
@@ -307,6 +354,9 @@ async function handleResolveCallback(
 
   if (choiceId === "approve" && result.ok) {
     await sendUndoButtonIfReversible(chatId, proposalId);
+    if (result.learnRuleNudge) {
+      await sendMessage(chatId, result.learnRuleNudge);
+    }
   }
 }
 

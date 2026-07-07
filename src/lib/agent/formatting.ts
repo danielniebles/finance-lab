@@ -61,6 +61,10 @@ const TITLE_BUILDERS: Record<string, TitleBuilder> = {
     `Record payment: ${fmt(i.amount)} from ${i.debtorName ?? "?"}`,
   propose_undo_last: (i) => `Undo: ${i.originalAction ?? "last action"}`,
   propose_add_transaction: (i) => `Add transaction: ${i.wallet ?? "?"} — ${fmt(i.amount)}`,
+  propose_create_counterparty_rule: (i) =>
+    `Create rule: ${i.matchType ?? "?"} "${i.matchValue ?? "?"}"`,
+  propose_update_counterparty_rule: (i) => `Update rule ${i.ruleId}`,
+  propose_delete_counterparty_rule: (i) => `Delete rule ${i.ruleId}`,
 };
 
 export function buildProposalTitle(name: string, input: Record<string, unknown>): string {
@@ -76,6 +80,9 @@ export function buildProposalFields(
     "cardId", "debtorId", "accountId", "installmentId", "loanId",
     "targetProposalId", "createCard", "createDebtor", "createdId", "createdDebtorId",
     "appCategoryId", // shown via the editable mechanism, not a static field (ADR-031)
+    "hadCounterpartyMatch", // internal bookkeeping for the learn-from-correction nudge (ADR-033)
+    "ruleMatchType", "ruleMatchValue", // denormalized for the Telegram auto-record notification (ADR-033)
+    "counterpartyAccount", "counterpartyMerchant", "counterpartySender", // extraction inputs, not user-facing card fields (ADR-033)
   ]);
   return Object.entries(input)
     .filter(([k]) => !skipKeys.has(k))

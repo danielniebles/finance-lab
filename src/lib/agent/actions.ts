@@ -36,8 +36,20 @@ import {
 } from "@/lib/actions/loans";
 import { importFromDrive } from "@/lib/actions/drive";
 import { createTransaction, deleteTransaction } from "@/lib/actions/transactions";
+import {
+  createCounterpartyRule,
+  updateCounterpartyRule,
+  deleteCounterpartyRule,
+} from "@/lib/actions/counterparty-rules";
 import { db } from "@/lib/db";
-import type { VaultKind, VaultGoalType, BatchStatus, EntryType } from "@/generated/prisma";
+import type {
+  VaultKind,
+  VaultGoalType,
+  BatchStatus,
+  EntryType,
+  RuleMatchType,
+  RuleDirection,
+} from "@/generated/prisma";
 
 const CREATED_ID_MISSING_MSG = "Cannot undo: createdId not recorded.";
 
@@ -407,6 +419,58 @@ async function undoAddTransaction(params: Record<string, unknown>): Promise<void
   await deleteTransaction(params.createdId as string);
 }
 
+// ─── Counterparty rule actions ────────────────────────────────────────────────
+
+async function executeCreateCounterpartyRule(
+  params: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const created = await createCounterpartyRule({
+    matchType: params.matchType as RuleMatchType,
+    matchValue: params.matchValue as string,
+    direction: params.direction as RuleDirection | undefined,
+    appCategoryId: params.appCategoryId as string,
+    wallet: params.wallet as string,
+    autoRecord: params.autoRecord as boolean | undefined,
+    recurring: params.recurring as boolean | undefined,
+    expectedAmount:
+      params.expectedAmount != null ? Number(params.expectedAmount) : undefined,
+    notes: (params.notes as string | undefined) ?? undefined,
+  });
+  return { createdId: created.id };
+}
+
+async function undoCreateCounterpartyRule(
+  params: Record<string, unknown>,
+): Promise<void> {
+  if (!params.createdId)
+    throw new Error(CREATED_ID_MISSING_MSG);
+  await deleteCounterpartyRule(params.createdId as string);
+}
+
+async function executeUpdateCounterpartyRule(
+  params: Record<string, unknown>,
+): Promise<void> {
+  const { ruleId, ...fields } = params;
+  await updateCounterpartyRule(ruleId as string, {
+    matchType: fields.matchType as RuleMatchType,
+    matchValue: fields.matchValue as string,
+    direction: fields.direction as RuleDirection | undefined,
+    appCategoryId: fields.appCategoryId as string,
+    wallet: fields.wallet as string,
+    autoRecord: fields.autoRecord as boolean | undefined,
+    recurring: fields.recurring as boolean | undefined,
+    expectedAmount:
+      fields.expectedAmount != null ? Number(fields.expectedAmount) : null,
+    notes: (fields.notes as string | undefined) ?? null,
+  });
+}
+
+async function executeDeleteCounterpartyRule(
+  params: Record<string, unknown>,
+): Promise<void> {
+  await deleteCounterpartyRule(params.ruleId as string);
+}
+
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 /**
@@ -456,6 +520,12 @@ export const PROPOSAL_ACTIONS: Record<string, ProposalActionDef> = {
     execute: executeAddTransaction,
     undo: undoAddTransaction,
   },
+  propose_create_counterparty_rule: {
+    execute: executeCreateCounterpartyRule,
+    undo: undoCreateCounterpartyRule,
+  },
+  propose_update_counterparty_rule: { execute: executeUpdateCounterpartyRule },
+  propose_delete_counterparty_rule: { execute: executeDeleteCounterpartyRule },
 };
 
 /**

@@ -57,6 +57,42 @@ export function toTelegramMessage(p: ProposalDescriptor): TelegramRenderedMessag
   return { text, reply_markup: { inline_keyboard } };
 }
 
+export type AutoRecordNotice = {
+  proposalId: string;
+  amountText: string;
+  appCategoryName: string;
+  wallet: string;
+  ruleMatchType: string;
+  ruleMatchValue: string;
+};
+
+/**
+ * Auto-record notification (ADR-033): sent when a CounterpartyRule match
+ * already created the transaction (no card was ever shown). Reuses the
+ * EXISTING callback formats verbatim — `eopen:0` (as if field index 0 were
+ * the category, mirroring the normal propose_add_transaction descriptor
+ * shape) reveals the category options, and `undo:{proposalId}` is the same
+ * format the ordinary post-approval Undo button already uses
+ * (sendUndoButtonIfReversible in telegram/route.ts) — no new callback_data
+ * format needed for either button.
+ */
+export function toTelegramAutoRecordMessage(notice: AutoRecordNotice): TelegramRenderedMessage {
+  const lines = [
+    `✅ <b>Registrado</b>: ${escapeHtml(notice.amountText)} → ${escapeHtml(notice.appCategoryName)}`,
+    `Wallet: ${escapeHtml(notice.wallet)}`,
+    `<i>Regla: ${escapeHtml(notice.ruleMatchType)} "${escapeHtml(notice.ruleMatchValue)}"</i>`,
+  ];
+
+  const inline_keyboard: InlineButton[][] = [
+    [
+      { text: "✏️ Editar", callback_data: `${notice.proposalId}:eopen:0` },
+      { text: "↩︎ Deshacer", callback_data: `undo:${notice.proposalId}` },
+    ],
+  ];
+
+  return { text: lines.join("\n"), reply_markup: { inline_keyboard } };
+}
+
 /**
  * Option-picker view for one editable field: shows every option as its own
  * button (selected one marked with a ✓ prefix), plus a back button that

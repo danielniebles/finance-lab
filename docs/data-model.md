@@ -42,7 +42,7 @@ User-defined budget category. Groups one or more MoneyLover categories and carri
 | id | String (cuid) | Primary key |
 | name | String (unique) | e.g. "Groceries" |
 
-**Relations:** has many `CategoryMapping`; has many `BudgetItem`; has many `Transaction` (direct link — MANUAL rows only; see ADR-030)
+**Relations:** has many `CategoryMapping`; has many `BudgetItem`; has many `Transaction` (direct link — MANUAL rows only; see ADR-030); has many `CounterpartyRule` (via `counterpartyRules`, ADR-032)
 
 ---
 
@@ -89,6 +89,36 @@ A single expense/income record — either a row from a MoneyLover XLSX export (`
 **Category resolution rule (used everywhere a transaction's effective AppCategory is needed):** `appCategoryId ?? moneyLoverCategory?.mapping?.appCategoryId` (ADR-030).
 
 **Enum `TransactionSource`:** `MONEYLOVER` | `MANUAL`
+
+---
+
+### CounterpartyRule
+A dictionary entry mapping a known counterparty (destination account, merchant, or sender) to a category and a wallet. Data model + CRUD layer shipped in Phase 2 of the transactions milestone (ADR-032); ingestion rule-matching, auto-record-and-notify, and learning shipped in the same phase's follow-on pass (ADR-033).
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key |
+| matchType | RuleMatchType enum | What kind of value `matchValue` holds |
+| matchValue | String | Normalized on write via `normalizeMatchValue()` — digits-only for ACCOUNT, trimmed+uppercased for MERCHANT/SENDER/KEYWORD |
+| direction | RuleDirection enum | Restricts the rule to EXPENSE, INCOME, or ANY (default) |
+| appCategoryId | String | FK → AppCategory — category to route a match to |
+| wallet | String | Wallet LABEL to route to — overrides the message's stated account. Plain string, like `Transaction.wallet` — no first-class Wallet model (deferred) |
+| autoRecord | Boolean | Default true — matched → record automatically instead of proposing a card (ADR-033) |
+| recurring | Boolean | Default false — hint: recurring inflow/outflow (foundation for Phase 3) |
+| expectedAmount | Float? | Optional, for future recurring-cadence validation (Phase 3) |
+| notes | String? | Optional notes |
+| matchCount | Int | Default 0 — bumped by `bumpCounterpartyRuleMatch()` only when a match is actually used to auto-record (ADR-033) |
+| lastMatchedAt | DateTime? | Set alongside `matchCount` |
+| createdAt | DateTime | Record creation time |
+
+**Enum `RuleMatchType`:** `ACCOUNT` | `MERCHANT` | `SENDER` | `KEYWORD`
+**Enum `RuleDirection`:** `EXPENSE` | `INCOME` | `ANY`
+
+**Relations:** belongs to `AppCategory`
+
+**Normalization:** `normalizeMatchValue(matchType, raw)` in `src/lib/normalize-match-value.ts` — the single source of truth for turning a raw matched value into its stored/lookup form. Standalone file (not inside `actions/` or `queries/`) because it is shared by the CRUD write path and by `matchCounterpartyRule()`'s lookup path (ADR-033) — both must normalize identically or matching silently breaks.
+
+**Matching (ADR-033):** `matchCounterpartyRule({ account?, merchant?, sender?, direction })` in `src/lib/queries/counterparty-rules.ts` tries `ACCOUNT` → `MERCHANT` → `SENDER` in that priority order (a single bundle call, not one lookup per matchType), filtering on `direction` (`ANY` matches either `EXPENSE` or `INCOME`). It is a pure read — it does not bump `matchCount`/`lastMatchedAt` itself; that is `bumpCounterpartyRuleMatch(ruleId)`, called only by the auto-record path once a match is actually used (a match that turns out low-confidence or `autoRecord: false` should not count as a real match).
 
 ---
 
@@ -338,3 +368,5 @@ A persisted record of every proposal the agent has emitted, across all channels.
 | EntryType | INITIAL, ADJUSTMENT |
 | VaultKind | MANDATORY, LEISURE |
 | VaultGoalType | FIXED_DEADLINE, OPEN_ENDED, RECURRING |
+| RuleMatchType | ACCOUNT, MERCHANT, SENDER, KEYWORD |
+| RuleDirection | EXPENSE, INCOME, ANY |

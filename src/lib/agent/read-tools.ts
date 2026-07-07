@@ -14,6 +14,7 @@ import { getVaults, getVaultObligations } from "@/lib/queries/vaults";
 import { getRecurringExpenses } from "@/lib/queries/recurring";
 import { getForecast } from "@/lib/queries/forecast";
 import { listDriveFiles } from "@/lib/actions/drive";
+import { getCounterpartyRules } from "@/lib/queries/counterparty-rules";
 
 export const READ_TOOLS = new Set([
   "get_overview",
@@ -29,6 +30,7 @@ export const READ_TOOLS = new Set([
   "get_forecast",
   "get_categories",
   "list_drive_files",
+  "get_counterparty_rules",
 ]);
 
 // ─── fetch helpers ─────────────────────────────────────────────────────────────
@@ -123,6 +125,7 @@ const READ_TOOL_HANDLERS: Record<string, ReadToolHandler> = {
   get_forecast: (input) => getForecast(Number(input.month), Number(input.year)),
   get_categories: () => getCategories(),
   list_drive_files: () => listDriveFiles(),
+  get_counterparty_rules: () => getCounterpartyRules(),
 };
 
 export async function runReadTool(

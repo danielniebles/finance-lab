@@ -17,6 +17,17 @@ export type ResolvedProposal = {
   blockingMessage?: string;
   /** Fields the user can change directly on the card before approving (e.g. category). */
   editable?: EditableField[];
+  /**
+   * Set when the resolver already performed the write itself (the
+   * counterparty-rule auto-record exception, ADR-033) — the tool-use loop
+   * must NOT create a normal pending proposal/action-card in this case; it
+   * only returns `message` as the tool_result so the agent turn completes.
+   */
+  autoRecorded?: {
+    transactionId: string;
+    proposalId: string;
+    message: string;
+  };
 };
 
 /** Assemble a successful resolution — the common case for every resolver. */

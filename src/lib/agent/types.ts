@@ -27,7 +27,20 @@ export type ProposalDescriptor = {
   editable?: EditableField[];
 };
 
+/**
+ * A transaction the counterparty-rule auto-record path (ADR-033) already
+ * created and approved during this turn — the tool-use loop skipped the
+ * normal proposal-card flow entirely. Delivery layers (deliver-to-telegram.ts)
+ * use this to send the "✅ Registrado… [✏️ Editar] [↩︎ Deshacer]" notification
+ * instead of (or alongside) a normal action card.
+ */
+export type AutoRecordedNotice = {
+  proposalId: string; // = the already-approved PendingProposal.id (undo/edit target)
+  transactionId: string;
+};
+
 export type AgentTurnResult = {
   text: string;
   proposals: ProposalDescriptor[];
+  autoRecorded: AutoRecordedNotice[];
 };

@@ -14,8 +14,9 @@ import { db } from "@/lib/db";
 import { saveMessage } from "@/lib/actions/chat";
 import { runAgentTurn } from "@/lib/agent/run-agent-turn";
 import { sendMessage, sendChatAction } from "@/lib/telegram/api";
-import { toTelegramMessage } from "@/lib/telegram/render";
-import type { ProposalDescriptor } from "@/lib/agent/types";
+import { toTelegramMessage, toTelegramAutoRecordMessage } from "@/lib/telegram/render";
+import { formatCOP } from "@/lib/format";
+import type { AutoRecordedNotice, ProposalDescriptor } from "@/lib/agent/types";
 
 // A turn whose only output is a proposal (no text) was previously dropped from
 // ChatMessage entirely, so the model couldn't see what it had already proposed
@@ -66,6 +67,40 @@ async function loadHistoryWithIncoming(text: string) {
   return history;
 }
 
+// ─── Auto-record notification (ADR-033) ──────────────────────────────────────
+// The tool-use loop only returns proposalId/transactionId (AutoRecordedNotice)
+// — it doesn't know about Telegram rendering. This loads the already-approved
+// PendingProposal row (created by auto-record-transaction.ts, complete with
+// its `editable` category field) and the rule that matched, to build the
+// "✅ Registrado…" notification with the reused eopen:/undo: callback formats.
+
+async function sendAutoRecordNotification(chatId: string, notice: AutoRecordedNotice): Promise<void> {
+  const proposal = await db.pendingProposal.findUnique({ where: { id: notice.proposalId } });
+  if (!proposal) return;
+
+  const params = proposal.params as {
+    amount: number;
+    appCategoryId: string;
+    wallet: string;
+    ruleMatchType?: string;
+    ruleMatchValue?: string;
+  };
+  const editable = proposal.editable as { options: { id: string; label: string }[] }[] | null;
+  const categoryName =
+    editable?.[0]?.options.find((o) => o.id === params.appCategoryId)?.label ?? "?";
+
+  const { text, reply_markup } = toTelegramAutoRecordMessage({
+    proposalId: notice.proposalId,
+    amountText: formatCOP(params.amount),
+    appCategoryName: categoryName,
+    wallet: params.wallet,
+    ruleMatchType: params.ruleMatchType ?? "?",
+    ruleMatchValue: params.ruleMatchValue ?? "?",
+  });
+
+  await sendMessage(chatId, text, { reply_markup, parse_mode: "HTML" });
+}
+
 /**
  * Runs one agent turn on `text`, sends the reply + proposal cards to the
  * Telegram chat, and persists a coherent assistant turn (incl. proposal
@@ -113,5 +148,11 @@ export async function runTurnAndDeliverToTelegram(
       reply_markup,
       parse_mode: "HTML",
     });
+  }
+
+  // result.autoRecorded may be absent on older/mocked results (tests mock
+  // runAgentTurn's return shape) — default defensively rather than assume.
+  for (const notice of result.autoRecorded ?? []) {
+    await sendAutoRecordNotification(chatId, notice);
   }
 }
