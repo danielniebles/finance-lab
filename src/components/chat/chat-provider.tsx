@@ -12,7 +12,7 @@ import {
   type SetStateAction,
 } from "react";
 import { getMessages, clearHistory as clearHistoryDB } from "@/lib/actions/chat";
-import type { EditableField, ProposalDescriptor } from "@/lib/agent/types";
+import type { BatchDescriptor, EditableField, ProposalDescriptor } from "@/lib/agent/types";
 
 export type Message = {
   id: string;
@@ -31,6 +31,16 @@ export type ProposalEvent = {
   proposalId?: string; // DB id from backend — used by ActionCard to resolve
   approved: boolean | null; // null = pending, true = approved, false = dismissed
   editable?: EditableField[];
+  batch?: BatchDescriptor;
+  /**
+   * The reply message from /api/proposals/resolve's { ok, message } — for
+   * most actions this is just "Approved" (the ActionCard shows its own
+   * "Approved" badge instead), but for the transactions-batch action it
+   * carries the required "✅ Agregadas N · Total $X · mueve..." summary that
+   * must reach the user. Set generically on resolve for every proposal type,
+   * not just batch — displaying it is a safe no-op change for the rest.
+   */
+  resolvedMessage?: string;
 };
 
 export type ChatModuleContext = {
@@ -51,6 +61,7 @@ type NdjsonEvent = {
   proposalId?: string;
   fields?: { label: string; value: string }[];
   editable?: EditableField[];
+  batch?: BatchDescriptor;
 };
 
 function buildErrorMessage(): Message {
@@ -73,7 +84,7 @@ type ChatContextValue = {
   closeChat: () => void;
   sendMessage: (content: string) => Promise<void>;
   clearHistory: () => Promise<void>;
-  updateProposal: (id: string, approved: boolean) => void;
+  updateProposal: (id: string, approved: boolean, resolvedMessage?: string) => void;
   updateProposalDescriptor: (id: string, descriptor: ProposalDescriptor) => void;
 };
 
@@ -104,6 +115,7 @@ function handleNdjsonLine(line: string, { onTextDelta, onProposal }: StreamCallb
         proposalId: event.proposalId,
         approved: null,
         editable: event.editable,
+        batch: event.batch,
       });
     }
   } catch {
@@ -139,11 +151,11 @@ export function useChat() {
 
 function useProposalUpdaters(setItems: Dispatch<SetStateAction<ChatItem[]>>) {
   const updateProposal = useCallback(
-    (id: string, approved: boolean) => {
+    (id: string, approved: boolean, resolvedMessage?: string) => {
       setItems((prev) =>
         prev.map((item) =>
           item.id === id && "type" in item && (item as ProposalEvent).type === "proposal"
-            ? { ...(item as ProposalEvent), approved }
+            ? { ...(item as ProposalEvent), approved, resolvedMessage }
             : item
         )
       );
@@ -162,6 +174,7 @@ function useProposalUpdaters(setItems: Dispatch<SetStateAction<ChatItem[]>>) {
                 label: descriptor.title,
                 fields: descriptor.fields,
                 editable: descriptor.editable,
+                batch: descriptor.batch,
               }
             : item
         )

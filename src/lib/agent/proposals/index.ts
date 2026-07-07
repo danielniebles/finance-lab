@@ -11,6 +11,7 @@ import { resolveCreateLoan, resolveRecordLoanPayment } from "./loans";
 import { resolveAccountAdjustment, resolveTransfer } from "./accounts";
 import { resolveUndoLast } from "./undo";
 import { resolveAddTransaction } from "./transactions";
+import { resolveAddTransactionsBatch } from "./transactions-batch";
 import {
   resolveCreateCounterpartyRule,
   resolveUpdateCounterpartyRule,
@@ -23,6 +24,7 @@ export { resolveCreateLoan, resolveRecordLoanPayment } from "./loans";
 export { resolveAccountAdjustment, resolveTransfer } from "./accounts";
 export { resolveUndoLast } from "./undo";
 export { resolveAddTransaction } from "./transactions";
+export { resolveAddTransactionsBatch } from "./transactions-batch";
 export {
   resolveCreateCounterpartyRule,
   resolveUpdateCounterpartyRule,
@@ -56,6 +58,7 @@ export const RESOLVER_REGISTRY: Record<string, ComplexResolver> = {
   propose_account_adjustment: (input) => resolveAccountAdjustment(input),
   propose_transfer: (input) => resolveTransfer(input),
   propose_add_transaction: (input, _month, _year, channel) => resolveAddTransaction(input, channel),
+  propose_add_transactions_batch: (input) => resolveAddTransactionsBatch(input),
   propose_create_counterparty_rule: (input) => resolveCreateCounterpartyRule(input),
   propose_update_counterparty_rule: (input) => resolveUpdateCounterpartyRule(input),
   propose_delete_counterparty_rule: (input) => resolveDeleteCounterpartyRule(input),

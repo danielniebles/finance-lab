@@ -1,4 +1,5 @@
-import type { ProposalDescriptor, EditableField } from "@/lib/agent/types";
+import type { ProposalDescriptor, EditableField, BatchDescriptor } from "@/lib/agent/types";
+import { formatCOP } from "@/lib/format";
 
 // Convert a ProposalDescriptor to a Telegram message with inline keyboard buttons.
 //
@@ -114,6 +115,120 @@ export function toTelegramEditOptionsMessage(
   // One option per row keeps labels readable; back button on its own row.
   const inline_keyboard: InlineButton[][] = optionButtons.map((b) => [b]);
   inline_keyboard.push([{ text: "⬅︎ Volver", callback_data: `${p.id}:eback` }]);
+
+  return { text, reply_markup: { inline_keyboard } };
+}
+
+// ─── Batch proposal rendering (ADR-034 — card-screenshot ingestion) ─────────
+//
+// callback_data formats, all prefixed `${proposalId}:` (indices only, per the
+// 64-byte budget documented above):
+//   bt:{idx}          — toggle item[idx].included
+//   be:{idx}          — open the category picker for item[idx]
+//   bs:{idx}:{optIdx} — set item[idx].appCategoryId from categoryOptions[optIdx]
+//   bo                — open the card-label picker (read-only navigation)
+//   bc:{optIdx}       — set batch.cardLabel from cardLabelOptions[optIdx]
+//   bback             — restore the default batch card view (from either picker)
+// approve/dismiss reuse the EXISTING `${proposalId}:approve|dismiss` format —
+// no new code needed there, the generic fallback in route.ts already handles it.
+//
+// Long statements (~30+ items): Telegram allows ~100 buttons per message, and
+// two buttons/item stays comfortably under that up to ~30 items. Beyond that,
+// this renders every item unpaginated — a known, documented limitation (see
+// .scratch/card-screenshot-batch-proposal.md) rather than a pagination system,
+// per the handoff's explicit "note as an edge case, not a hard requirement."
+
+const MAX_BATCH_ITEM_BUTTON_ROWS = 30;
+
+function batchItemLine(item: BatchDescriptor["items"][number], idx: number, categoryLabel: string): string {
+  const marker = item.included ? "✓" : "✕ (tachado)";
+  const scratchNote = item.scratchDetected ? " ⚠︎" : "";
+  return `${idx + 1}. ${marker} ${escapeHtml(item.vendor)} ${escapeHtml(formatCOP(-Math.abs(item.amount)))} → ${escapeHtml(categoryLabel)}${scratchNote}`;
+}
+
+/** Full batch review card: numbered list + per-item toggle/edit buttons + card-label + approve/dismiss. */
+export function toTelegramBatchMessage(p: ProposalDescriptor): TelegramRenderedMessage {
+  const batch = p.batch;
+  if (!batch) {
+    // Defensive: should never happen (caller only invokes this when p.batch is set).
+    return toTelegramMessage(p);
+  }
+
+  const categoryById = new Map(batch.categoryOptions.map((c) => [c.id, c.label]));
+  const includedCount = batch.items.filter((i) => i.included).length;
+  const total = batch.items
+    .filter((i) => i.included)
+    .reduce((sum, i) => sum + Math.abs(i.amount), 0);
+
+  const lines = batch.items.map((item, idx) =>
+    batchItemLine(item, idx, categoryById.get(item.appCategoryId) ?? "?"),
+  );
+
+  const text = [
+    `<b>${escapeHtml(p.title)}</b>`,
+    `Tarjeta: ${escapeHtml(batch.cardLabel)}`,
+    lines.join("\n"),
+    `Incluidas: ${includedCount} · Total: ${escapeHtml(formatCOP(total))}`,
+  ].join("\n\n");
+
+  const inline_keyboard: InlineButton[][] = [];
+  batch.items.slice(0, MAX_BATCH_ITEM_BUTTON_ROWS).forEach((item, idx) => {
+    inline_keyboard.push([
+      { text: `${idx + 1} ${item.included ? "✓" : "✕"}`, callback_data: `${p.id}:bt:${idx}` },
+      { text: `${idx + 1} ✏️`, callback_data: `${p.id}:be:${idx}` },
+    ]);
+  });
+
+  inline_keyboard.push([{ text: "💳 Tarjeta", callback_data: `${p.id}:bo` }]);
+  inline_keyboard.push(
+    p.choices.map((choice) => ({
+      text: choice.id === "approve" ? `✅ Aprobar ${includedCount}` : "❌ Descartar",
+      callback_data: `${p.id}:${choice.id}`,
+    })),
+  );
+
+  return { text, reply_markup: { inline_keyboard } };
+}
+
+/**
+ * Category picker for one batch item — same shape as toTelegramEditOptionsMessage
+ * (one option per row, ✓ marks the current selection, back button restores the
+ * batch card), adapted for batch.categoryOptions + the `bs:{idx}:{optIdx}` format.
+ */
+export function toTelegramBatchCategoryMessage(
+  p: ProposalDescriptor,
+  itemIdx: number,
+): TelegramRenderedMessage {
+  const batch = p.batch;
+  const item = batch?.items[itemIdx];
+  const text = `<b>${escapeHtml(p.title)}</b>\n\nCategoría para ${escapeHtml(item?.vendor ?? "?")}:`;
+
+  const optionButtons: InlineButton[] = (batch?.categoryOptions ?? []).map((opt, optIdx) => ({
+    text: opt.id === item?.appCategoryId ? `✓ ${opt.label}` : opt.label,
+    callback_data: `${p.id}:bs:${itemIdx}:${optIdx}`,
+  }));
+
+  const inline_keyboard: InlineButton[][] = optionButtons.map((b) => [b]);
+  inline_keyboard.push([{ text: "⬅︎ Volver", callback_data: `${p.id}:bback` }]);
+
+  return { text, reply_markup: { inline_keyboard } };
+}
+
+/**
+ * Card-label picker — same shape, over batch.cardLabelOptions, using the
+ * `bc:{optIdx}` format (no item index needed, it's a batch-level field).
+ */
+export function toTelegramBatchCardLabelMessage(p: ProposalDescriptor): TelegramRenderedMessage {
+  const batch = p.batch;
+  const text = `<b>${escapeHtml(p.title)}</b>\n\nTarjeta:`;
+
+  const optionButtons: InlineButton[] = (batch?.cardLabelOptions ?? []).map((opt, optIdx) => ({
+    text: opt.id === batch?.cardLabel || opt.label === batch?.cardLabel ? `✓ ${opt.label}` : opt.label,
+    callback_data: `${p.id}:bc:${optIdx}`,
+  }));
+
+  const inline_keyboard: InlineButton[][] = optionButtons.map((b) => [b]);
+  inline_keyboard.push([{ text: "⬅︎ Volver", callback_data: `${p.id}:bback` }]);
 
   return { text, reply_markup: { inline_keyboard } };
 }

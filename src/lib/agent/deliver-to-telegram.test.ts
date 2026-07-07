@@ -35,7 +35,8 @@ vi.mock("@/lib/telegram/render", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { runTurnAndDeliverToTelegram } from "./deliver-to-telegram";
+import { saveMessage } from "@/lib/actions/chat";
+import { runTurnAndDeliverToTelegram, runImageTurnAndDeliverToTelegram } from "./deliver-to-telegram";
 
 describe("runTurnAndDeliverToTelegram — typing indicator", () => {
   beforeEach(() => {
@@ -132,5 +133,74 @@ describe("runTurnAndDeliverToTelegram — ingest echo", () => {
       String(text).startsWith("📥 Procesando:"),
     );
     expect(echoCalls).toHaveLength(0);
+  });
+});
+
+// ─── runImageTurnAndDeliverToTelegram (card-screenshot Part 1) ───────────────
+// Verifies the image entry point round-trips: sends the "📸 Leyendo…" echo,
+// persists a text placeholder (never raw image bytes) to ChatMessage, attaches
+// the image content block only to the LIVE incoming message (history rows stay
+// plain strings), and delivers the result exactly like the text path.
+
+describe("runImageTurnAndDeliverToTelegram", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    runAgentTurnMock.mockResolvedValue({ text: "Veo 3 transacciones.", proposals: [] });
+    process.env.TELEGRAM_ALLOWED_CHAT_ID = "12345";
+  });
+
+  const IMAGE = { base64: "ZmFrZS1pbWFnZS1ieXRlcw==", mediaType: "image/jpeg" };
+
+  it("sends the 'Leyendo el pantallazo' echo before running the turn", async () => {
+    await runImageTurnAndDeliverToTelegram(IMAGE);
+
+    expect(sendMessageMock).toHaveBeenCalledWith("12345", "📸 Leyendo el pantallazo…");
+  });
+
+  it("persists a text placeholder to ChatMessage instead of raw image bytes", async () => {
+    await runImageTurnAndDeliverToTelegram(IMAGE);
+
+    expect(saveMessage).toHaveBeenCalledWith(
+      "user",
+      "📸 [foto de tarjeta recibida]",
+      "telegram",
+    );
+    // Never persist base64 image bytes anywhere in the call.
+    const persistedCalls = vi.mocked(saveMessage).mock.calls;
+    for (const call of persistedCalls) {
+      expect(String(call[1])).not.toContain(IMAGE.base64);
+    }
+  });
+
+  it("attaches the image content block only to the live incoming message", async () => {
+    vi.mocked(db.chatMessage.findMany).mockResolvedValueOnce([
+      { role: "user", content: "hola", createdAt: new Date("2026-01-01") },
+    ] as never);
+
+    await runImageTurnAndDeliverToTelegram(IMAGE);
+
+    expect(runAgentTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          { role: "user", content: "hola" },
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: "image/jpeg", data: IMAGE.base64 },
+              },
+              { type: "text", text: expect.any(String) },
+            ],
+          },
+        ],
+      }),
+    );
+  });
+
+  it("delivers the agent's text reply to Telegram like the text path", async () => {
+    await runImageTurnAndDeliverToTelegram(IMAGE);
+
+    expect(sendMessageMock).toHaveBeenCalledWith("12345", "Veo 3 transacciones.");
   });
 });

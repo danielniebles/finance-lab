@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { PROPOSAL_ACTIONS } from "@/lib/agent/actions";
+import { DEFAULT_APPROVE_MESSAGE } from "@/lib/agent/types";
 
 export type ProposalDecision = {
   proposalId: string;
@@ -42,6 +43,50 @@ function buildLearnRuleNudge(action: string, params: Record<string, unknown>): s
   return `💡 ¿Quieres que recuerde esto? La próxima transacción a/de "${counterparty}" se registraría automáticamente con la misma categoría y wallet. Dime "sí, recuérdalo" si quieres crear la regla.`;
 }
 
+/**
+ * Runs the registered action (or the special propose_undo_last dispatch),
+ * persists any returned extra fields back onto params, and returns the reply
+ * message to use — either the generic "Approved" default or, when an
+ * action's execute() opted into the generic message escape hatch (e.g. the
+ * batch's "Agregadas N · Total X" summary), that string instead. Split out
+ * of resolveProposal to keep its cognitive complexity within budget.
+ */
+async function executeApprovedAction(
+  proposalId: string,
+  action: string,
+  params: Record<string, unknown>,
+): Promise<string> {
+  if (action === "propose_undo_last") {
+    await executeUndo(params);
+    return DEFAULT_APPROVE_MESSAGE;
+  }
+
+  const def = PROPOSAL_ACTIONS[action];
+  if (!def) throw new Error(`No handler for action: ${action}`);
+  const extra = await def.execute(params, { proposalId });
+  if (!extra || Object.keys(extra).length === 0) {
+    return DEFAULT_APPROVE_MESSAGE;
+  }
+
+  // A generic escape hatch: an action's execute() may return its own reply
+  // text (e.g. the batch's "Agregadas N · Total X" summary) in place of the
+  // default "Approved" — checked here rather than a per-action
+  // `if (action === ...)` branch, so a THIRD special case never needs to be
+  // bolted onto resolveProposal (learnRuleNudge is the second; this
+  // generalizes instead of adding a third). `message` itself is never
+  // persisted onto params — it's reply text, not proposal state (undo/
+  // display never need it back).
+  const { message: extraMessage, ...extraToPersist } = extra;
+  await db.pendingProposal.update({
+    where: { id: proposalId },
+    data: {
+      params: { ...params, ...extraToPersist } as unknown as Record<string, string>,
+    },
+  });
+
+  return typeof extraMessage === "string" ? extraMessage : DEFAULT_APPROVE_MESSAGE;
+}
+
 export async function resolveProposal(d: ProposalDecision): Promise<ResolveProposalResult> {
   const { proposalId, choiceId } = d;
 
@@ -68,24 +113,7 @@ export async function resolveProposal(d: ProposalDecision): Promise<ResolvePropo
   const params = proposal.params as Record<string, unknown>;
 
   try {
-    if (proposal.action === "propose_undo_last") {
-      await executeUndo(params);
-    } else {
-      const def = PROPOSAL_ACTIONS[proposal.action];
-      if (!def) throw new Error(`No handler for action: ${proposal.action}`);
-      const extra = await def.execute(params, { proposalId });
-      if (extra && Object.keys(extra).length > 0) {
-        await db.pendingProposal.update({
-          where: { id: proposalId },
-          data: {
-            params: { ...params, ...extra } as unknown as Record<
-              string,
-              string
-            >,
-          },
-        });
-      }
-    }
+    const approveMessage = await executeApprovedAction(proposalId, proposal.action, params);
 
     await db.pendingProposal.update({
       where: { id: proposalId },
@@ -100,7 +128,7 @@ export async function resolveProposal(d: ProposalDecision): Promise<ResolvePropo
 
     return {
       ok: true,
-      message: "Approved",
+      message: approveMessage,
       learnRuleNudge: buildLearnRuleNudge(proposal.action, params),
     };
   } catch (err) {

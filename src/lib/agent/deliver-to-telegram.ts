@@ -10,13 +10,14 @@
 // authorized user — there is only ever one delivery target, so it is resolved
 // here rather than threaded through as a parameter).
 
+import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { db } from "@/lib/db";
 import { saveMessage } from "@/lib/actions/chat";
 import { runAgentTurn } from "@/lib/agent/run-agent-turn";
 import { sendMessage, sendChatAction } from "@/lib/telegram/api";
-import { toTelegramMessage, toTelegramAutoRecordMessage } from "@/lib/telegram/render";
+import { toTelegramMessage, toTelegramAutoRecordMessage, toTelegramBatchMessage } from "@/lib/telegram/render";
 import { formatCOP } from "@/lib/format";
-import type { AutoRecordedNotice, ProposalDescriptor } from "@/lib/agent/types";
+import type { AgentTurnResult, AutoRecordedNotice, ProposalDescriptor } from "@/lib/agent/types";
 
 // A turn whose only output is a proposal (no text) was previously dropped from
 // ChatMessage entirely, so the model couldn't see what it had already proposed
@@ -46,11 +47,13 @@ export async function saveAssistantTurn(
   }
 }
 
-async function loadHistoryWithIncoming(text: string) {
-  // Fetch the most RECENT 20 messages (desc + take), then reverse back to
-  // chronological order. `asc + take` would instead grab the 20 OLDEST rows,
-  // permanently blinding the agent to anything recent once the conversation
-  // exceeds 20 messages (ADR-029).
+// Shared by both the plain-text and image entry points: loads the most
+// RECENT 20 messages (desc + take), then reverses back to chronological
+// order. `asc + take` would instead grab the 20 OLDEST rows, permanently
+// blinding the agent to anything recent once the conversation exceeds 20
+// messages (ADR-029). History rows are always plain strings — only the
+// incoming message (appended by the caller) may carry a content-block array.
+async function loadHistory(): Promise<{ role: "user" | "assistant"; content: string }[]> {
   const historyRows = (
     await db.chatMessage.findMany({
       orderBy: { createdAt: "desc" },
@@ -58,13 +61,17 @@ async function loadHistoryWithIncoming(text: string) {
     })
   ).reverse();
 
-  const history = historyRows.map((m) => ({
+  return historyRows.map((m) => ({
     role: m.role as "user" | "assistant",
     content: m.content,
   }));
+}
 
-  history.push({ role: "user" as const, content: text });
-  return history;
+async function loadHistoryWithIncoming(
+  text: string,
+): Promise<{ role: "user" | "assistant"; content: MessageParam["content"] }[]> {
+  const history = await loadHistory();
+  return [...history, { role: "user" as const, content: text }];
 }
 
 // ─── Auto-record notification (ADR-033) ──────────────────────────────────────
@@ -99,6 +106,37 @@ async function sendAutoRecordNotification(chatId: string, notice: AutoRecordedNo
   });
 
   await sendMessage(chatId, text, { reply_markup, parse_mode: "HTML" });
+}
+
+// Shared tail for both entry points: persists the combined assistant turn,
+// then delivers text/proposal cards/auto-record notices to Telegram exactly
+// the same way regardless of whether the turn started from text or an image.
+async function deliverResultToTelegram(
+  chatId: string,
+  channel: "web" | "telegram" | "shortcut",
+  result: AgentTurnResult,
+): Promise<void> {
+  await saveAssistantTurn(result.text, result.proposals, channel);
+
+  if (result.text) {
+    await sendMessage(chatId, result.text);
+  }
+
+  for (const proposal of result.proposals) {
+    const { text: proposalText, reply_markup } = proposal.batch
+      ? toTelegramBatchMessage(proposal)
+      : toTelegramMessage(proposal);
+    await sendMessage(chatId, proposalText, {
+      reply_markup,
+      parse_mode: "HTML",
+    });
+  }
+
+  // result.autoRecorded may be absent on older/mocked results (tests mock
+  // runAgentTurn's return shape) — default defensively rather than assume.
+  for (const notice of result.autoRecorded ?? []) {
+    await sendAutoRecordNotification(chatId, notice);
+  }
 }
 
 /**
@@ -136,23 +174,49 @@ export async function runTurnAndDeliverToTelegram(
     channel: "telegram",
   });
 
-  await saveAssistantTurn(result.text, result.proposals, channel);
+  await deliverResultToTelegram(chatId, channel, result);
+}
 
-  if (result.text) {
-    await sendMessage(chatId, result.text);
-  }
+/**
+ * Image-aware sibling of `runTurnAndDeliverToTelegram()` (Part 1 of the
+ * card-screenshot feature — see .scratch/card-screenshot-image-ingestion.md).
+ * Only the Telegram photo path calls this today: a photo arrives with no
+ * caption text worth persisting verbatim, so a short placeholder is saved to
+ * `ChatMessage` instead of the raw image bytes (never store base64 in the
+ * DB — `ChatMessage.content` stays a plain `String` column, no schema change).
+ * The image content block is attached ONLY to the live incoming message;
+ * history rows loaded from the DB are always plain strings.
+ */
+export async function runImageTurnAndDeliverToTelegram(
+  image: { base64: string; mediaType: string },
+  opts?: { channel?: "telegram"; instruction?: string },
+): Promise<void> {
+  const chatId = process.env.TELEGRAM_ALLOWED_CHAT_ID as string;
+  const channel = opts?.channel ?? "telegram";
+  const instruction = opts?.instruction ?? "Extrae la información de esta imagen.";
 
-  for (const proposal of result.proposals) {
-    const { text: proposalText, reply_markup } = toTelegramMessage(proposal);
-    await sendMessage(chatId, proposalText, {
-      reply_markup,
-      parse_mode: "HTML",
-    });
-  }
+  await sendMessage(chatId, "📸 Leyendo el pantallazo…");
 
-  // result.autoRecorded may be absent on older/mocked results (tests mock
-  // runAgentTurn's return shape) — default defensively rather than assume.
-  for (const notice of result.autoRecorded ?? []) {
-    await sendAutoRecordNotification(chatId, notice);
-  }
+  const history = await loadHistory();
+  // Placeholder text for shared history — never persist raw image bytes.
+  await saveMessage("user", "📸 [foto de tarjeta recibida]", channel);
+
+  const incomingMessage: { role: "user"; content: MessageParam["content"] } = {
+    role: "user",
+    content: [
+      {
+        type: "image",
+        source: { type: "base64", media_type: image.mediaType as "image/jpeg" | "image/png" | "image/webp" | "image/gif", data: image.base64 },
+      },
+      { type: "text", text: instruction },
+    ],
+  };
+
+  const result = await runAgentTurn({
+    messages: [...history, incomingMessage],
+    context: undefined,
+    channel: "telegram",
+  });
+
+  await deliverResultToTelegram(chatId, channel, result);
 }

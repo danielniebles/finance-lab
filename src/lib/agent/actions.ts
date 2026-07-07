@@ -42,6 +42,8 @@ import {
   deleteCounterpartyRule,
 } from "@/lib/actions/counterparty-rules";
 import { db } from "@/lib/db";
+import { revalidatePath } from "next/cache";
+import { TransactionSource } from "@/generated/prisma";
 import type {
   VaultKind,
   VaultGoalType,
@@ -50,6 +52,8 @@ import type {
   RuleMatchType,
   RuleDirection,
 } from "@/generated/prisma";
+import type { BatchDescriptor } from "./types";
+import { formatCOP } from "@/lib/format";
 
 const CREATED_ID_MISSING_MSG = "Cannot undo: createdId not recorded.";
 
@@ -419,6 +423,76 @@ async function undoAddTransaction(params: Record<string, unknown>): Promise<void
   await deleteTransaction(params.createdId as string);
 }
 
+// ─── Transaction batch actions (ADR-034 — card-screenshot ingestion) ─────────
+// Reads the batch state AS MUTATED IN params by the toggle/edit callbacks
+// (bt:/be:/bs:/bc:) — NOT the original tool-call input — since the user may
+// have toggled/edited items since the card was first shown. Only INCLUDED
+// items are created; every included row's wallet is the batch-level
+// cardLabel (never a rule's wallet — the handoff is explicit this batch flow
+// differs from the single-transaction ADR-033 auto-record exception, which
+// only reused the rule's wallet in a different flow, single-item, not this
+// one). Returns { createdIds, count, total, message } — `message` is picked
+// up by resolveProposal (execute-proposal.ts) in place of the hardcoded
+// "Approved" string (a generic extension, not a batch-specific special case).
+
+// Creates all included rows atomically via an interactive `db.$transaction`
+// callback: a failure partway through (DB hiccup, constraint violation) rolls
+// back EVERYTHING, so we never end up with some transactions persisted with
+// no createdId reference anywhere (permanently un-undoable orphans), and a
+// retry after a failure never re-creates rows that already succeeded (since
+// none did). Deliberately bypasses createTransaction() here — that helper
+// uses the shared `db` singleton with no way to thread an interactive
+// transaction client through — and instead builds the raw
+// `tx.transaction.create` calls directly, mirroring createTransaction()'s own
+// data shape (MANUAL source, no batch/moneyLover linkage). The revalidation
+// side effect (createTransaction()'s revalidateAll()) runs ONCE after the
+// whole batch commits rather than once per item.
+async function executeAddTransactionsBatch(
+  params: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const batch = params.batch as BatchDescriptor;
+  const included = batch.items.filter((item) => item.included);
+
+  const createdIds = await db.$transaction(async (tx) => {
+    const ids: string[] = [];
+    for (const item of included) {
+      const created = await tx.transaction.create({
+        data: {
+          amount: -Math.abs(item.amount),
+          date: item.date ? new Date(item.date) : new Date(),
+          appCategoryId: item.appCategoryId,
+          wallet: batch.cardLabel,
+          note: item.vendor,
+          source: TransactionSource.MANUAL,
+          batchId: null,
+          externalId: null,
+          moneyLoverCategoryId: null,
+        },
+      });
+      ids.push(created.id);
+    }
+    return ids;
+  });
+
+  for (const path of ["/expenses", "/overview", "/trends"] as const) {
+    revalidatePath(path);
+  }
+
+  const total = included.reduce((sum, item) => sum + Math.abs(item.amount), 0);
+  const message = `✅ Agregadas ${included.length} · Total ${formatCOP(total)} · mueve ${formatCOP(total)} a tu pocket de Bancolombia.`;
+
+  return { createdIds, count: included.length, total, message };
+}
+
+async function undoAddTransactionsBatch(params: Record<string, unknown>): Promise<void> {
+  const createdIds = params.createdIds as string[] | undefined;
+  if (!createdIds || createdIds.length === 0)
+    throw new Error(CREATED_ID_MISSING_MSG);
+  for (const id of createdIds) {
+    await deleteTransaction(id);
+  }
+}
+
 // ─── Counterparty rule actions ────────────────────────────────────────────────
 
 async function executeCreateCounterpartyRule(
@@ -519,6 +593,10 @@ export const PROPOSAL_ACTIONS: Record<string, ProposalActionDef> = {
   propose_add_transaction: {
     execute: executeAddTransaction,
     undo: undoAddTransaction,
+  },
+  propose_add_transactions_batch: {
+    execute: executeAddTransactionsBatch,
+    undo: undoAddTransactionsBatch,
   },
   propose_create_counterparty_rule: {
     execute: executeCreateCounterpartyRule,

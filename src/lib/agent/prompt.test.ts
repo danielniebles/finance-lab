@@ -25,3 +25,25 @@ describe("buildSystemPrompt — counterparty rules (ADR-033)", () => {
     expect(prompt).toContain("consulted automatically");
   });
 });
+
+describe("buildSystemPrompt — card-screenshot batch ingestion (ADR-034)", () => {
+  const prompt = buildSystemPrompt({ now: new Date("2026-07-06") });
+
+  it("instructs extracting every row with vendor/amount/date on a card-statement screenshot", () => {
+    expect(prompt).toContain("propose_add_transactions_batch");
+    expect(prompt).toContain("vendor, amount, date");
+  });
+
+  it("instructs marking scratched/crossed-out rows best-effort", () => {
+    expect(prompt).toContain("scratched: true");
+  });
+
+  it("states card purchases are always expenses (positive magnitude for this tool)", () => {
+    expect(prompt).toContain("Card purchases are always expenses");
+  });
+
+  it("instructs exactly one batch call, no per-row questions", () => {
+    expect(prompt).toContain("exactly ONE propose_add_transactions_batch call");
+    expect(prompt).toContain("Do not ask per-row clarifying questions");
+  });
+});

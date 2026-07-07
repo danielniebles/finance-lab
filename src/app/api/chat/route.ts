@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
         // `editable` (ADR-031) is included so a following Frontend pass can render it as
         // a <select> — omitted entirely (undefined) for the vast majority of proposals
         // that don't set it, so existing NDJSON payload shape is otherwise unchanged.
+        // `batch` (ADR-034) follows the same story for propose_add_transactions_batch.
         for (const p of result.proposals) {
           write({
             type: "proposal",
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
             label: p.title,
             fields: p.fields,
             editable: p.editable,
+            batch: p.batch,
           });
         }
 

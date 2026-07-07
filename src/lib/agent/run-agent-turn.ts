@@ -15,7 +15,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, ToolResultBlockParam, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
 import { db } from "@/lib/db";
 import { saveMessage } from "@/lib/actions/chat";
-import type { AgentTurnResult, AutoRecordedNotice, ProposalDescriptor } from "./types";
+import type { AgentTurnResult, AutoRecordedNotice, BatchDescriptor, ProposalDescriptor } from "./types";
 import { buildSystemPrompt } from "./prompt";
 import { PROPOSAL_ACTIONS } from "./actions";
 import { TOOLS } from "./tools";
@@ -96,6 +96,12 @@ async function processProposalToolBlock(
   const title = resolved ? resolved.title : buildProposalTitle(toolBlock.name, toolInput);
   const fields = resolved ? resolved.fields : buildProposalFields(toolInput);
   const editable = resolved?.editable;
+  // propose_add_transactions_batch (ADR-034) nests its multi-item shape
+  // under params.batch — the single source of truth PendingProposal.params
+  // persists and every batch callback (bt:/be:/bs:/bc:) later reads/mutates.
+  // Thread it onto the descriptor too so the immediate NDJSON/Telegram
+  // render has it without a second DB read.
+  const batch = (finalParams as { batch?: BatchDescriptor }).batch;
 
   // Store the verbatim tool name — no transformation. This is the
   // canonical action identifier across PendingProposal.action, the
@@ -127,6 +133,7 @@ async function processProposalToolBlock(
       { id: "dismiss", label: "Dismiss" },
     ],
     ...(editable ? { editable } : {}),
+    ...(batch ? { batch } : {}),
   };
   proposals.push(descriptor);
 
@@ -172,9 +179,9 @@ async function processToolUseBlocks(
   return { toolResults, lastTool };
 }
 
-export function deduplicateHistory(
-  inputMessages: { role: "user" | "assistant"; content: string }[],
-): { role: "user" | "assistant"; content: string }[] {
+export function deduplicateHistory<T extends { role: "user" | "assistant" }>(
+  inputMessages: T[],
+): T[] {
   let history = [...inputMessages];
   let trailingUsers = 0;
   for (let i = history.length - 1; i >= 0; i--) {
@@ -207,7 +214,7 @@ export function collectTextBlocks(
 // ─── Channel-agnostic agent turn ─────────────────────────────────────────────
 
 export async function runAgentTurn(args: {
-  messages: { role: "user" | "assistant"; content: string }[];
+  messages: { role: "user" | "assistant"; content: MessageParam["content"] }[];
   context?: { module?: string; focus?: { month: number; year: number }; entityId?: string; route?: string };
   onTextDelta?: (delta: string) => void;
   channel?: "web" | "telegram";
@@ -219,6 +226,10 @@ export async function runAgentTurn(args: {
 
   // Guard against orphaned consecutive user messages.
   // Keep the most recent user message; strip extra trailing user messages.
+  // History rows loaded from the DB are always plain strings — only the LIVE
+  // incoming message (the last one) may carry an Anthropic content-block array
+  // (e.g. an image block from a Telegram photo). deduplicateHistory only reads
+  // `.role`, so it's unaffected by the widened content type.
   const history = deduplicateHistory(inputMessages);
 
   const messages: MessageParam[] = history.map((m) => ({

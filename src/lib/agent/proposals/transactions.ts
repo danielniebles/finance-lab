@@ -25,8 +25,14 @@ const SHORTLIST_SIZE = 5; // resolved guess + up to 4 more, then __other__
  * order as proposals/loans.ts's resolveCreateLoan name resolution. Falls back
  * to the first category alphabetically when the name is missing or matches
  * nothing — never blocks, since category is editable on the card.
+ *
+ * Exported for reuse by proposals/transactions-batch.ts (ADR-034): a batch
+ * item has no per-item category-name guess from the vision model (only
+ * `{vendor, amount, date?, scratched?}`), so "best-guess category" there
+ * means the identical no-name fallback this function already gives
+ * `resolveCategoryGuess(categories, undefined)` — not a new heuristic.
  */
-function resolveCategoryGuess(
+export function resolveCategoryGuess(
   categories: CategoryOption[],
   appCategoryName: string | undefined,
 ): CategoryOption {
@@ -45,8 +51,11 @@ function resolveCategoryGuess(
  * categories (alphabetically, since getCategories() is already name-sorted —
  * simplest heuristic that doesn't need extra usage-tracking for v1), then the
  * synthetic "Otra…" option always last.
+ *
+ * Exported for reuse by proposals/transactions-batch.ts (ADR-034) — the
+ * batch's per-item `categoryOptions` shortlist reuses this exact heuristic.
  */
-function buildCategoryShortlist(
+export function buildCategoryShortlist(
   categories: CategoryOption[],
   guess: CategoryOption,
 ): EditableOption[] {

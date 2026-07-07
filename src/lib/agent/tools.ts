@@ -455,6 +455,33 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
 
+  {
+    name: "propose_add_transactions_batch",
+    description:
+      "Propose adding multiple expense transactions extracted from a credit-card statement screenshot. Extract every row visible in the image as { vendor, amount, date?, scratched? } — amount is always a positive magnitude (the resolver negates it, since card purchases are always expenses), scratched is your best-effort guess for whether the row is visibly crossed out (pre-excludes it; the user can re-include it on the card). Optionally pass cardLabel (the card/wallet these purchases were made on) — defaults to a generic label if you can't tell. Categories and inclusion are resolved automatically (counterparty rules by vendor, else a best-guess default) and are editable per row on the resulting card; never ask per-row clarifying questions. Emits ONE batch action card — does NOT mutate data.",
+    input_schema: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          description: "Every transaction row visible in the screenshot.",
+          items: {
+            type: "object",
+            properties: {
+              vendor: { type: "string", description: "Merchant/vendor name as printed" },
+              amount: { type: "number", description: "Positive magnitude in COP (always treated as an expense)" },
+              date: { type: "string", description: "ISO date (YYYY-MM-DD) if visible/inferable, optional" },
+              scratched: { type: "boolean", description: "Best-effort: true if this row appears crossed out/scratched in the image" },
+            },
+            required: ["vendor", "amount"],
+          },
+        },
+        cardLabel: { type: "string", description: "Card/wallet label these purchases were made on (optional — defaults to a generic label, editable on the card)" },
+      },
+      required: ["items"],
+    },
+  },
+
   // ── Counterparty rule tools ──
   {
     name: "propose_create_counterparty_rule",

@@ -14,6 +14,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useChat } from "./chat-provider";
 import type { ProposalEvent } from "./chat-provider";
+import { BatchProposalTable } from "./batch-proposal-table";
+import { DEFAULT_APPROVE_MESSAGE } from "@/lib/agent/types";
 import type { EditableField, ProposalDescriptor } from "@/lib/agent/types";
 
 // ─── Param display helpers ────────────────────────────────────────────────────
@@ -189,6 +191,43 @@ function EditableFieldsSection({
   );
 }
 
+// ─── Proposal body (batch table, or fields + editable field) ─────────────────
+//
+// Batch proposals (propose_add_transactions_batch, ADR-034) render an
+// interactive table from proposal.batch instead of the generic fields/
+// editable display — branched cleanly so every other proposal type's
+// rendering is completely unchanged.
+
+function ProposalBody({
+  proposal,
+  isPending,
+  onDescriptorUpdated,
+}: {
+  proposal: ProposalEvent;
+  isPending: boolean;
+  onDescriptorUpdated: (descriptor: ProposalDescriptor) => void;
+}) {
+  if (proposal.batch) {
+    return (
+      <BatchProposalTable
+        proposalId={proposal.proposalId ?? ""}
+        batch={proposal.batch}
+        disabled={!isPending}
+        onUpdated={onDescriptorUpdated}
+      />
+    );
+  }
+
+  return (
+    <>
+      <ProposalFieldsDisplay proposal={proposal} />
+      {isPending && (
+        <EditableFieldsSection proposal={proposal} onFieldUpdated={onDescriptorUpdated} />
+      )}
+    </>
+  );
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 type Props = {
@@ -214,7 +253,7 @@ export function ActionCard({ proposal }: Props) {
       });
       const data = (await res.json()) as { ok: boolean; message: string };
       if (!data.ok) throw new Error(data.message);
-      updateProposal(proposal.id, true);
+      updateProposal(proposal.id, true, data.message);
       router.refresh();
     } catch (err) {
       console.error("[ActionCard] approve failed:", err);
@@ -242,15 +281,11 @@ export function ActionCard({ proposal }: Props) {
         {proposal.label}
       </p>
 
-      <ProposalFieldsDisplay proposal={proposal} />
-
-      {/* Editable fields (e.g. category) — only while pending */}
-      {isPending && (
-        <EditableFieldsSection
-          proposal={proposal}
-          onFieldUpdated={(descriptor) => updateProposalDescriptor(proposal.id, descriptor)}
-        />
-      )}
+      <ProposalBody
+        proposal={proposal}
+        isPending={isPending}
+        onDescriptorUpdated={(descriptor) => updateProposalDescriptor(proposal.id, descriptor)}
+      />
 
       {/* Action state */}
       {isPending ? (
@@ -268,9 +303,14 @@ export function ActionCard({ proposal }: Props) {
           </Button>
         </div>
       ) : isApproved ? (
-        <div className="flex items-center gap-1.5 text-success text-xs font-medium pt-1">
-          <CheckCircle2 className="size-3.5" aria-hidden="true" />
-          Approved
+        <div className="space-y-1 pt-1">
+          <div className="flex items-center gap-1.5 text-success text-xs font-medium">
+            <CheckCircle2 className="size-3.5" aria-hidden="true" />
+            Approved
+          </div>
+          {proposal.resolvedMessage && proposal.resolvedMessage !== DEFAULT_APPROVE_MESSAGE && (
+            <p className="text-muted-foreground text-xs">{proposal.resolvedMessage}</p>
+          )}
         </div>
       ) : (
         // dismissed
