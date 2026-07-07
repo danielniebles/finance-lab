@@ -35,6 +35,7 @@ import {
   deleteTransfer,
 } from "@/lib/actions/loans";
 import { importFromDrive } from "@/lib/actions/drive";
+import { createTransaction, deleteTransaction } from "@/lib/actions/transactions";
 import { db } from "@/lib/db";
 import type { VaultKind, VaultGoalType, BatchStatus, EntryType } from "@/generated/prisma";
 
@@ -382,6 +383,30 @@ async function undoTransfer(params: Record<string, unknown>): Promise<void> {
   await deleteTransfer(params.createdId as string);
 }
 
+// ─── Transaction actions ──────────────────────────────────────────────────────
+// The editable card (ADR-031) may have overridden `appCategoryId` in `params`
+// by the time this runs (via applyProposalEdit) — just use it directly, no
+// extra resolution needed here.
+
+async function executeAddTransaction(
+  params: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const created = await createTransaction({
+    amount: Number(params.amount),
+    date: new Date(params.date as string),
+    appCategoryId: params.appCategoryId as string,
+    wallet: params.wallet as string,
+    note: (params.note as string | undefined) ?? undefined,
+  });
+  return { createdId: created.id };
+}
+
+async function undoAddTransaction(params: Record<string, unknown>): Promise<void> {
+  if (!params.createdId)
+    throw new Error(CREATED_ID_MISSING_MSG);
+  await deleteTransaction(params.createdId as string);
+}
+
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 /**
@@ -426,6 +451,10 @@ export const PROPOSAL_ACTIONS: Record<string, ProposalActionDef> = {
   propose_transfer: {
     execute: executeTransfer,
     undo: undoTransfer,
+  },
+  propose_add_transaction: {
+    execute: executeAddTransaction,
+    undo: undoAddTransaction,
   },
 };
 

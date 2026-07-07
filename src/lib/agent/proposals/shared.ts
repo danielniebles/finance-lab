@@ -5,6 +5,8 @@
 // return object. Split out of run-agent-turn.ts (see docs/backlog.md
 // god-file item).
 
+import type { EditableField } from "../types";
+
 export type ProposalField = { label: string; value: string };
 
 export type ResolvedProposal = {
@@ -13,6 +15,8 @@ export type ResolvedProposal = {
   fields: ProposalField[];
   /** If set, return this as a plain text tool result instead of creating a proposal */
   blockingMessage?: string;
+  /** Fields the user can change directly on the card before approving (e.g. category). */
+  editable?: EditableField[];
 };
 
 /** Assemble a successful resolution — the common case for every resolver. */
@@ -20,8 +24,9 @@ export function buildResolvedProposal(
   params: Record<string, unknown>,
   title: string,
   fields: ProposalField[],
+  editable?: EditableField[],
 ): ResolvedProposal {
-  return { params, title, fields };
+  return { params, title, fields, ...(editable ? { editable } : {}) };
 }
 
 /**

@@ -6,7 +6,7 @@
 import { db } from "@/lib/db";
 import { getFinancialSnapshot } from "@/lib/queries/chat";
 import { getHealthScore } from "@/lib/queries/health-score";
-import { getImportBatches, getMonthlyAnalysis } from "@/lib/queries/expenses";
+import { getImportBatches, getMonthlyAnalysis, getCategories } from "@/lib/queries/expenses";
 import { getTrends } from "@/lib/queries/trends";
 import { getAllInstallments, getMonthSummary } from "@/lib/queries/installments";
 import { getLoansOverview } from "@/lib/queries/loans";
@@ -27,6 +27,7 @@ export const READ_TOOLS = new Set([
   "get_vault_obligations",
   "get_recurring_expenses",
   "get_forecast",
+  "get_categories",
   "list_drive_files",
 ]);
 
@@ -95,9 +96,9 @@ async function fetchTransactions(input: Record<string, unknown>): Promise<unknow
       id: t.id,
       date: t.date,
       amount: t.amount,
-      category: t.moneyLoverCategory.name,
+      category: t.moneyLoverCategory?.name ?? null,
       appCategory:
-        t.moneyLoverCategory.mapping?.appCategory?.name ?? null,
+        t.moneyLoverCategory?.mapping?.appCategory?.name ?? null,
       note: t.note,
       wallet: t.wallet,
     })),
@@ -120,6 +121,7 @@ const READ_TOOL_HANDLERS: Record<string, ReadToolHandler> = {
   get_vault_obligations: (input) => getVaultObligations(Number(input.month), Number(input.year)),
   get_recurring_expenses: (input) => getRecurringExpenses(Number(input.month), Number(input.year)),
   get_forecast: (input) => getForecast(Number(input.month), Number(input.year)),
+  get_categories: () => getCategories(),
   list_drive_files: () => listDriveFiles(),
 };
 

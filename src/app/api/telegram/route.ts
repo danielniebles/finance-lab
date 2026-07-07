@@ -6,19 +6,22 @@
 //   TELEGRAM_WEBHOOK_SECRET  — random string; must match the secret_token sent to setWebhook
 
 import { after, NextRequest } from "next/server";
+import { db } from "@/lib/db";
 import { runAgentTurn } from "@/lib/agent/run-agent-turn";
 import {
   runTurnAndDeliverToTelegram,
   saveAssistantTurn,
 } from "@/lib/agent/deliver-to-telegram";
 import { resolveProposal } from "@/lib/agent/execute-proposal";
+import { applyProposalEdit } from "@/lib/agent/apply-proposal-edit";
 import {
   sendMessage,
   answerCallbackQuery,
   editMessageText,
 } from "@/lib/telegram/api";
-import { toTelegramMessage } from "@/lib/telegram/render";
+import { toTelegramMessage, toTelegramEditOptionsMessage } from "@/lib/telegram/render";
 import { REVERSIBLE_ACTIONS } from "@/lib/agent/actions";
+import type { ProposalDescriptor, EditableField } from "@/lib/agent/types";
 
 // ─── Minimal Telegram Update types ───────────────────────────────────────────
 
@@ -143,7 +146,6 @@ async function handleUndoCallback(cbq: TelegramCallbackQuery, originalProposalId
 
 /** After an approved reversible action, send a follow-up message with an ↩ Undo button. */
 async function sendUndoButtonIfReversible(chatId: number, proposalId: string): Promise<void> {
-  const { db } = await import("@/lib/db");
   const proposal = await db.pendingProposal.findUnique({
     where: { id: proposalId },
     select: { action: true },
@@ -157,6 +159,133 @@ async function sendUndoButtonIfReversible(chatId: number, proposalId: string): P
       },
     });
   }
+}
+
+// ─── Editable-field callbacks (ADR-031) ───────────────────────────────────────
+// `e:{fieldIdx}:{optIdx}` mutates the pending proposal's params/editable and
+// re-renders the default card — it does NOT approve. `eopen:{fieldIdx}` is
+// read-only navigation: reveals the option buttons for one field, built from
+// the already-persisted `editable[fieldIdx].options` (no DB mutation, no
+// re-running the agent). `eback` restores the default card view.
+
+async function loadProposalDescriptor(proposalId: string): Promise<ProposalDescriptor | null> {
+  const proposal = await db.pendingProposal.findUnique({ where: { id: proposalId } });
+  if (!proposal) return null;
+
+  return {
+    id: proposal.id,
+    action: proposal.action,
+    params: proposal.params as Record<string, unknown>,
+    title: proposal.title,
+    fields: [],
+    reasoning: "",
+    choices: [
+      { id: "approve", label: "Approve", style: "primary" },
+      { id: "dismiss", label: "Dismiss" },
+    ],
+    editable: (proposal.editable as unknown as EditableField[] | null) ?? undefined,
+  };
+}
+
+async function editMessageWithProposal(
+  chatId: number,
+  messageId: number,
+  proposal: ProposalDescriptor,
+  view: "card" | { fieldIdx: number },
+): Promise<void> {
+  const { text, reply_markup } =
+    view === "card" ? toTelegramMessage(proposal) : toTelegramEditOptionsMessage(proposal, view.fieldIdx);
+  await editMessageText(chatId, messageId, text, { reply_markup });
+}
+
+async function handleEditOpenCallback(
+  cbq: TelegramCallbackQuery,
+  proposalId: string,
+  fieldIdx: number,
+): Promise<void> {
+  const chatId = cbq.message?.chat?.id;
+  const messageId = cbq.message?.message_id;
+  if (chatId == null || messageId == null) return;
+
+  const proposal = await loadProposalDescriptor(proposalId);
+  if (!proposal) {
+    await answerCallbackQuery(cbq.id, "Proposal not found.");
+    return;
+  }
+
+  await answerCallbackQuery(cbq.id, "");
+  await editMessageWithProposal(chatId, messageId, proposal, { fieldIdx });
+}
+
+async function handleEditBackCallback(cbq: TelegramCallbackQuery, proposalId: string): Promise<void> {
+  const chatId = cbq.message?.chat?.id;
+  const messageId = cbq.message?.message_id;
+  if (chatId == null || messageId == null) return;
+
+  const proposal = await loadProposalDescriptor(proposalId);
+  if (!proposal) {
+    await answerCallbackQuery(cbq.id, "Proposal not found.");
+    return;
+  }
+
+  await answerCallbackQuery(cbq.id, "");
+  await editMessageWithProposal(chatId, messageId, proposal, "card");
+}
+
+type EditSelection = { field: EditableField; option: { id: string; label: string } };
+
+async function resolveEditSelection(
+  proposalId: string,
+  fieldIdx: number,
+  optIdx: number,
+): Promise<EditSelection | null> {
+  const proposal = await loadProposalDescriptor(proposalId);
+  const field = proposal?.editable?.[fieldIdx];
+  const option = field?.options[optIdx];
+  if (!field || !option) return null;
+  return { field, option };
+}
+
+/**
+ * "Otra…" (__other__) is a synthetic option, not a real id to persist —
+ * prompt for free text instead. The next normal text message is picked up by
+ * the agent's ordinary prompt behavior (Part D), which re-resolves the typed
+ * name and re-issues the proposal; no special state machine needed.
+ */
+async function promptForOtherCategory(cbq: TelegramCallbackQuery, chatId: number): Promise<void> {
+  await answerCallbackQuery(cbq.id, "");
+  await sendMessage(chatId, "Escribe la categoría");
+}
+
+async function handleEditApplyCallback(
+  cbq: TelegramCallbackQuery,
+  proposalId: string,
+  fieldIdx: number,
+  optIdx: number,
+): Promise<void> {
+  const chatId = cbq.message?.chat?.id;
+  const messageId = cbq.message?.message_id;
+  if (chatId == null || messageId == null) return;
+
+  const selection = await resolveEditSelection(proposalId, fieldIdx, optIdx);
+  if (!selection) {
+    await answerCallbackQuery(cbq.id, "Invalid selection.");
+    return;
+  }
+
+  if (selection.option.id === "__other__") {
+    await promptForOtherCategory(cbq, chatId);
+    return;
+  }
+
+  const result = await applyProposalEdit(proposalId, selection.field.field, selection.option.id);
+  if (!result.ok || !result.descriptor) {
+    await answerCallbackQuery(cbq.id, result.message ?? "Could not apply edit.");
+    return;
+  }
+
+  await answerCallbackQuery(cbq.id, "Updated.");
+  await editMessageWithProposal(chatId, messageId, result.descriptor, "card");
 }
 
 async function handleResolveCallback(
@@ -181,12 +310,49 @@ async function handleResolveCallback(
   }
 }
 
+// Editable-field callback formats (ADR-031), all prefixed `${proposalId}:`:
+//   eopen:{fieldIdx}          — reveal option buttons for one field
+//   e:{fieldIdx}:{optIdx}     — apply the selected option, re-render the card
+//   eback                     — restore the default card view
+// Checked via a trailing-segment match (not lastIndexOf(":")) since these
+// formats contain multiple colons themselves, unlike the plain approve/dismiss
+// format the fallback parse below still handles.
+const EDIT_OPEN_RE = /^(.+):eopen:(\d+)$/;
+const EDIT_APPLY_RE = /^(.+):e:(\d+):(\d+)$/;
+const EDIT_BACK_RE = /^(.+):eback$/;
+
+async function tryHandleEditCallback(cbq: TelegramCallbackQuery, data: string): Promise<boolean> {
+  const applyMatch = data.match(EDIT_APPLY_RE);
+  if (applyMatch) {
+    await handleEditApplyCallback(cbq, applyMatch[1], Number(applyMatch[2]), Number(applyMatch[3]));
+    return true;
+  }
+
+  const openMatch = data.match(EDIT_OPEN_RE);
+  if (openMatch) {
+    await handleEditOpenCallback(cbq, openMatch[1], Number(openMatch[2]));
+    return true;
+  }
+
+  const backMatch = data.match(EDIT_BACK_RE);
+  if (backMatch) {
+    await handleEditBackCallback(cbq, backMatch[1]);
+    return true;
+  }
+
+  return false;
+}
+
 async function handleCallbackQuery(cbq: TelegramCallbackQuery): Promise<void> {
   const data = cbq.data ?? "";
 
   // Handle undo callback: "undo:{proposalId}"
   if (data.startsWith("undo:")) {
     await handleUndoCallback(cbq, data.slice(5));
+    return;
+  }
+
+  if (await tryHandleEditCallback(cbq, data)) {
     return;
   }
 

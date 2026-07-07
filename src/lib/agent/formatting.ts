@@ -60,6 +60,7 @@ const TITLE_BUILDERS: Record<string, TitleBuilder> = {
   propose_record_loan_payment: (i) =>
     `Record payment: ${fmt(i.amount)} from ${i.debtorName ?? "?"}`,
   propose_undo_last: (i) => `Undo: ${i.originalAction ?? "last action"}`,
+  propose_add_transaction: (i) => `Add transaction: ${i.wallet ?? "?"} — ${fmt(i.amount)}`,
 };
 
 export function buildProposalTitle(name: string, input: Record<string, unknown>): string {
@@ -74,6 +75,7 @@ export function buildProposalFields(
     "vaultId", "id", "sourceAccountId", "fromVaultId", "fundingVaultId",
     "cardId", "debtorId", "accountId", "installmentId", "loanId",
     "targetProposalId", "createCard", "createDebtor", "createdId", "createdDebtorId",
+    "appCategoryId", // shown via the editable mechanism, not a static field (ADR-031)
   ]);
   return Object.entries(input)
     .filter(([k]) => !skipKeys.has(k))

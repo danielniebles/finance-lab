@@ -96,6 +96,12 @@ export const TOOLS: Anthropic.Tool[] = [
       required: ["month", "year"],
     },
   },
+  {
+    name: "get_categories",
+    description:
+      "Get all AppCategories (id, name, budgetType). Call this before proposing a transaction to guess the best category and build the editable option shortlist.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
 
   // ── Proposal tools ──
   {
@@ -402,6 +408,27 @@ export const TOOLS: Anthropic.Tool[] = [
         notes: { type: "string", description: "Notes (optional)" },
       },
       required: ["fromAccountName", "toAccountName", "amount"],
+    },
+  },
+
+  // ── Transaction tools ──
+  {
+    name: "propose_add_transaction",
+    description:
+      "Propose adding a single expense/income transaction (bot-captured, e.g. from a bank notification or typed in chat). Signed amount: negative = expense, positive = income. Call get_categories first to guess the best appCategoryName — the category is always editable directly on the resulting card, so never ask a clarifying question about it; an unresolved or omitted category name falls back to a reasonable default. Emits an action card — does NOT mutate.",
+    input_schema: {
+      type: "object",
+      properties: {
+        amount: { type: "number", description: "Signed amount in COP: negative = expense, positive = income" },
+        date: { type: "string", description: "ISO date (YYYY-MM-DD), defaults to today" },
+        appCategoryName: {
+          type: "string",
+          description: "Best-guess AppCategory name (optional — call get_categories to pick a real one). Never blocks; editable on the card.",
+        },
+        wallet: { type: "string", description: "Account/wallet label, e.g. bank name (optional)" },
+        note: { type: "string", description: "Merchant or note (optional)" },
+      },
+      required: ["amount"],
     },
   },
 

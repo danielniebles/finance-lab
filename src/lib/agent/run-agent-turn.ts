@@ -75,23 +75,27 @@ async function processProposalToolBlock(
     };
   }
 
-  // Build final params, title, fields
+  // Build final params, title, fields, editable
   const finalParams = resolved ? resolved.params : toolInput;
   const title = resolved ? resolved.title : buildProposalTitle(toolBlock.name, toolInput);
   const fields = resolved ? resolved.fields : buildProposalFields(toolInput);
+  const editable = resolved?.editable;
 
   // Store the verbatim tool name — no transformation. This is the
   // canonical action identifier across PendingProposal.action, the
   // registry, and undo. (ADR-026)
   const actionName = toolBlock.name;
 
-  // Persist a PendingProposal record
+  // Persist a PendingProposal record. `editable` is stored at creation time
+  // (not just mutated later) so the Telegram/web edit callbacks can resolve
+  // option index → id without re-running the agent (ADR-031).
   const pendingProposal = await db.pendingProposal.create({
     data: {
       action: actionName,
       params: finalParams as unknown as Record<string, string>,
       title,
       channel,
+      ...(editable ? { editable: editable as unknown as Record<string, string> } : {}),
     },
   });
 
@@ -106,6 +110,7 @@ async function processProposalToolBlock(
       { id: "approve", label: "Approve", style: "primary" },
       { id: "dismiss", label: "Dismiss" },
     ],
+    ...(editable ? { editable } : {}),
   };
   proposals.push(descriptor);
 

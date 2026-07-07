@@ -14,7 +14,15 @@ import {
 import { Upload, Loader2, HardDrive, RefreshCw, FileSpreadsheet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type ImportResult = { error?: string; success?: boolean; month?: number; year?: number; count?: number };
+type ImportResult = {
+  error?: string;
+  success?: boolean;
+  month?: number;
+  year?: number;
+  count?: number;
+  imported?: number;
+  skippedAsDuplicate?: number;
+};
 
 export function ImportForm() {
   const [open, setOpen] = useState(false);

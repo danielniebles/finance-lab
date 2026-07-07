@@ -3,7 +3,9 @@
 ## Known issues
 - `next-themes` is listed as a dependency (`package.json`) but is not used — theme is managed via a plain cookie mechanism instead. The package can be removed.
 - `@anthropic-ai/sdk` and the `@googleapis/drive` packages are production dependencies, which means they are bundled for the server but not tree-shaken. This is acceptable for a server-rendered app but worth noting if bundle size ever matters.
-- The chat history window is hard-coded to the last 20 messages (`src/app/api/chat/route.ts:26`). Very long conversations silently drop older context.
+- ✅ RESOLVED (ADR-029) — The chat history window loads the most-recent 20 messages (`desc + take: 20`, reversed), not the 20 oldest. Two follow-on ideas from the same investigation are still open, not yet built:
+  1. **Time-bounded window** — additionally filter to messages within a recent window (e.g. ~2 hours), so a stale topic drops off instead of bleeding into a new one once 20 messages haven't yet been reached.
+  2. **Reset keyword** — a `reset`/`nuevo` keyword that starts a fresh context (ignores history before it), for when the user deliberately switches topics.
 
 ## TODO items from code
 No `TODO` or `FIXME` comments were found in the source.
@@ -158,7 +160,17 @@ This generalizes beyond primas: the same trigger question applies to recurring-e
 
 **Deferred / open items from this domain:**
 - **Voucher OCR** — photographing receipts to auto-categorize without MoneyLover export. Requires a separate ingestion pipeline.
-- **One-off expense logger** — recording an expense directly in Finance Lab (not via MoneyLover import). Needs a transaction form + category mapping UI outside the import flow.
+- ✅ SHIPPED (ADR-030/031) — **One-off/bot expense logger.** `propose_add_transaction` + `createTransaction()` record a MANUAL transaction directly (Telegram, Shortcut ingest, or typed chat), with the category editable on the action card instead of a separate mapping UI. MoneyLover import now backfills around it (dedup by day+amount).
+
+---
+
+### First-class Wallet/Account model (deferred — out of scope for the transactions milestone)
+
+`Transaction.wallet` is a plain string label (e.g. "Bancolombia", "Nequi") populated from MoneyLover wallet names or from a bot-parsed bank notification. It is **not** modeled as an entity and has no relation to `SavingsAccount` — a transaction's wallet and a savings account of the same name are two unconnected strings today.
+
+**What's missing:** a first-class Wallet/Account model that represents the user's actual MoneyLover wallets (salary, savings, investments) as entities owning transactions, reconciled with the existing `SavingsAccount` liquidity tracker. Needed for: true balance-per-wallet (not just category-level expense analysis), full parity with MoneyLover's own per-wallet view, and eventually letting a bot-captured transaction affect the right account's computed balance if that's ever desired (today it deliberately does not — ADR-030's "expense record only, no balance coupling" decision).
+
+**Why deferred:** the transactions milestone (ADR-030/031) explicitly scoped this out — the wallet-as-string-label approach was sufficient to ship bot-primary capture without touching the Loans/liquidity model, and folding wallet identity into `SavingsAccount` (or a new entity) is a real modeling decision (which wallets map to which accounts, what happens to existing MoneyLover wallet names that don't correspond to any tracked account, whether/how a MANUAL transaction should ever affect a balance) that deserves its own design pass rather than being bolted on here.
 
 ---
 

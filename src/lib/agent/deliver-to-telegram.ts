@@ -46,10 +46,16 @@ export async function saveAssistantTurn(
 }
 
 async function loadHistoryWithIncoming(text: string) {
-  const historyRows = await db.chatMessage.findMany({
-    orderBy: { createdAt: "asc" },
-    take: 20,
-  });
+  // Fetch the most RECENT 20 messages (desc + take), then reverse back to
+  // chronological order. `asc + take` would instead grab the 20 OLDEST rows,
+  // permanently blinding the agent to anything recent once the conversation
+  // exceeds 20 messages (ADR-029).
+  const historyRows = (
+    await db.chatMessage.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    })
+  ).reverse();
 
   const history = historyRows.map((m) => ({
     role: m.role as "user" | "assistant",
@@ -74,6 +80,14 @@ export async function runTurnAndDeliverToTelegram(
 
   if (channel === "telegram") {
     await sendChatAction(chatId, "typing");
+  }
+
+  // Ingested (shortcut) messages arrive with no visible trace in Telegram —
+  // echo the raw text before running the turn so the user can see exactly
+  // what's being processed and match it to the reply that follows. Normal
+  // Telegram messages are already visible in the chat; don't double-echo.
+  if (channel === "shortcut") {
+    await sendMessage(chatId, `📥 Procesando: ${text}`);
   }
 
   const history = await loadHistoryWithIncoming(text);

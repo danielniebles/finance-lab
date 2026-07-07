@@ -57,9 +57,11 @@ The agent core is channel-agnostic. `runAgentTurn()` knows nothing about React o
 
 - **Web:** the NDJSON stream in `/api/chat` serializes proposals as `{type:"proposal", proposalId, ...}`; `ActionCard` renders them; approval calls `POST /api/proposals/resolve`.
 - **Telegram:** the webhook at `/api/telegram` calls `runAgentTurn()` (buffered, no streaming), sends text and proposal messages with inline keyboard buttons; button taps call `resolveProposal()` directly.
-- **Shortcut/HTTP ingest:** `POST /api/ingest` (bearer `INGEST_SECRET`) accepts `{ text }` from an external client (e.g. an iPhone Shortcut forwarding a bank message), runs the shared agent-turn helper (`runTurnAndDeliverToTelegram`, also used by the Telegram webhook), and delivers the reply/proposal to Telegram. Propose-then-confirm is unchanged — approval still happens in Telegram.
+- **Shortcut/HTTP ingest:** `POST /api/ingest` (bearer `INGEST_SECRET`) accepts `{ text }` from an external client (e.g. an iPhone Shortcut forwarding a bank message), runs the shared agent-turn helper (`runTurnAndDeliverToTelegram`, also used by the Telegram webhook), and delivers the reply/proposal to Telegram. Propose-then-confirm is unchanged — approval still happens in Telegram. Before running the agent turn, the raw ingested text is echoed to Telegram (`📥 Procesando: <text>`) so the user can see exactly what's being processed (ADR-029).
 
 Propose-then-confirm (§2) is preserved on every channel — the user must tap Approve before any mutation occurs.
+
+**History window (ADR-029):** every channel reads the same shared `ChatMessage` history, capped at the 20 most **recent** messages (`desc + take: 20`, then reversed to chronological order) — not the 20 oldest. The prior bug (`orderBy: "asc", take: 20`, which grabs the oldest rows) made the agent permanently blind to anything recent once a conversation passed 20 messages; fixed identically in both `deliver-to-telegram.ts` and the web route.
 
 ---
 
@@ -104,6 +106,7 @@ Tools come in two classes. **Read tools** execute immediately and return data.
 | `get_vault_obligations(month, year)` | `getVaultObligations()` | Per-vault required / contributed / still-needed this month |
 | `get_recurring_expenses(month, year)` | `getRecurringExpenses()` | All active recurring expenses with computed set-aside amounts and status |
 | `get_forecast(month, year)` | `getForecast()` | Projected savings rate + per-category landing ranges from trend history (historical only). When an IN_PROGRESS batch exists for the month, returns pacing mode fields: `pacingMode`, `spentSoFar`, `projectedVariableSpend`, `daysElapsed`, `daysInMonth`. |
+| `get_categories()` | `getCategories()` | All AppCategories (`id`, `name`, `budgetType`) — used to guess a category and build the editable option shortlist for `propose_add_transaction`. |
 | `list_drive_files()` | `listDriveFiles()` | Lists MoneyLover XLSX files in the configured Google Drive folder, ordered by most-recently modified |
 
 ### 4.2 Proposal tools (return an action card; never mutate)
@@ -126,7 +129,10 @@ Authoritative mapping: `src/lib/agent/actions.ts`.
 | `propose_record_loan_payment(debtorName, amount, date?, notes?)` | `recordLoanPayment()` | Record a repayment from a debtor. Targets oldest active loan when multiple exist. Shows resulting outstanding balance. |
 | `propose_account_adjustment(accountName, amount, date?, notes?)` | `createEntry()` (type ADJUSTMENT) | Direct debit/credit/correction on a savings account — no repayment expected. Signed amount: negative = money out, positive = money in. Account must exist — ask user if not found. |
 | `propose_transfer(fromAccountName, toAccountName, amount, date?, notes?)` | `createTransfer()` | Move money between two of the user's savings accounts. Both accounts must exist — ask user if either is not found. |
-| `propose_undo_last()` | reverse of last approved action | Proposes reversal of the most recent approved conversational write. Reversible: createInstallment, markPayment, createLoan, recordPayment, createDebtor, createCard, accountAdjustment, transfer. Imports are NOT reversible. |
+| `propose_add_transaction(amount, date?, appCategoryName?, wallet?, note?)` | `createTransaction()` | Add a single bot-captured expense/income record (ADR-030). Signed amount: negative = expense, positive = income. Call `get_categories` first to guess `appCategoryName` — category is **never** a blocking field; an unresolved/omitted guess falls back to a default and is always editable directly on the card (ADR-031). `wallet` is a free-text account label, not a `SavingsAccount` — no balance coupling. |
+| `propose_undo_last()` | reverse of last approved action | Proposes reversal of the most recent approved conversational write. Reversible: createInstallment, markPayment, createLoan, recordPayment, createDebtor, createCard, accountAdjustment, transfer, addTransaction. Imports are NOT reversible. |
+
+**Editable proposals (ADR-031):** a proposal may mark one or more fields as directly editable on the card instead of static text — today, `propose_add_transaction`'s category. The descriptor carries `editable: { field, label, selectedId, options }[]`; a synthetic `{ id: "__other__", label: "Otra…" }` option is always last. On Telegram, a `✏️ {label}` button reveals the option list (`eopen:`), tapping an option applies it and re-renders the card (`e:`) — this mutates only the *pending* proposal's draft, it does **not** approve. On web, the same descriptor renders as a `<select>` (Frontend pass), calling `POST /api/proposals/edit`. Both channels share one mutation, `applyProposalEdit()`. Approve/Dismiss are unchanged for every proposal without an editable field.
 
 ---
 
@@ -274,6 +280,16 @@ This uses German amortization (`computeInstallmentDue` in `installment-utils.ts`
 
 ---
 
+## 5f. Domain rules: Bot-captured transactions (ADR-030, ADR-031)
+
+A **transaction** added via `propose_add_transaction` is an expense-analysis record — same shape as a MoneyLover import row, but with `source = MANUAL`, no `batchId`, and a direct `appCategoryId`. It is **not** a `SavingsAccount` operation: `wallet` is a free-text label (e.g. "Bancolombia" from a bank notification), never resolved against `get_loans()`, and never touches any account balance. Do not confuse this with `propose_account_adjustment` — that's for a real savings-account balance change; this is purely a categorized expense/income entry for the monthly analysis.
+
+**Bank-message ingestion is self-contained and one-shot.** A bank/payment notification already carries everything needed: amount, date, merchant (→ `note`), and account (→ `wallet`). On such a message, call `get_categories`, pick a best-guess category, and emit exactly **one** `propose_add_transaction` card in the same turn — never ask a clarifying question about the category (it's editable on the card; see ADR-031). This is a scoped exception to ask-XOR-propose (§5e) for category on this tool specifically — every other field still follows that rule normally.
+
+**Bot primary, MoneyLover backfills.** Live bot capture (Telegram + Shortcut ingest) is the primary expense-capture path. The weekly MoneyLover import is a backfill: on import, a MoneyLover row matching an existing MANUAL transaction (same calendar day + exact amount) is skipped as a duplicate, and the import result reports how many were skipped.
+
+---
+
 ## 6. Extensibility model
 
 To add a capability later, in order:
@@ -304,8 +320,9 @@ vault entry — keep them behind the same propose-then-confirm gate.
   executes the tool (read tools hit the DB, proposal tools emit an action-card event and
   return "proposal surfaced, awaiting user approval"); the route feeds `tool_result` back
   and continues until `end_turn`.
-- **History:** persisted in `ChatMessage`. (Known issue: hard-capped at last 20 messages —
-  see backlog.)
+- **History:** persisted in `ChatMessage`, capped at the 20 most recent messages across all
+  channels (`desc + take: 20`, reversed to chronological order — ADR-029). A time-bounded
+  window and a manual "reset topic" keyword are still open backlog items.
 
 ---
 

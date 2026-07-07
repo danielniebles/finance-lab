@@ -39,10 +39,11 @@ model MoneyLoverCategory {
 }
 
 model AppCategory {
-  id          String            @id @default(cuid())
-  name        String            @unique
-  mappings    CategoryMapping[]
-  budgetItems BudgetItem[]
+  id           String            @id @default(cuid())
+  name         String            @unique
+  mappings     CategoryMapping[]
+  budgetItems  BudgetItem[]
+  transactions Transaction[]
 }
 
 model BudgetItem {
@@ -62,17 +63,25 @@ model CategoryMapping {
   appCategory          AppCategory        @relation(fields: [appCategoryId], references: [id])
 }
 
+enum TransactionSource {
+  MONEYLOVER
+  MANUAL
+}
+
 model Transaction {
-  id                   String             @id @default(cuid())
-  externalId           Int
+  id                   String              @id @default(cuid())
+  externalId           Int?
   date                 DateTime
   amount               Float
   wallet               String
   note                 String?
-  batchId              String
-  batch                ImportBatch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  moneyLoverCategoryId String
-  moneyLoverCategory   MoneyLoverCategory @relation(fields: [moneyLoverCategoryId], references: [id])
+  batchId              String?
+  batch                ImportBatch?        @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  moneyLoverCategoryId String?
+  moneyLoverCategory   MoneyLoverCategory? @relation(fields: [moneyLoverCategoryId], references: [id])
+  appCategoryId        String?
+  appCategory          AppCategory?        @relation(fields: [appCategoryId], references: [id])
+  source               TransactionSource   @default(MONEYLOVER)
 }
 
 enum BudgetType {
@@ -283,6 +292,7 @@ model PendingProposal {
   title      String
   status     String    @default("pending") // pending | approved | dismissed | expired | undone
   channel    String                        // "web" | "telegram"
+  editable   Json?                         // option list for index→id resolution (editable proposal fields; unused until the Telegram/tool pass lands)
   createdAt  DateTime  @default(now())
   resolvedAt DateTime?
 }

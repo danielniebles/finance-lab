@@ -24,8 +24,9 @@ src/
       chat/route.ts         — Thin NDJSON streaming wrapper over runAgentTurn; emits {type:"proposal",proposalId,...} events
       proposals/
         resolve/route.ts    — POST handler: { proposalId, choiceId } → resolveProposal() → { ok, message }
+        edit/route.ts       — POST handler (ADR-031): { proposalId, field, optionId } → applyProposalEdit() → { ok, descriptor?, message? }
       telegram/
-        route.ts            — Telegram webhook: verifies secret token + allowlist; dispatches message and callback_query updates
+        route.ts            — Telegram webhook: verifies secret token + allowlist; dispatches message and callback_query updates, incl. eopen:/e:/eback editable-field callbacks (ADR-031)
       ingest/
         route.ts            — External ingest webhook (ADR-028): bearer-auth POST { text }, 200 { ok: true } immediately, then runs the shared delivery helper in after()
   components/
@@ -37,7 +38,7 @@ src/
     loans/                  — LoansDashboard, AccountCard, DebtorForm, LoanForm, PaymentForm, EntryForm, AccountForm, TransferForm, LoansClient, LoanRowActions
     vaults/                 — VaultsDashboard (client), VaultTile, VaultForm, EntryForm, VaultLedger, VaultDueBanner, RecurringList, RecurringExpenseForm
     settings/               — CategoryList, MappingList
-    chat/                   — FloatingChat, ChatProvider, ChatMessages, ChatInput, ActionCard
+    chat/                   — FloatingChat, ChatProvider, ChatMessages, ChatInput, ActionCard (ActionCard's `<select>` rendering of editable fields, ADR-031, lands in a following Frontend pass — see the shared ProposalDescriptor.editable contract in agent/types.ts)
     ui/                     — shadcn/ui base-nova primitives
   lib/
     db.ts                   — Prisma client singleton
@@ -48,37 +49,40 @@ src/
     forecast-utils.ts       — pure math for the forecasting module; predictCategoryLanding (recency-weighted mean, MIN_MONTHS guard), projectSavingsRate. Mirrors vault-utils.ts pattern.
     forecast-utils.test.ts  — Vitest unit tests for forecast-utils (12 tests: prediction, null/thin-data cases, projectSavingsRate edge cases). Run with `npm test`.
     parse-moneylover.ts     — XLSX → Transaction[] parser
+    financial-period-utils.ts — getFinancialPeriodBounds(month, year, startDay): inverts parse-moneylover.ts's financialMonthYear — given a calendar (month, year), returns the [start, end) date range for that financial-month bucket. Lets queries select transactions by date range instead of by ImportBatch, so MANUAL (bot-captured) rows with no batch are included (ADR-030).
     queries/
-      expenses.ts           — getMonthlyAnalysis(), getImportBatches(), getUnmappedCategories()
+      expenses.ts           — getMonthlyAnalysis() (date-range scoped via getFinancialPeriodBounds, category resolved per ADR-030's rule), getImportBatches(), getAvailableMonths() (unions ImportBatch months with MANUAL-transaction financial-period months — replaces the old batch-only "available months"), getCategories() (CategoryOption[] — used by get_categories and propose_add_transaction's shortlist), getUnmappedCategories()
       installments.ts       — getAllInstallments(), getMonthSummary()
       loans.ts              — getLoansOverview() — now returns inVaults + netWorth; account balance formula subtracts vaultFundedNet
-      trends.ts             — getTrends()
+      trends.ts             — getTrends() — date-range scoped like getMonthlyAnalysis; a manual-only month always counts, a month with an IN_PROGRESS batch stays excluded even with manual transactions present (ADR-030)
       health-score.ts       — getHealthScore()
-      chat.ts               — getFinancialSnapshot()
+      chat.ts               — getFinancialSnapshot() — date-range scoped + null-safe category resolution, so manual transactions are included in the agent's snapshot (ADR-030)
       vaults.ts             — getVaults() (branches on goalType: RECURRING uses summed set-asides), getVaultObligations(); VaultEntryRow now includes sourceAccountId + sourceAccountName
       recurring.ts          — getRecurringExpenses(month, year): items with set-aside + status
       accounts.ts           — getSavingsAccounts(): lightweight AccountOption[] (id, name, balance) for pickers
     agent/
-      types.ts              — ProposalChoice, ProposalDescriptor, AgentTurnResult (channel-agnostic types)
+      types.ts              — ProposalChoice, ProposalDescriptor (now with optional editable: EditableField[], ADR-031), EditableField, EditableOption, AgentTurnResult (channel-agnostic types)
       prompt.ts             — System-prompt builder: single source of truth for the text sent to the model
-      actions.ts            — PROPOSAL_ACTIONS registry (keyed by exact propose_* tool name) + REVERSIBLE_ACTIONS; consumed by run-agent-turn.ts and execute-proposal.ts; single source of truth for proposal dispatch (ADR-026)
-      tools.ts              — TOOLS: Anthropic.Tool[] JSON schema array (read + proposal tool definitions the model sees)
-      read-tools.ts         — READ_TOOLS set + runReadTool(): name→handler registry over the fetch*/query functions for every read-only tool
-      formatting.ts         — formatParamKey/formatParamValue, TITLE_BUILDERS, buildProposalTitle(), buildProposalFields(): proposal display formatting
-      proposals/            — complex proposal resolvers, split by domain: shared.ts (ResolvedProposal type + buildResolvedProposal/blockingProposal helpers), drive.ts, installments.ts, loans.ts, undo.ts, index.ts (RESOLVER_REGISTRY + resolveComplexProposal() dispatch, re-exports every resolver)
-      run-agent-turn.ts     — Channel-agnostic tool-use loop orchestrator: derives PROPOSAL_TOOLS from PROPOSAL_ACTIONS, processReadToolBlock/processProposalToolBlock/processToolUseBlocks, persists PendingProposal on each proposal tool call, runAgentTurn(); previously a 1,200+ line god-file mixing tool dispatch/resolution/formatting/orchestration, split into the sibling files above (tools.ts, read-tools.ts, formatting.ts, proposals/)
+      actions.ts            — PROPOSAL_ACTIONS registry (keyed by exact propose_* tool name) + REVERSIBLE_ACTIONS; consumed by run-agent-turn.ts and execute-proposal.ts; single source of truth for proposal dispatch (ADR-026). Includes propose_add_transaction → createTransaction/deleteTransaction (ADR-030).
+      tools.ts              — TOOLS: Anthropic.Tool[] JSON schema array (read + proposal tool definitions the model sees). Includes get_categories and propose_add_transaction (ADR-030/031).
+      read-tools.ts         — READ_TOOLS set + runReadTool(): name→handler registry over the fetch*/query functions for every read-only tool. Includes get_categories → getCategories().
+      formatting.ts         — formatParamKey/formatParamValue, TITLE_BUILDERS, buildProposalTitle(), buildProposalFields(): proposal display formatting. buildProposalFields' skipKeys now also excludes appCategoryId — shown via the editable mechanism, not a static field (ADR-031).
+      proposals/            — complex proposal resolvers, split by domain: shared.ts (ResolvedProposal type + buildResolvedProposal/blockingProposal helpers — buildResolvedProposal now takes an optional editable: EditableField[] 4th arg, ADR-031), drive.ts, installments.ts, loans.ts, accounts.ts, transactions.ts (resolveAddTransaction — category name resolution + editable shortlist builder, ADR-030/031), undo.ts, index.ts (RESOLVER_REGISTRY + resolveComplexProposal() dispatch, re-exports every resolver)
+      run-agent-turn.ts     — Channel-agnostic tool-use loop orchestrator: derives PROPOSAL_TOOLS from PROPOSAL_ACTIONS, processReadToolBlock/processProposalToolBlock/processToolUseBlocks, persists PendingProposal (now incl. editable, ADR-031) on each proposal tool call, runAgentTurn(); previously a 1,200+ line god-file mixing tool dispatch/resolution/formatting/orchestration, split into the sibling files above (tools.ts, read-tools.ts, formatting.ts, proposals/)
       execute-proposal.ts   — resolveProposal(): looks up PendingProposal, dispatches via PROPOSAL_ACTIONS registry, marks approved/dismissed; used by both web and Telegram
-      deliver-to-telegram.ts — runTurnAndDeliverToTelegram(text, opts?): shared helper (ADR-028) — loads shared history, saveMessage, runAgentTurn({channel:"telegram"}), persists combined assistant turn, delivers text + proposal cards to TELEGRAM_ALLOWED_CHAT_ID; used by both the Telegram webhook (handleTextMessage) and /api/ingest
+      apply-proposal-edit.ts — applyProposalEdit(proposalId, field, optionId) (ADR-031): the one shared mutation for editable proposal cards — updates params[field] + editable[fieldIndex].selectedId, rejects a non-pending proposal or unknown field/option, returns a re-rendered ProposalDescriptor. Used by both the Telegram callback handler and POST /api/proposals/edit.
+      deliver-to-telegram.ts — runTurnAndDeliverToTelegram(text, opts?): shared helper (ADR-028) — loads shared history (most-recent 20, reversed to chronological order — ADR-029), saveMessage, runAgentTurn({channel:"telegram"}), persists combined assistant turn, echoes ingested (shortcut-channel) text before the turn (ADR-029), delivers text + proposal cards to TELEGRAM_ALLOWED_CHAT_ID; used by both the Telegram webhook (handleTextMessage) and /api/ingest
     telegram/
       api.ts                — Telegram Bot API helpers: sendMessage, answerCallbackQuery, editMessageText, sendChatAction
-      render.ts             — toTelegramMessage(): converts ProposalDescriptor → Telegram text + inline_keyboard
+      render.ts             — toTelegramMessage(): converts ProposalDescriptor → Telegram text + inline_keyboard, incl. a ✏️ {label} button per editable field (ADR-031). toTelegramEditOptionsMessage(): the option-picker view for one editable field (✓ marks the current selection, plus a ⬅︎ Volver back button). callback_data uses indices, not ids: eopen:{fieldIdx}, e:{fieldIdx}:{optIdx}, eback.
     actions/
-      import.ts             — importMoneyLoverFile(), importBuffer()
+      import.ts             — importMoneyLoverFile(), importBuffer() — now dedups MoneyLover rows against existing MANUAL transactions (same day + exact amount) before insert, returns { imported, skippedAsDuplicate, count } (ADR-030)
       drive.ts              — listDriveFiles(), importFromDrive()
       expenses.ts           — expense-related server actions
       categories.ts         — AppCategory + BudgetItem CRUD actions
       installments.ts       — Installment + InstallmentPayment CRUD actions
       loans.ts              — SavingsAccount, Debtor, Loan, LoanPayment, Transfer CRUD actions
+      transactions.ts       — createTransaction(), deleteTransaction() (ADR-030): the bot/manual-capture write path — MANUAL source, batchId/externalId/moneyLoverCategoryId null, direct appCategoryId
       chat.ts               — saveMessage()
       vaults.ts             — createVault(), updateVault(), archiveVault(), addVaultEntry(vaultId, amount, date?, notes?, sourceAccountId?) — 5th arg optional; revalidates /loans, deleteVaultEntry()
       recurring.ts          — createRecurringExpense(), updateRecurringExpense(), deleteRecurringExpense(), payRecurringExpense() (atomic via prisma.$transaction)
@@ -139,7 +143,7 @@ src/
 ---
 
 ### `src/app/(app)/chat`
-**Responsibility:** Full-screen AI advisor backed by `claude-sonnet-4-6`. Uses a channel-agnostic tool-use loop (11 read tools + 9 proposal tools, including the ADR-027 `propose_account_adjustment`/`propose_transfer` pair), orchestrated by `src/lib/agent/run-agent-turn.ts` and split across `src/lib/agent/{tools,read-tools,formatting}.ts` and `src/lib/agent/proposals/`. Conversation history is persisted in `ChatMessage` (shared across web, Telegram, and Shortcut ingest). The web route (`src/app/api/chat/route.ts`) persists a combined assistant-turn record — text plus a `[Proposed: ...]` summary line per proposal — instead of only the text reply, so a turn whose sole output was a proposal still threads into history (ADR-027; previously such turns vanished from the 20-message window, causing the model to re-ask). The Telegram and Shortcut-ingest entry points share this same behavior via `runTurnAndDeliverToTelegram()` (ADR-028) rather than duplicating it. The floating chat panel is available on every page, module-context-aware. Proposal tools persist a `PendingProposal` record and surface action cards (`ActionCard`) that the user must approve before mutations occur (ADR-015). Approval calls `POST /api/proposals/resolve` which runs the unified `resolveProposal()` (ADR-022).
+**Responsibility:** Full-screen AI advisor backed by `claude-sonnet-4-6`. Uses a channel-agnostic tool-use loop (13 read tools + 16 proposal tools, including the ADR-027 `propose_account_adjustment`/`propose_transfer` pair and the ADR-030/031 `get_categories`/`propose_add_transaction` pair), orchestrated by `src/lib/agent/run-agent-turn.ts` and split across `src/lib/agent/{tools,read-tools,formatting}.ts` and `src/lib/agent/proposals/`. Conversation history is persisted in `ChatMessage` (shared across web, Telegram, and Shortcut ingest), capped at the 20 most **recent** messages, chronologically ordered (ADR-029 — previously the 20 oldest, a bug that made the agent blind to recent context in long conversations). The web route (`src/app/api/chat/route.ts`) persists a combined assistant-turn record — text plus a `[Proposed: ...]` summary line per proposal — instead of only the text reply, so a turn whose sole output was a proposal still threads into history (ADR-027; previously such turns vanished from the 20-message window, causing the model to re-ask). The Telegram and Shortcut-ingest entry points share this same behavior via `runTurnAndDeliverToTelegram()` (ADR-028) rather than duplicating it. The floating chat panel is available on every page, module-context-aware. Proposal tools persist a `PendingProposal` record (now optionally with `editable`, ADR-031) and surface action cards (`ActionCard`) that the user must approve before mutations occur (ADR-015). Approval calls `POST /api/proposals/resolve` which runs the unified `resolveProposal()` (ADR-022); an in-place field edit calls `POST /api/proposals/edit` which runs `applyProposalEdit()` — this mutates only the pending proposal's draft, never approves (ADR-031).
 **Key files:** `chat/page.tsx`, `components/chat/chat-provider.tsx` (NDJSON streaming + proposal state), `chat-messages.tsx`, `chat-input.tsx`, `floating-chat.tsx`, `action-card.tsx`, `src/app/api/chat/route.ts` (thin streaming wrapper), `src/app/api/proposals/resolve/route.ts` (web approve path), `src/lib/agent/run-agent-turn.ts` (tool-use loop orchestrator), `src/lib/agent/tools.ts` (tool JSON schemas), `src/lib/agent/read-tools.ts` (read-tool dispatch), `src/lib/agent/formatting.ts` (proposal display formatting), `src/lib/agent/proposals/` (complex resolvers by domain), `src/lib/agent/execute-proposal.ts` (unified write path), `src/lib/agent/deliver-to-telegram.ts` (shared Telegram-delivery helper, ADR-028)
 **Dependencies:** All agent read queries, vault + recurring write actions, Anthropic SDK, Prisma (PendingProposal)
 **Exports:** `ChatPage` (route), `FloatingChat`, `ActionCard`
@@ -172,13 +176,13 @@ src/
 ### `src/lib/queries/`
 **Responsibility:** All read-only database queries. Pure async functions returning typed data. Called directly inside Server Components.
 **Key files:**
-- `expenses.ts` — `getMonthlyAnalysis()`: full budget/actual/severity breakdown for one month; `getImportBatches()`, `getUnmappedCategories()`
+- `expenses.ts` — `getMonthlyAnalysis()`: full budget/actual/severity breakdown for one month, date-range scoped via `getFinancialPeriodBounds()` so MANUAL transactions are included (ADR-030); `getImportBatches()`, `getAvailableMonths()` (unions ImportBatch + MANUAL-transaction months), `getCategories()` (`CategoryOption[]` — id/name/budgetType, for `get_categories` and the transaction-proposal shortlist), `getUnmappedCategories()`
 - `installments.ts` — `getAllInstallments()`: status-enriched list; `getMonthSummary()`: obligations for a given month; `getCardSummaries(month, year)`: per-card outstanding debt + monthly obligation; `getInstallmentFormData()`: cards/debtors/accounts for form pickers
 - `loans.ts` — `getLoansOverview()`: accounts with computed balances (now subtracts `vaultFundedNet` per account), debtors with computed loan remainders, portfolio KPIs. Now returns `inVaults` (total sourced vault money across accounts) and `netWorth = totalSavings + inVaults`. `totalSavings` and `liquidityRatio` are unchanged (ADR-011 untouched).
 - `accounts.ts` — `getSavingsAccounts()`: lightweight list of `{ id, name, balance }` for picker UIs. Uses the same balance formula as `loans.ts` (including `vaultFundedNet` deduction).
-- `trends.ts` — `getTrends(n)`: per-month income/expense/budget/savings-rate + per-category spend across n months
+- `trends.ts` — `getTrends(n)`: per-month income/expense/budget/savings-rate + per-category spend across n months, date-range scoped like `getMonthlyAnalysis` (ADR-030)
 - `health-score.ts` — `getHealthScore()`: composite 0–100 score with month-over-month delta
-- `chat.ts` — `getFinancialSnapshot()`: plain-text financial summary (used by the `get_overview` agent tool)
+- `chat.ts` — `getFinancialSnapshot()`: plain-text financial summary (used by the `get_overview` agent tool), date-range scoped + null-safe category resolution so manual transactions are included (ADR-030)
 - `vaults.ts` — `getVaults()`: all active vaults with computed `VaultWithMetrics` (balance, remaining, progress %, status, contributedThisMonth). `VaultEntryRow` now includes `sourceAccountId` and `sourceAccountName`; entries include the `sourceAccount` relation. `getVaultObligations(month, year)`: per-vault required/contributed/stillNeeded totals.
 - `forecast.ts` — `getForecast(month, year)`: historical projection using trend history + budget structure. Reuses `getTrends` + `getMonthlyAnalysis`. No new DB shape. Returns `ForecastResult` with per-category predictions, projected savings rate, vsTarget/vsLastMonth deltas, overspend drivers, and `dataSufficiency` flag.
 
@@ -187,11 +191,12 @@ src/
 ### `src/lib/actions/`
 **Responsibility:** All write operations exposed as Next.js Server Actions (or API route handlers for streaming). Call `revalidatePath` after mutations.
 **Key files:**
-- `import.ts` — `importMoneyLoverFile()` / `importBuffer()`: parse XLSX → upsert categories → replace batch → insert transactions
+- `import.ts` — `importMoneyLoverFile()` / `importBuffer()`: parse XLSX → upsert categories → replace batch → insert transactions. Now skips a parsed row as a duplicate when a MANUAL transaction already matches on the same calendar day + exact amount (backfill dedup, ADR-030); returns `{ imported, skippedAsDuplicate, count }`.
 - `drive.ts` — `listDriveFiles()` / `importFromDrive()`: Google Drive service account integration
 - `categories.ts` — AppCategory and BudgetItem create/update/delete
 - `installments.ts` — Installment CRUD (`createInstallment`, `updateInstallment`, `deleteInstallment`); payment actions (`markPayment` — auto-creates a Loan record when debtorId + fundingAccountId are set, `unmarkPayment`); CreditCard CRUD (`createCard`, `updateCard`, `deleteCard`)
 - `loans.ts` — SavingsAccount, AccountEntry, Transfer, Debtor, Loan, LoanPayment CRUD
+- `transactions.ts` — `createTransaction({ amount, date, appCategoryId, wallet, note? })` (ADR-030): creates a MANUAL row (`batchId`/`externalId`/`moneyLoverCategoryId: null`), revalidates `/expenses`, `/overview`, `/trends`; `deleteTransaction(id)` for undo
 - `chat.ts` — `saveMessage()`: persist a single ChatMessage row
 - `vaults.ts` — `createVault()`, `updateVault()`, `archiveVault()` (sets archivedAt), `addVaultEntry()` (signature: `vaultId, amount, date?, notes?, sourceAccountId?` — rejects withdrawal driving balance < 0), `deleteVaultEntry()`; all revalidate `/vaults`, `/overview`, and `/loans` (the last because sourced contributions change account balances)
 

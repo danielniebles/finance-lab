@@ -11,13 +11,16 @@ export async function POST(req: NextRequest) {
   };
   const { content, context } = body;
 
-  // Persist user message and fetch history in parallel
+  // Persist user message and fetch history in parallel. Fetch the most
+  // RECENT 20 (desc + take), then reverse to chronological order — avoids
+  // loading the whole table just to slice the tail (ADR-029; mirrors
+  // deliver-to-telegram.ts's loadHistoryWithIncoming).
   const [, historyRows] = await Promise.all([
     saveMessage("user", content),
-    db.chatMessage.findMany({ orderBy: { createdAt: "asc" } }),
+    db.chatMessage.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
   ]);
 
-  const history = historyRows.slice(-20).map((m) => ({
+  const history = historyRows.reverse().map((m) => ({
     role: m.role as "user" | "assistant",
     content: m.content,
   }));
@@ -38,7 +41,10 @@ export async function POST(req: NextRequest) {
           channel: "web",
         });
 
-        // Emit each proposal as an NDJSON event (includes proposalId for frontend resolve)
+        // Emit each proposal as an NDJSON event (includes proposalId for frontend resolve).
+        // `editable` (ADR-031) is included so a following Frontend pass can render it as
+        // a <select> — omitted entirely (undefined) for the vast majority of proposals
+        // that don't set it, so existing NDJSON payload shape is otherwise unchanged.
         for (const p of result.proposals) {
           write({
             type: "proposal",
@@ -47,6 +53,7 @@ export async function POST(req: NextRequest) {
             params: p.params,
             label: p.title,
             fields: p.fields,
+            editable: p.editable,
           });
         }
 

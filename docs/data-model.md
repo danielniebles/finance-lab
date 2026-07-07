@@ -42,7 +42,7 @@ User-defined budget category. Groups one or more MoneyLover categories and carri
 | id | String (cuid) | Primary key |
 | name | String (unique) | e.g. "Groceries" |
 
-**Relations:** has many `CategoryMapping`; has many `BudgetItem`
+**Relations:** has many `CategoryMapping`; has many `BudgetItem`; has many `Transaction` (direct link — MANUAL rows only; see ADR-030)
 
 ---
 
@@ -71,18 +71,24 @@ Links one MoneyLoverCategory to one AppCategory (1:1 on the MoneyLover side).
 ---
 
 ### Transaction
-A single row from a MoneyLover XLSX export. Positive amount = income; negative = expense.
+A single expense/income record — either a row from a MoneyLover XLSX export (`source = MONEYLOVER`) or a bot/manually-captured entry (`source = MANUAL`, ADR-030). Positive amount = income; negative = expense.
 
 | Field | Type | Description |
 |---|---|---|
 | id | String (cuid) | Primary key |
-| externalId | Int | MoneyLover's own row ID |
+| externalId | Int? | MoneyLover's own row ID — null for MANUAL |
 | date | DateTime | Transaction date |
 | amount | Float | Positive = income, negative = expense (COP) |
-| wallet | String | MoneyLover wallet name |
+| wallet | String | Account/wallet label — MoneyLover wallet name, or a free-text label for MANUAL rows (e.g. bank name from a notification) |
 | note | String? | Optional note |
-| batchId | String | FK → ImportBatch (cascade delete) |
-| moneyLoverCategoryId | String | FK → MoneyLoverCategory |
+| batchId | String? | FK → ImportBatch (cascade delete) — null for MANUAL (not part of any import) |
+| moneyLoverCategoryId | String? | FK → MoneyLoverCategory — null for MANUAL |
+| appCategoryId | String? | FK → AppCategory — direct category link, set for MANUAL rows, null for MONEYLOVER rows (which resolve via `moneyLoverCategory.mapping` instead) |
+| source | TransactionSource enum | `MONEYLOVER` (default) or `MANUAL` |
+
+**Category resolution rule (used everywhere a transaction's effective AppCategory is needed):** `appCategoryId ?? moneyLoverCategory?.mapping?.appCategoryId` (ADR-030).
+
+**Enum `TransactionSource`:** `MONEYLOVER` | `MANUAL`
 
 ---
 
@@ -317,8 +323,9 @@ A persisted record of every proposal the agent has emitted, across all channels.
 | action | String | Proposal tool name, e.g. "propose_vault_contribution" |
 | params | Json | Validated arguments for the server action |
 | title | String | Human-readable title built by the agent |
-| status | String | "pending" \| "approved" \| "dismissed" \| "expired" (default: "pending") |
+| status | String | "pending" \| "approved" \| "dismissed" \| "expired" \| "undone" (default: "pending") |
 | channel | String | "web" or "telegram" — which channel surfaced this proposal |
+| editable | Json? | `EditableField[]` (ADR-031) — option list for the proposal's editable fields (e.g. category), persisted at creation time so Telegram's index-based edit callback can resolve `optIdx → option.id` without re-running the agent. Null for proposals with no editable field (every tool except `propose_add_transaction` today). |
 | createdAt | DateTime | When the proposal was emitted |
 | resolvedAt | DateTime? | When the user approved or dismissed it |
 

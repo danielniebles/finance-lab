@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { ImportForm } from "@/components/expenses/import-form";
 import { AnalysisDashboard } from "@/components/expenses/analysis-dashboard";
 import { PeriodSelector } from "@/components/expenses/period-selector";
-import { db } from "@/lib/db";
+import { getAvailableMonths } from "@/lib/queries/expenses";
 
 type Props = {
   searchParams: Promise<{ month?: string; year?: string }>;
@@ -30,10 +30,7 @@ export default async function ExpensesPage({ searchParams }: Props) {
   const selectedMonth = params.month ? parseInt(params.month) : fallback.month;
   const selectedYear = params.year ? parseInt(params.year) : fallback.year;
 
-  const importedMonths = await db.importBatch.findMany({
-    select: { month: true, year: true, status: true },
-    orderBy: [{ year: "asc" }, { month: "asc" }],
-  });
+  const importedMonths = await getAvailableMonths();
 
   return (
     <div className="space-y-6">

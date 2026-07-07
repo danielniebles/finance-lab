@@ -47,6 +47,7 @@ vi.mock("@/lib/queries/health-score", () => ({
 vi.mock("@/lib/queries/expenses", () => ({
   getImportBatches: vi.fn().mockResolvedValue([]),
   getMonthlyAnalysis: vi.fn().mockResolvedValue({}),
+  getCategories: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/lib/queries/trends", () => ({
@@ -85,9 +86,11 @@ vi.mock("@/lib/actions/drive", () => ({
 import { db } from "@/lib/db";
 import { getLoansOverview } from "@/lib/queries/loans";
 import { getAllInstallments, getCardSummaries } from "@/lib/queries/installments";
+import { getCategories } from "@/lib/queries/expenses";
 import { listDriveFiles } from "@/lib/actions/drive";
 import type { LoansOverview } from "@/lib/queries/loans";
 import type { InstallmentRow } from "@/lib/queries/installments";
+import type { CategoryOption } from "@/lib/queries/expenses";
 import type { DriveFile } from "@/lib/actions/drive";
 
 import {
@@ -106,6 +109,7 @@ import {
   resolveRecordLoanPayment,
   resolveAccountAdjustment,
   resolveTransfer,
+  resolveAddTransaction,
   resolveUndoLast,
   resolveComplexProposal,
   RESOLVER_REGISTRY,
@@ -1120,6 +1124,142 @@ describe("resolveTransfer", () => {
   });
 });
 
+// ─── resolveAddTransaction ────────────────────────────────────────────────────
+
+function makeCategory(overrides?: Partial<CategoryOption>): CategoryOption {
+  return { id: "cat-1", name: "Groceries", budgetType: "VARIABLE", ...overrides };
+}
+
+const GOING_OUT = makeCategory({ id: "cat-2", name: "Going Out" });
+const TRANSPORT = makeCategory({ id: "cat-3", name: "Transport" });
+const UTILITIES = makeCategory({ id: "cat-4", name: "Utilities", budgetType: "FIXED" });
+const HEALTH = makeCategory({ id: "cat-5", name: "Health" });
+const EDUCATION = makeCategory({ id: "cat-6", name: "Education" });
+
+describe("resolveAddTransaction", () => {
+  it("returns a blocking message when no AppCategory exists at all", async () => {
+    vi.mocked(getCategories).mockResolvedValue([]);
+
+    const result = await resolveAddTransaction({ amount: -50_000 });
+    expect(result.blockingMessage).toMatch(/No categories exist/);
+  });
+
+  it("resolves appCategoryName by case-insensitive exact match", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT]);
+
+    const result = await resolveAddTransaction({
+      amount: -11_956,
+      appCategoryName: "going out",
+      wallet: "Bancolombia",
+    });
+
+    expect(result.blockingMessage).toBeUndefined();
+    expect(result.params.appCategoryId).toBe(GOING_OUT.id);
+  });
+
+  it("resolves appCategoryName by partial/contains match when no exact match exists", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT]);
+
+    const result = await resolveAddTransaction({
+      amount: -20_000,
+      appCategoryName: "going",
+    });
+
+    expect(result.params.appCategoryId).toBe(GOING_OUT.id);
+  });
+
+  it("falls back to the first category alphabetically when appCategoryName is missing", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory({ name: "Alpha" }), GOING_OUT]);
+
+    const result = await resolveAddTransaction({ amount: -20_000 });
+    expect(result.params.appCategoryId).toBe("cat-1");
+  });
+
+  it("falls back to the first category when appCategoryName matches nothing — never blocks", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT]);
+
+    const result = await resolveAddTransaction({
+      amount: -20_000,
+      appCategoryName: "Nonexistent Category Name",
+    });
+
+    expect(result.blockingMessage).toBeUndefined();
+    expect(result.params.appCategoryId).toBe("cat-1");
+  });
+
+  it("builds an editable shortlist: resolved guess first, then more categories, then __other__ last", async () => {
+    vi.mocked(getCategories).mockResolvedValue([
+      makeCategory(),
+      GOING_OUT,
+      TRANSPORT,
+      UTILITIES,
+      HEALTH,
+      EDUCATION,
+    ]);
+
+    const result = await resolveAddTransaction({
+      amount: -11_956,
+      appCategoryName: "Going Out",
+    });
+
+    expect(result.editable).toHaveLength(1);
+    const field = result.editable![0];
+    expect(field.field).toBe("appCategoryId");
+    expect(field.label).toBe("Categoría");
+    expect(field.selectedId).toBe(GOING_OUT.id);
+    expect(field.options[0]).toEqual({ id: GOING_OUT.id, label: GOING_OUT.name });
+    expect(field.options[field.options.length - 1]).toEqual({ id: "__other__", label: "Otra…" });
+    // Exactly the shortlist size (guess + up to 4 more) + the synthetic option.
+    expect(field.options).toHaveLength(5 + 1);
+  });
+
+  it("always includes the __other__ option even with very few categories", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory()]);
+
+    const result = await resolveAddTransaction({ amount: -5_000 });
+    const options = result.editable![0].options;
+    expect(options.at(-1)).toEqual({ id: "__other__", label: "Otra…" });
+  });
+
+  it("builds params/title/fields with amount, date, wallet, note — category not in fields", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT]);
+
+    const result = await resolveAddTransaction({
+      amount: -11_956,
+      date: "2026-07-06",
+      appCategoryName: "Going Out",
+      wallet: "Bancolombia",
+      note: "Uber Rides",
+    });
+
+    expect(result.params).toEqual({
+      amount: -11_956,
+      date: "2026-07-06",
+      appCategoryId: GOING_OUT.id,
+      wallet: "Bancolombia",
+      note: "Uber Rides",
+    });
+    expect(result.title).toBe(`Add expense: Bancolombia — ${formatCOP(11_956)}`);
+    expect(result.fields.some((f) => f.label.toLowerCase().includes("categor"))).toBe(false);
+  });
+
+  it("labels income (positive amount) distinctly from expense in the title", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory()]);
+
+    const result = await resolveAddTransaction({ amount: 500_000, wallet: "Nu" });
+    expect(result.title).toContain("income");
+  });
+
+  it("defaults date to today and wallet to a placeholder when omitted", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory()]);
+
+    const result = await resolveAddTransaction({ amount: -5_000 });
+    const today = new Date().toISOString().slice(0, 10);
+    expect(result.params.date).toBe(today);
+    expect(result.params.wallet).toBe("—");
+  });
+});
+
 // ─── resolveUndoLast ──────────────────────────────────────────────────────────
 
 describe("resolveUndoLast", () => {
@@ -1214,6 +1354,14 @@ describe("resolveComplexProposal", () => {
       amount: 1,
     });
     expect(result?.blockingMessage).toMatch(/not found/);
+  });
+
+  it("dispatches propose_add_transaction to resolveAddTransaction", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory()]);
+
+    const result = await resolveComplexProposal("propose_add_transaction", { amount: -1000 });
+    expect(result?.blockingMessage).toBeUndefined();
+    expect(result?.params.appCategoryId).toBe("cat-1");
   });
 });
 
