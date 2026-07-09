@@ -219,7 +219,7 @@ export async function AnalysisDashboard({ month, year }: Props) {
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
-function StatCard({
+export function StatCard({
   label,
   value,
   rawValue,
