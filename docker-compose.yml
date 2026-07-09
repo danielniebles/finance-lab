@@ -33,6 +33,11 @@ services:
       # Keep node_modules and .next inside the container
       - /app/node_modules
       - /app/.next
+      # Override host's .env.local (points at localhost:5432) with the
+      # in-container DB host — prisma.config.ts force-overrides DATABASE_URL
+      # from .env.local, so the host file would otherwise break in-container
+      # connectivity to the `db` service.
+      - ./.env.docker.local:/app/.env.local:ro
     depends_on:
       db:
         condition: service_healthy
