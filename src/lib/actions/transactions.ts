@@ -27,9 +27,17 @@ export async function createTransaction(data: {
   date: Date;
   appCategoryId: string;
   wallet: string;
+  /**
+   * When the caller already knows the exact Wallet.id (e.g. a curated dropdown
+   * sourced from getWalletBalances()), pass it here to skip the ambiguous
+   * name-based resolution entirely — Wallet names are only unique per
+   * SavingsAccount (`@@unique([accountId, name])`), so resolveWalletId()'s
+   * global case-insensitive name lookup can collide across accounts.
+   */
+  walletId?: string;
   note?: string;
 }) {
-  const walletId = await resolveWalletId(data.wallet);
+  const walletId = data.walletId ?? (await resolveWalletId(data.wallet));
   const created = await db.transaction.create({
     data: {
       amount: data.amount,

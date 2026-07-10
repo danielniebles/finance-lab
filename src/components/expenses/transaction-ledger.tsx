@@ -10,6 +10,7 @@ import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/expenses/analysis-dashboard";
 import { LedgerControls } from "@/components/expenses/ledger-controls";
+import { AddTransactionRow } from "@/components/expenses/add-transaction-row";
 import { TransactionGroupList } from "@/components/expenses/transaction-group-list";
 import { LedgerEmptyState } from "@/components/expenses/ledger-empty-state";
 
@@ -59,15 +60,22 @@ export async function TransactionLedgerPage({ month, year, groupBy, filters }: P
     account.wallets.map((wallet) => ({ id: wallet.id, name: wallet.name })),
   );
   const activeFilters = hasAnyFilter(filters);
+  const activeWalletName = walletOptions.find((w) => w.id === filters.walletId)?.name;
+  const walletHint = activeWalletName ? `${activeWalletName} only` : undefined;
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-        <StatCard label="Income" value={result.monthTotalIncome} tone="neutral" />
-        <StatCard label="Expenses" value={result.monthTotalExpense} tone="neutral" />
+        <StatCard label="Income" value={result.monthTotalIncome} tone="neutral" hint={walletHint} />
+        <StatCard label="Expenses" value={result.monthTotalExpense} tone="neutral" hint={walletHint} />
       </div>
 
       <CategorySummaryPanel rows={result.categorySummary} />
+
+      {/* Sibling of LedgerControls, not a child — must stay interactive
+          during LedgerControls's filter-requery dimming (see
+          .scratch/manual-transaction-entry.md). */}
+      <AddTransactionRow categories={categories} walletOptions={walletOptions} />
 
       <LedgerControls
         month={month}

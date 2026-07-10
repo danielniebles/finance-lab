@@ -10,7 +10,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { formatCOP } from "@/lib/format";
+import { formatCOP, dateInputValue } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { updateTransaction, deleteTransaction } from "@/lib/actions/transactions";
 import type { LedgerItem, LedgerGroupBy } from "@/lib/queries/transactions";
@@ -27,14 +27,6 @@ type RowFormValues = {
   wallet: string;
   note: string;
 };
-
-function dateInputValue(date: Date): string {
-  const d = new Date(date);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
 
 function formatRowDate(date: Date): string {
   return new Date(date).toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
@@ -152,7 +144,7 @@ function TransactionDefaultRow({
           </span>
         )}
         {groupBy !== "wallet" && (
-          <span className="text-xs text-muted-foreground shrink-0">· {item.wallet}</span>
+          <span className="text-xs text-muted-foreground shrink-0">· {item.walletName ?? item.wallet}</span>
         )}
         {item.source === "MANUAL" && (
           <span className="text-xs text-muted-foreground shrink-0">manual</span>

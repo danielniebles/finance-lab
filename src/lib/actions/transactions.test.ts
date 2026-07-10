@@ -101,6 +101,31 @@ describe("createTransaction", () => {
 
     expect(result).toBe(created);
   });
+
+  it("uses an explicitly supplied walletId as-is, bypassing name-based resolution", async () => {
+    dbMock.transaction.create.mockResolvedValue({ id: "txn-1" });
+
+    await createTransaction({
+      amount: -1000,
+      date: new Date(2026, 2, 10),
+      appCategoryId: "cat-1",
+      wallet: "Savings",
+      walletId: "wallet-explicit-id",
+      note: "Curated dropdown pick",
+    });
+
+    // resolveWalletId would prefetch via db.wallet.findMany/db.savingsAccount.findMany —
+    // asserting those weren't called proves the name-based path was skipped entirely.
+    expect(db.wallet.findMany).not.toHaveBeenCalled();
+    expect(db.savingsAccount.findMany).not.toHaveBeenCalled();
+
+    expect(dbMock.transaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        wallet: "Savings",
+        walletId: "wallet-explicit-id",
+      }),
+    });
+  });
 });
 
 describe("deleteTransaction", () => {

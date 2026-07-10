@@ -214,10 +214,44 @@ describe("getTransactionList — filters", () => {
     expect(result.categorySummary).toEqual([{ name: "Transport", total: -10_000, count: 1 }]);
   });
 
-  it("monthTotalExpense/monthTotalIncome stay whole-month regardless of filters", async () => {
+  it("monthTotalExpense/monthTotalIncome stay whole-month when walletId is not set, regardless of category/type/search", async () => {
+    const resultCategory = await getTransactionList(7, 2026, "day", { category: "Transport" });
+    expect(resultCategory.monthTotalExpense).toBe(30_000);
+    expect(resultCategory.monthTotalIncome).toBe(500_000);
+
+    const resultType = await getTransactionList(7, 2026, "day", { type: "expense" });
+    expect(resultType.monthTotalExpense).toBe(30_000);
+    expect(resultType.monthTotalIncome).toBe(500_000);
+
+    const resultSearch = await getTransactionList(7, 2026, "day", { search: "uber" });
+    expect(resultSearch.monthTotalExpense).toBe(30_000);
+    expect(resultSearch.monthTotalIncome).toBe(500_000);
+  });
+
+  it("monthTotalExpense/monthTotalIncome scope to the wallet when walletId is set", async () => {
     const result = await getTransactionList(7, 2026, "day", { walletId: "wlt_nequi" });
-    expect(result.monthTotalExpense).toBe(30_000);
+    // Only t2 (-10_000, wlt_nequi) belongs to this wallet — t1/t3 (wlt_bancolombia) excluded.
+    expect(result.monthTotalExpense).toBe(10_000);
+    expect(result.monthTotalIncome).toBe(0);
+  });
+
+  it("monthTotalExpense/monthTotalIncome scope to the wallet even when combined with other filters", async () => {
+    // category/type/search still don't narrow the totals — only walletId does.
+    const result = await getTransactionList(7, 2026, "day", {
+      walletId: "wlt_bancolombia",
+      category: "Groceries",
+      type: "expense",
+    });
+    // Both wlt_bancolombia rows (t1 expense, t3 income) count toward the totals.
+    expect(result.monthTotalExpense).toBe(20_000);
     expect(result.monthTotalIncome).toBe(500_000);
+  });
+
+  it("monthTotalExpense/monthTotalIncome are 0/0 for a wallet with no transactions this month", async () => {
+    const result = await getTransactionList(7, 2026, "day", { walletId: "wlt_nonexistent" });
+    expect(result.monthTotalExpense).toBe(0);
+    expect(result.monthTotalIncome).toBe(0);
+    expect(result.groups).toEqual([]);
   });
 });
 

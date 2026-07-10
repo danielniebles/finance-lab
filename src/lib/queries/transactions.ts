@@ -233,9 +233,13 @@ function computeCategorySummary(items: LedgerItem[]): CategorySummaryRow[] {
  * included alongside MoneyLover rows.
  *
  * monthTotalExpense/monthTotalIncome are always computed from the FULL
- * month's transactions (filters do not affect them) so this view's header
- * band stays consistent with getMonthlyAnalysis's totals for the same month
- * no matter what the user has filtered the list down to.
+ * month's transactions and ignore category/type/search filters (so this
+ * view's header band stays consistent with getMonthlyAnalysis's totals for
+ * the same month no matter what the user has filtered the list down to) —
+ * EXCEPT walletId, which does scope them: when filters.walletId is set, both
+ * totals reflect only that wallet's transactions for the month (still the
+ * whole month, just restricted to one wallet's balance), since the header
+ * band is expected to track the selected wallet.
  */
 export async function getTransactionList(
   month: number,
@@ -258,10 +262,14 @@ export async function getTransactionList(
 
   const allItems = transactions.map(toLedgerItem);
 
-  const monthTotalIncome = allItems
+  // Only walletId scopes the two month totals (see JSDoc above); category/
+  // type/search stay whole-month by design, so this set is NOT filteredItems.
+  const walletScopedItems = allItems.filter((item) => matchesWallet(item, filters?.walletId));
+
+  const monthTotalIncome = walletScopedItems
     .filter((item) => item.amount > 0)
     .reduce((sum, item) => sum + item.amount, 0);
-  const monthTotalExpense = allItems
+  const monthTotalExpense = walletScopedItems
     .filter((item) => item.amount < 0)
     .reduce((sum, item) => sum + Math.abs(item.amount), 0);
 
