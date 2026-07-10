@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { Suspense } from "react";
 import { OverviewDashboard } from "@/components/overview/overview-dashboard";
+import { AccountsCard } from "@/components/overview/accounts-card";
 import { ForecastPanel } from "@/components/overview/forecast-panel";
 import { VaultDueBanner } from "@/components/vaults/vault-due-banner";
 import { getVaultObligations } from "@/lib/queries/vaults";
@@ -17,6 +18,9 @@ export default async function OverviewPage() {
     <div className="space-y-6">
       <h1 className="font-heading text-2xl font-semibold">Overview</h1>
       <VaultDueBanner obligations={obligations} month={month} year={year} />
+      <Suspense fallback={<div className="text-muted-foreground text-sm">Loading…</div>}>
+        <AccountsCard />
+      </Suspense>
       <ForecastPanel month={month} year={year} />
       <Suspense fallback={<div className="text-muted-foreground text-sm">Loading…</div>}>
         <OverviewDashboard />
