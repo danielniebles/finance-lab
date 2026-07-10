@@ -183,3 +183,43 @@ Identified while writing the shared backend-layer standard; recorded here so the
 - **Inconsistent error handling.** Actions mix thrown errors with ad-hoc `{ error }` returns. Converge on one contract (a typed result *or* throw-to-`error.tsx`), and never leak DB/internal error detail to the client — map to a safe message and log the detail server-side.
 - **Revalidation is on the pre-16 model.** `revalidatePath` is used throughout (~56 call sites). When adopting the Next 16 caching model, migrate to tag-based `cacheTag`/`updateTag`. Not urgent — do it as one deliberate caching migration, not piecemeal.
 - **Auth / user-scoping — intentionally absent** while the app is single-user (see the multi-currency / multi-user note above). When multi-user is ever introduced, every action and query must authenticate and scope to the owning user; an unscoped query becomes a data leak at that point.
+
+---
+
+### Wallet balance model (part C of the expenses-granularity work)
+
+✅ **C1 SHIPPED (2026-07-09) — see ADR-036/ADR-037 and `.handoff/wallets-model/HANDOFF.md`.** The
+"distinct wallets" assumption below (the original framing of this entry) was superseded by the unified
+**Account (institution) → Wallet (envelope partition)** model: `Wallet` is a NEW model, a partition
+*inside* the existing `SavingsAccount`. Bancolombia splits into `debit/daily` / `savings` / `investments`;
+every other account (Nu, Rappi, Protección) gets a single default wallet. `Transaction.walletId` (+ `Loan
+.walletId`, `VaultEntry.sourceWalletId`) attaches flows to a wallet; balance = `openingBalance + Σ(flows
+dated >= openingDate)` (the ADR-037 epoch, preventing historical MoneyLover imports from retroactively
+moving current balances). `getWalletBalances()` (`src/lib/queries/wallets.ts`, NEW) reports the Home grand
+total (Σ ALL wallets); `getLoansOverview()` (`src/lib/queries/loans.ts`) now derives its savings figure and
+`available` KPI from the same per-wallet rows, gated by two flags (`isSavings`, `includeInAvailable`) —
+one computation, no second system to drift.
+
+**What shipped in C1:** schema + migration (continuity-preserving — day-0 balances reconcile to the
+pre-migration computed balance), the wallet-resolution write path on every Transaction-creating call site,
+`getWalletBalances()`, the `getLoansOverview()` refactor, and tests (`src/lib/wallet-balance-utils.test.ts`,
+`src/lib/queries/wallets.test.ts`, `src/lib/queries/loans.test.ts`) covering continuity and the
+double-count epoch guard.
+
+**Deferred to C2/C3 (see HANDOFF.md "Phasing" for the full breakdown):**
+- **C2** — per-transaction source-wallet selection (editable wallet field on loan/vault-funding/transaction
+  proposals), categories on savings movements (savings in/out becomes a categorized `Transaction` instead
+  of a category-less `AccountEntry`), and a wallet settings screen (create/rename/toggle `isSavings`/
+  `includeInAvailable` — no CRUD UI exists yet, HANDOFF's fixed known set is hard-coded by the migration).
+- **C3** — first-class envelope→envelope `Transfer` (net-zero, distinct from a counterparty "transferencia
+  a cuenta X" payment), `AccountEntry.walletId` for per-wallet adjustments, reconciliation UI, and an
+  agent read-only wallet-balance tool + `propose_move_between_wallets`.
+- **Open, needs Daniel's numbers:** Bancolombia's real debit/daily and investments balances — until
+  supplied, the whole current balance is parked in the `savings` wallet as a placeholder (grand total and
+  the savings figure reconcile either way; only the sub-split is provisional). See ADR-037's "one intended
+  discontinuity" note — `available` will legitimately drop once the real split is entered, by design.
+- **Data-quality note surfaced during migration:** the DB has two Bancolombia-shaped accounts — one named
+  exactly `"Bancolombia"` (got the 3-way split) and one named `"Bancolombia Main"` (has real loan/
+  installment-funding history but got only a single default wallet, since the split only matches the exact
+  name `"Bancolombia"`). Confirm with Daniel whether `"Bancolombia Main"` is stale test data to retire/merge,
+  or a second real account that should also be split.

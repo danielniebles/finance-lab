@@ -32,7 +32,10 @@ A bank credit card belonging to the user. Lives in the **Installments module** �
 The Loans module is a *liquidity tracker*: savings accounts Daniel controls + money owed **to** Daniel by debtors. The Installments module is an *obligations tracker*: what Daniel owes the bank, month by month. This boundary is intentional. A `Debtor` record may appear in both modules (formal cash loans via Loans, credit-funded purchases via Installments) because a debtor is a person, not a module concept.
 
 **Savings account**
-A personal savings or investment account the user controls. Balance is derived from a ledger of `AccountEntry` records (INITIAL + ADJUSTMENTs) plus transfer flows minus loans given minus sourced vault contributions (see ADR-021). The `available` figure used in KPIs only counts accounts with `includeInAvailable = true`.
+A personal savings/investment **institution** the user controls (Bancolombia, Nu, Rappi, Protección). Since ADR-036, an account is a container for one or more **Wallets** — envelope partitions (Bancolombia splits into `debit/daily`/`savings`/`investments`; every other account has one default wallet). Each wallet's balance is `openingBalance + Σ(flows dated on/after openingDate)` — entries, transfers, loans given, sourced vault contributions (ADR-021/037). The `available` KPI only counts wallets with `isSavings = true && includeInAvailable = true` — both flags now live on `Wallet`, not the account (ADR-036 moved `includeInAvailable` down).
+
+**Wallet**
+An envelope partition inside a savings account (ADR-036/037) — the entity a MoneyLover-parity "wallet" maps to. See `docs/data-model.md`'s `Wallet` entity for the full field/formula reference.
 
 **Loan**
 Money lent by the user to a named `Debtor`, sourced from one of their savings accounts. Repaid through `LoanPayment` records. The remaining balance is always computed — never stored.

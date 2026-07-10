@@ -79,16 +79,22 @@ A single expense/income record — either a row from a MoneyLover XLSX export (`
 | externalId | Int? | MoneyLover's own row ID — null for MANUAL |
 | date | DateTime | Transaction date |
 | amount | Float | Positive = income, negative = expense (COP) |
-| wallet | String | Account/wallet label — MoneyLover wallet name, or a free-text label for MANUAL rows (e.g. bank name from a notification) |
+| wallet | String | LEGACY account/wallet label — MoneyLover wallet name, or a free-text label for MANUAL rows (e.g. bank name from a notification). Kept as a fallback + audit trail alongside `walletId` (ADR-036/037) — not dropped in C1. |
 | note | String? | Optional note |
 | batchId | String? | FK → ImportBatch (cascade delete) — null for MANUAL (not part of any import) |
 | moneyLoverCategoryId | String? | FK → MoneyLoverCategory — null for MANUAL |
 | appCategoryId | String? | FK → AppCategory — direct category link, set for MANUAL rows, null for MONEYLOVER rows (which resolve via `moneyLoverCategory.mapping` instead) |
 | source | TransactionSource enum | `MONEYLOVER` (default) or `MANUAL` |
+| walletId | String? | FK → Wallet (ADR-036/037) — the envelope partition this transaction belongs to. Nullable (backfilled by migration where the legacy `wallet` label resolves; null = unassigned). Resolved on every write path via `resolveWalletId()`/`buildWalletResolver()` (`src/lib/resolve-wallet.ts`), never set directly by a caller. |
 
 **Category resolution rule (used everywhere a transaction's effective AppCategory is needed):** `appCategoryId ?? moneyLoverCategory?.mapping?.appCategoryId` (ADR-030).
 
 **Enum `TransactionSource`:** `MONEYLOVER` | `MANUAL`
+
+**Wallet resolution rule (ADR-036/037, applied on every write):** given the row's `wallet` string label,
+match a `Wallet` by name (case-insensitive) first; if that misses — including when the label just names an
+institution with multiple partitions (e.g. "Bancolombia") — fall back to that `SavingsAccount`'s
+`defaultWalletId`; if neither matches, `walletId` stays null. See `src/lib/resolve-wallet.ts`.
 
 ---
 
@@ -173,7 +179,11 @@ Records one payment made for a specific installment slot.
 ---
 
 ### SavingsAccount
-A personal savings or investment account. Balance is computed from entries + transfers − loans.
+A personal savings or investment account — the **institution** (Bancolombia, Nu, Rappi, Protección). Since
+ADR-036, this is the top level of a two-level **Account → Wallet** hierarchy: the account no longer holds a
+balance flag directly — `includeInAvailable` moved down to `Wallet` (an account with one partition still
+behaves exactly as before; a split account like Bancolombia now has per-partition flags). Balance is Σ its
+wallets' computed balances (see `Wallet` below).
 
 | Field | Type | Description |
 |---|---|---|
@@ -181,9 +191,49 @@ A personal savings or investment account. Balance is computed from entries + tra
 | name | String (unique) | Account label |
 | accountType | AccountType enum | BANK, DIGITAL, or PENSION |
 | color | String? | Hex color for UI |
-| includeInAvailable | Boolean | Whether to count toward liquid available |
+| savingsWalletId | String? | FK → Wallet — target wallet for account-level loan/vault-funding/transfer/adjustment flows (ADR-036/037). For a single-wallet account, equals `defaultWalletId`. |
+| defaultWalletId | String? | FK → Wallet — default wallet for ambient transactions whose label only names the institution (e.g. a MoneyLover "Bancolombia" row). For a single-wallet account, equals `savingsWalletId`. |
 
-**Relations:** has many `AccountEntry`; has many `Loan` (as lender); has many `Transfer` (from/to); has many `Installment` via "InstallmentFunding" (savings accounts that fund debtor-linked installments); has many `VaultEntry` via "VaultFundingSource" (entries sourced from this account reduce its computed balance)
+**Relations:** has many `AccountEntry`; has many `Loan` (as lender); has many `Transfer` (from/to); has many `Installment` via "InstallmentFunding" (savings accounts that fund debtor-linked installments); has many `VaultEntry` via "VaultFundingSource" (entries sourced from this account reduce its computed balance); has many `Wallet` (its envelope partitions, ADR-036)
+
+---
+
+### Wallet
+**NEW (ADR-036/037, Milestone C1).** An envelope partition *inside* a `SavingsAccount`. An account with no
+split has exactly one (default) wallet named after the account; Bancolombia splits into `debit/daily`,
+`savings`, and `investments`. This is the entity a MoneyLover-parity "wallet" maps to — not the institution
+itself.
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key |
+| accountId | String | FK → SavingsAccount (cascade delete) |
+| name | String | Partition name, e.g. "savings", "debit/daily", or the account name for a single-wallet account. Unique per account (`@@unique([accountId, name])`). |
+| color | String? | Optional hex color for UI |
+| sortOrder | Int | Display order within the account (default 0) |
+| isSavings | Boolean | Flag 1 — is this wallet part of the savings/Loans surface at all? (`debit/daily` = false; every other wallet = true) |
+| includeInAvailable | Boolean | Flag 2 — moved down from `SavingsAccount` (ADR-036). Within savings, does it count toward the liquid `available` KPI? (Protección, investments = false) |
+| openingBalance | Float | Reconciliation anchor — the wallet's real balance as of `openingDate` (ADR-037) |
+| openingDate | DateTime | The balance "epoch" — only flows dated on/after this date move the balance forward |
+
+**A wallet counts toward the liquidity KPI iff `isSavings && includeInAvailable`.**
+
+**Balance formula (ADR-037):** `openingBalance + Σ(flows dated >= openingDate)`, where flows are signed
+`Transaction`s (via `walletId`) plus `Loan`s given / `LoanPayment`s / `VaultEntry` funding (all via their
+own wallet FK) plus — only for the wallet that is its account's `savingsWalletId` — that account's
+`AccountEntry` and `Transfer` rows (not yet wallet-aware themselves; C2/C3). The `date >= openingDate` guard
+applies to every flow term: pre-epoch flows are already folded into `openingBalance`, so re-counting them
+would double-count. Pure math lives in `src/lib/wallet-balance-utils.ts` (`computeWalletBalance`), shared by
+`getWalletBalances()` (`src/lib/queries/wallets.ts`) and the `getLoansOverview()`/`getSavingsAccounts()`
+refactor.
+
+**Surfaces (different subsets of the same per-wallet numbers):** Home/Overview = `grandTotal = Σ ALL
+wallet.balance` (the real bank balance, `getWalletBalances()`). Loans/savings = `Σ wallet.balance WHERE
+isSavings` (`getLoansOverview()`'s per-account `balance`). Liquidity KPI = `available = Σ wallet.balance
+WHERE isSavings && includeInAvailable` (`getLoansOverview()`'s `available`, unchanged formula/shape,
+ADR-021).
+
+**Relations:** belongs to `SavingsAccount`; has many `Transaction`; has many `Loan` (as source wallet); has many `VaultEntry` via "VaultFundingWallet" (as source wallet); is pointed to by `SavingsAccount.savingsWalletId` / `.defaultWalletId`
 
 ---
 
@@ -241,8 +291,9 @@ A specific amount lent to a Debtor, sourced from a SavingsAccount. Remaining bal
 | expectedBy | DateTime? | Optional repayment target date |
 | notes | String? | Optional notes |
 | createdAt | DateTime | Record creation time |
+| walletId | String? | FK → Wallet (ADR-036/037) — source wallet. C1 always defaults it to the account's `savingsWalletId` (set by `createLoan`/`updateLoan`); per-transaction wallet selection is a C2 follow-up. |
 
-**Relations:** has many `LoanPayment`
+**Relations:** has many `LoanPayment`; belongs to an optional `Wallet` (source)
 
 ---
 
@@ -326,6 +377,7 @@ Ledger entry for a vault. Positive = contribution, negative = withdrawal.
 | notes | String? | Optional notes |
 | createdAt | DateTime | Record creation time |
 | sourceAccountId | String? | FK → SavingsAccount via "VaultFundingSource" (optional). When set, this entry is a sourced contribution — the amount is deducted from that account's computed balance. Null = notional earmark (no account balance impact). |
+| sourceWalletId | String? | FK → Wallet via "VaultFundingWallet" (ADR-036/037, optional) — alongside `sourceAccountId` (kept for backward-compat; derivable from the wallet). C1 always defaults it to the source account's `savingsWalletId` (set by `addVaultEntry`); per-transaction wallet selection is a C2 follow-up. |
 
 `VaultEntryRow` (the query return type) also exposes `sourceAccountName: string | null` (resolved from the relation).
 
