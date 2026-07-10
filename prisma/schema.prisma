@@ -83,6 +83,10 @@ model Transaction {
   appCategoryId        String?
   appCategory          AppCategory?        @relation(fields: [appCategoryId], references: [id])
   source               TransactionSource   @default(MONEYLOVER)
+  // Wallet partition this transaction belongs to (ADR-036/037). Nullable during
+  // migration; `wallet` (the legacy string label) is kept as a fallback + audit trail.
+  walletId             String?
+  walletRef            Wallet?             @relation(fields: [walletId], references: [id])
 }
 
 enum BudgetType {
@@ -168,13 +172,47 @@ model SavingsAccount {
   name               String         @unique
   accountType        AccountType
   color              String? // hex color for UI dot
-  includeInAvailable Boolean        @default(true)
   entries            AccountEntry[]
   loansGiven         Loan[]
   transfersFrom      Transfer[]     @relation("TransferFrom")
   transfersTo        Transfer[]     @relation("TransferTo")
   fundedInstallments Installment[]  @relation("InstallmentFunding")
   vaultEntriesFunded VaultEntry[]   @relation("VaultFundingSource")
+
+  // ─── Wallets (ADR-036/037, Milestone C1) ─────────────────────────────────
+  wallets         Wallet[] @relation("AccountWallets")
+  // Target wallet for account-level loan/vault/transfer/adjustment flows.
+  savingsWalletId String?
+  savingsWallet   Wallet?  @relation("AccountSavingsWallet", fields: [savingsWalletId], references: [id])
+  // Default wallet for ambient transactions whose label only names the institution.
+  defaultWalletId String?
+  defaultWallet   Wallet?  @relation("AccountDefaultWallet", fields: [defaultWalletId], references: [id])
+}
+
+/// Envelope partition inside a SavingsAccount (institution). ADR-036.
+/// isSavings gates savings/Loans-surface membership (debit/daily = false);
+/// includeInAvailable (moved down from SavingsAccount) gates liquidity within
+/// savings (Protección/investments = false). A wallet counts toward the
+/// liquidity KPI iff isSavings && includeInAvailable.
+model Wallet {
+  id                 String   @id @default(cuid())
+  accountId          String
+  account            SavingsAccount @relation("AccountWallets", fields: [accountId], references: [id], onDelete: Cascade)
+  name               String
+  color              String?
+  sortOrder          Int      @default(0)
+  isSavings          Boolean  @default(true)
+  includeInAvailable Boolean  @default(true)
+  openingBalance     Float    @default(0) // reconciliation anchor (ADR-037)
+  openingDate        DateTime // the balance "epoch" — only flows on/after this date move the balance
+
+  transactions       Transaction[]
+  loans              Loan[]
+  vaultEntriesFunded VaultEntry[]     @relation("VaultFundingWallet")
+  savingsWalletFor   SavingsAccount[] @relation("AccountSavingsWallet")
+  defaultWalletFor   SavingsAccount[] @relation("AccountDefaultWallet")
+
+  @@unique([accountId, name])
 }
 
 enum AccountType {
@@ -229,6 +267,10 @@ model Loan {
   notes      String?
   payments   LoanPayment[]
   createdAt  DateTime       @default(now())
+  // Source wallet (ADR-036/037). C1 defaults it to the account's savingsWalletId;
+  // per-transaction selection is a C2 follow-up.
+  walletId   String?
+  wallet     Wallet?        @relation(fields: [walletId], references: [id])
 }
 
 model LoanPayment {
@@ -278,6 +320,11 @@ model VaultEntry {
   createdAt       DateTime        @default(now())
   sourceAccountId String?
   sourceAccount   SavingsAccount? @relation("VaultFundingSource", fields: [sourceAccountId], references: [id], onDelete: SetNull)
+  // Source wallet (ADR-036/037), alongside the existing sourceAccountId (kept for
+  // backward-compat — derivable from the wallet). C1 defaults it to the account's
+  // savingsWalletId.
+  sourceWalletId  String?
+  sourceWallet    Wallet?         @relation("VaultFundingWallet", fields: [sourceWalletId], references: [id], onDelete: SetNull)
 }
 
 // ─── Module 5: Recurring Expenses ────────────────────────────────────────────
