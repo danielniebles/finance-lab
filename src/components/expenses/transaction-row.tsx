@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { formatCOP, dateInputValue } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { getCategoryStyle } from "@/lib/category-style";
 import { updateTransaction, deleteTransaction } from "@/lib/actions/transactions";
 import type { LedgerItem, LedgerGroupBy } from "@/lib/queries/transactions";
 import type { CategoryOption } from "@/lib/queries/expenses";
@@ -129,6 +130,8 @@ function TransactionDefaultRow({
   onEdit: () => void;
   onDeleteRequest: () => void;
 }) {
+  const { icon: CategoryIcon, badge, iconWrap } = getCategoryStyle(item.categoryName);
+
   return (
     <div className="group/txnrow flex items-center gap-3 px-4 py-2 border-b border-border/40 last:border-0">
       <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -137,12 +140,20 @@ function TransactionDefaultRow({
             {formatRowDate(item.date)}
           </span>
         )}
-        <span className="text-sm truncate flex-1 min-w-0">{item.note || "—"}</span>
+        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-full", iconWrap)}>
+          <CategoryIcon className="size-4" />
+        </span>
         {groupBy !== "category" && item.categoryName && (
-          <span className="inline-flex w-fit shrink-0 items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          <span
+            className={cn(
+              "inline-flex w-fit shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+              badge
+            )}
+          >
             {item.categoryName}
           </span>
         )}
+        <span className="text-sm truncate flex-1 min-w-0">{item.note || "—"}</span>
         {groupBy !== "wallet" && (
           <span className="text-xs text-muted-foreground shrink-0">· {item.walletName ?? item.wallet}</span>
         )}
