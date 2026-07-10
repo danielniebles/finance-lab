@@ -25,7 +25,7 @@ const ALL_SENTINEL = "all";
 type FilterPatch = Partial<{
   groupBy: LedgerGroupBy;
   category: string;
-  wallet: string;
+  walletId: string;
   type: string;
   search: string;
 }>;
@@ -41,7 +41,7 @@ function resolveNextLedgerState(groupBy: LedgerGroupBy, filters: LedgerFilters, 
   return {
     groupBy: patch.groupBy ?? groupBy,
     category: resolvePatchedValue(patch.category, filters.category),
-    wallet: resolvePatchedValue(patch.wallet, filters.wallet),
+    walletId: resolvePatchedValue(patch.walletId, filters.walletId),
     type: resolvePatchedValue(patch.type, filters.type),
     search: resolvePatchedValue(patch.search, filters.search),
   };
@@ -62,7 +62,7 @@ export function buildLedgerUrl(
   const params = new URLSearchParams({ view: "ledger", month: String(month), year: String(year) });
   if (next.groupBy !== "day") params.set("groupBy", next.groupBy);
   if (next.category) params.set("category", next.category);
-  if (next.wallet) params.set("wallet", next.wallet);
+  if (next.walletId) params.set("walletId", next.walletId);
   if (next.type) params.set("type", next.type);
   if (next.search) params.set("search", next.search);
   return `/expenses?${params.toString()}`;
@@ -74,7 +74,7 @@ type Props = {
   groupBy: LedgerGroupBy;
   filters: LedgerFilters;
   categories: CategoryOption[];
-  walletOptions: string[];
+  walletOptions: { id: string; name: string }[];
   children: ReactNode;
 };
 
@@ -150,7 +150,7 @@ function FilterBar({
 }: {
   filters: LedgerFilters;
   categories: CategoryOption[];
-  walletOptions: string[];
+  walletOptions: { id: string; name: string }[];
   onChange: (patch: FilterPatch) => void;
 }) {
   return (
@@ -161,9 +161,9 @@ function FilterBar({
         onChange={(v) => onChange({ category: v ?? "" })}
       />
       <WalletSelect
-        value={filters.wallet}
+        value={filters.walletId}
         options={walletOptions}
-        onChange={(v) => onChange({ wallet: v ?? "" })}
+        onChange={(v) => onChange({ walletId: v ?? "" })}
       />
       <TypeSelect
         value={filters.type}
@@ -212,22 +212,23 @@ function WalletSelect({
   onChange,
 }: {
   value?: string;
-  options: string[];
+  options: { id: string; name: string }[];
   onChange: (v?: string) => void;
 }) {
+  const current = options.find((w) => w.id === value);
   return (
     <Select
       value={value ?? ALL_SENTINEL}
       onValueChange={(v) => v && onChange(v === ALL_SENTINEL ? undefined : v)}
     >
       <SelectTrigger className="h-8 w-32" aria-label="Filter by wallet">
-        <span className="text-sm truncate">{value ?? "All wallets"}</span>
+        <span className="text-sm truncate">{current?.name ?? "All wallets"}</span>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={ALL_SENTINEL}>All wallets</SelectItem>
         {options.map((w) => (
-          <SelectItem key={w} value={w}>
-            {w}
+          <SelectItem key={w.id} value={w.id}>
+            {w.name}
           </SelectItem>
         ))}
       </SelectContent>

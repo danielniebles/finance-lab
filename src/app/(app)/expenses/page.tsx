@@ -17,6 +17,7 @@ type Props = {
     groupBy?: string;
     category?: string;
     wallet?: string;
+    walletId?: string;
     type?: string;
     search?: string;
   }>;
@@ -83,6 +84,7 @@ export default async function ExpensesPage({ searchParams }: Props) {
             filters={{
               category: params.category || undefined,
               wallet: params.wallet || undefined,
+              walletId: params.walletId || undefined,
               type: parseType(params.type),
               search: params.search || undefined,
             }}

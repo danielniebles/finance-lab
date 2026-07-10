@@ -32,9 +32,9 @@ describe("buildLedgerUrl", () => {
     expect(url).toContain("category=Groceries");
   });
 
-  it("adds a wallet filter param when patched", () => {
-    const url = buildLedgerUrl(7, 2026, "day", NO_FILTERS, { wallet: "Nequi" });
-    expect(url).toContain("wallet=Nequi");
+  it("adds a walletId filter param when patched", () => {
+    const url = buildLedgerUrl(7, 2026, "day", NO_FILTERS, { walletId: "wlt_nequi" });
+    expect(url).toContain("walletId=wlt_nequi");
   });
 
   it("adds a type filter param when patched", () => {
@@ -48,18 +48,18 @@ describe("buildLedgerUrl", () => {
   });
 
   it("preserves an existing filter not present in the patch", () => {
-    const filters: LedgerFilters = { category: "Groceries", wallet: "Nequi" };
+    const filters: LedgerFilters = { category: "Groceries", walletId: "wlt_nequi" };
     const url = buildLedgerUrl(7, 2026, "day", filters, { search: "uber" });
     expect(url).toContain("category=Groceries");
-    expect(url).toContain("wallet=Nequi");
+    expect(url).toContain("walletId=wlt_nequi");
     expect(url).toContain("search=uber");
   });
 
   it("clearing a filter (patch value of empty string) removes it from the URL", () => {
-    const filters: LedgerFilters = { category: "Groceries", wallet: "Nequi" };
+    const filters: LedgerFilters = { category: "Groceries", walletId: "wlt_nequi" };
     const url = buildLedgerUrl(7, 2026, "day", filters, { category: "" });
     expect(url).not.toContain("category=");
-    expect(url).toContain("wallet=Nequi");
+    expect(url).toContain("walletId=wlt_nequi");
   });
 
   it("always includes view=ledger, month, and year", () => {

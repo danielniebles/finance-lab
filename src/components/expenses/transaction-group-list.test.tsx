@@ -29,6 +29,8 @@ const GROUPS: LedgerGroup[] = [
         date: new Date(2026, 6, 8),
         amount: -50_000,
         wallet: "Nequi",
+        walletId: null,
+        walletName: null,
         note: "Groceries run",
         categoryName: "Groceries",
         source: "MONEYLOVER",

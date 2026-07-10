@@ -34,6 +34,8 @@ function txn(overrides: Record<string, unknown> = {}) {
     date: new Date(2026, 6, 8),
     amount: -20_000,
     wallet: "Bancolombia",
+    walletId: null,
+    walletRef: null,
     note: "Éxito",
     source: "MONEYLOVER",
     appCategory: null,
@@ -117,23 +119,55 @@ describe("getTransactionList — category/wallet grouping", () => {
     expect(result.groups[0]).toMatchObject({ key: "uncategorized", label: "Sin categoría" });
   });
 
-  it("groups by wallet and sorts by |subtotal| descending", async () => {
+  it("groups by walletId and labels by the joined Wallet.name, sorted by |subtotal| descending", async () => {
     dbMock.transaction.findMany.mockResolvedValue([
-      txn({ id: "t1", amount: -5_000, wallet: "Nequi" }),
-      txn({ id: "t2", amount: -50_000, wallet: "Bancolombia" }),
+      txn({ id: "t1", amount: -5_000, walletId: "wlt_nequi", walletRef: { name: "Nequi" } }),
+      txn({ id: "t2", amount: -50_000, walletId: "wlt_bancolombia", walletRef: { name: "Bancolombia" } }),
     ]);
 
     const result = await getTransactionList(7, 2026, "wallet");
 
-    expect(result.groups.map((g) => g.key)).toEqual(["Bancolombia", "Nequi"]);
+    expect(result.groups.map((g) => g.key)).toEqual(["wlt_bancolombia", "wlt_nequi"]);
+    expect(result.groups.map((g) => g.label)).toEqual(["Bancolombia", "Nequi"]);
+  });
+
+  it("buckets walletId: null rows under an explicit 'Sin asignar' group", async () => {
+    dbMock.transaction.findMany.mockResolvedValue([
+      txn({ walletId: null, walletRef: null }),
+    ]);
+
+    const result = await getTransactionList(7, 2026, "wallet");
+
+    expect(result.groups[0]).toMatchObject({ key: "unassigned", label: "Sin asignar" });
   });
 });
 
 describe("getTransactionList — filters", () => {
   const FIXTURE = [
-    txn({ id: "t1", amount: -20_000, wallet: "Bancolombia", note: "Groceries run", appCategory: GROCERIES }),
-    txn({ id: "t2", amount: -10_000, wallet: "Nequi", note: "Uber ride", appCategory: TRANSPORT }),
-    txn({ id: "t3", amount: 500_000, wallet: "Bancolombia", note: "Salary", appCategory: null }),
+    txn({
+      id: "t1",
+      amount: -20_000,
+      walletId: "wlt_bancolombia",
+      walletRef: { name: "Bancolombia" },
+      note: "Groceries run",
+      appCategory: GROCERIES,
+    }),
+    txn({
+      id: "t2",
+      amount: -10_000,
+      walletId: "wlt_nequi",
+      walletRef: { name: "Nequi" },
+      note: "Uber ride",
+      appCategory: TRANSPORT,
+    }),
+    txn({
+      id: "t3",
+      amount: 500_000,
+      walletId: "wlt_bancolombia",
+      walletRef: { name: "Bancolombia" },
+      note: "Salary",
+      appCategory: null,
+    }),
   ];
 
   beforeEach(() => {
@@ -145,9 +179,19 @@ describe("getTransactionList — filters", () => {
     expect(itemIds(result)).toEqual(["t2"]);
   });
 
-  it("narrows by exact wallet label", async () => {
-    const result = await getTransactionList(7, 2026, "day", { wallet: "Nequi" });
+  it("narrows by walletId", async () => {
+    const result = await getTransactionList(7, 2026, "day", { walletId: "wlt_nequi" });
     expect(itemIds(result)).toEqual(["t2"]);
+  });
+
+  it("ignores the legacy exact-label `wallet` filter (matchesWallet no longer string-matches)", async () => {
+    // Regression guard for the bug this migration fixes: passing only the legacy
+    // label (no walletId) must NOT narrow the list — the new Wallet.name label
+    // space never matched the old MoneyLover `wallet` string anyway, so this
+    // field is now inert for filtering (kept only for ledger-controls.tsx's
+    // pending walletId migration, see LedgerFilters' doc comment).
+    const result = await getTransactionList(7, 2026, "day", { wallet: "Nequi" });
+    expect(itemIds(result).sort()).toEqual(["t1", "t2", "t3"]);
   });
 
   it("narrows by type=expense (negative amounts only)", async () => {
@@ -166,12 +210,12 @@ describe("getTransactionList — filters", () => {
   });
 
   it("categorySummary reflects the filtered set, not the whole month", async () => {
-    const result = await getTransactionList(7, 2026, "day", { wallet: "Nequi" });
+    const result = await getTransactionList(7, 2026, "day", { walletId: "wlt_nequi" });
     expect(result.categorySummary).toEqual([{ name: "Transport", total: -10_000, count: 1 }]);
   });
 
   it("monthTotalExpense/monthTotalIncome stay whole-month regardless of filters", async () => {
-    const result = await getTransactionList(7, 2026, "day", { wallet: "Nequi" });
+    const result = await getTransactionList(7, 2026, "day", { walletId: "wlt_nequi" });
     expect(result.monthTotalExpense).toBe(30_000);
     expect(result.monthTotalIncome).toBe(500_000);
   });

@@ -5,6 +5,7 @@ import {
   type CategorySummaryRow,
 } from "@/lib/queries/transactions";
 import { getCategories } from "@/lib/queries/expenses";
+import { getWalletBalances } from "@/lib/queries/wallets";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/expenses/analysis-dashboard";
@@ -20,24 +21,43 @@ type Props = {
 };
 
 function hasAnyFilter(filters: LedgerFilters): boolean {
-  return Boolean(filters.category || filters.wallet || filters.type || filters.search);
+  // filters.wallet (the legacy label field) is intentionally NOT checked here
+  // — it's filtering-inert (see transactions.ts's matchesWallet, which only
+  // compares walletId) and no longer written by ledger-controls.tsx, so
+  // counting it would let a stale ?wallet= bookmark param report "active
+  // filters" on an unfiltered result set.
+  return Boolean(filters.category || filters.walletId || filters.type || filters.search);
 }
 
 // The Ledger tab's server entry point (rendered by expenses/page.tsx behind
-// ?view=ledger). Fetches getTransactionList twice: once for the CURRENT
-// groupBy/filters (what's actually displayed) and once ungrouped-by-wallet
-// with NO filters, purely to derive the full month's distinct wallet labels
-// for WalletSelect's option list — using the existing typed API rather than
-// inventing a new query, so the select's options don't collapse to "whatever
-// the current filter already narrowed to."
+// ?view=ledger). Fetches getTransactionList once for the CURRENT
+// groupBy/filters (what's actually displayed) and getWalletBalances()
+// separately to derive WalletSelect's full option list.
+//
+// NOTE (wallet-ledger-filter-fix, .scratch/wallet-ledger-filter-fix.md, 4th
+// pass): walletOptions used to come from a month-scoped
+// getTransactionList(month, year, "wallet") call, which only surfaced
+// wallets with >= 1 transaction in the CURRENT month. AccountsCard links to a
+// wallet by id regardless of monthly activity (it reads from
+// getWalletBalances(), scoped to ALL wallets), so clicking a wallet with a
+// real balance but zero transactions this month correctly filtered the
+// ledger to an empty list, but WalletSelect's trigger fell back to "All
+// wallets" — no option in the month-scoped list matched that id. Fixed by
+// sourcing walletOptions from getWalletBalances() instead: every account's
+// wallets, regardless of transaction activity. This also naturally excludes
+// the "Sin asignar" pseudo-bucket (walletId: null) from the dropdown, since
+// it isn't a real Wallet row — same exclusion behavior as before, no longer
+// needing a sentinel-based filter to enforce it.
 export async function TransactionLedgerPage({ month, year, groupBy, filters }: Props) {
-  const [result, walletUniverse, categories] = await Promise.all([
+  const [result, walletBalances, categories] = await Promise.all([
     getTransactionList(month, year, groupBy, filters),
-    getTransactionList(month, year, "wallet"),
+    getWalletBalances(),
     getCategories(),
   ]);
 
-  const walletOptions = walletUniverse.groups.map((g) => g.label);
+  const walletOptions = walletBalances.accounts.flatMap((account) =>
+    account.wallets.map((wallet) => ({ id: wallet.id, name: wallet.name })),
+  );
   const activeFilters = hasAnyFilter(filters);
 
   return (

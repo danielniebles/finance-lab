@@ -6,7 +6,13 @@ export type LedgerGroupBy = "day" | "category" | "wallet";
 
 export type LedgerFilters = {
   category?: string; // AppCategory name (resolved, not an id)
-  wallet?: string; // exact wallet label
+  // Legacy exact-label filter (ADR-035 era). No longer applied by matchesWallet
+  // (Wallet.name values from ADR-036/037 don't match this MoneyLover payment-method
+  // label space at all — see .scratch/wallet-ledger-filter-fix.md). Kept only so
+  // existing UI (ledger-controls.tsx's WalletSelect, a Frontend-owned follow-up)
+  // still type-checks pending its migration to walletId.
+  wallet?: string;
+  walletId?: string; // Wallet.id — the real wallet-partition filter (ADR-036/037)
   type?: "expense" | "income"; // amount sign
   search?: string; // note contains, case-insensitive
 };
@@ -15,7 +21,14 @@ export type LedgerItem = {
   id: string;
   date: Date;
   amount: number;
+  // Legacy MoneyLover wallet label — retained as the edit-form/display fallback
+  // (transaction-row.tsx binds an editable text input to this field, which
+  // resolveWalletId() re-resolves into walletId server-side on save). Not used
+  // for wallet filtering/grouping anymore — see walletId/walletName below.
   wallet: string;
+  walletId: string | null;
+  // Resolved Wallet.name via walletId's relation; null iff walletId is null.
+  walletName: string | null;
   note: string | null;
   categoryName: string | null;
   source: TransactionSource;
@@ -39,12 +52,16 @@ export type TransactionListResult = {
 
 const UNCATEGORIZED_KEY = "uncategorized";
 const UNCATEGORIZED_LABEL = "Sin categoría";
+export const UNASSIGNED_WALLET_KEY = "unassigned";
+export const UNASSIGNED_WALLET_LABEL = "Sin asignar";
 
 type RawTransaction = {
   id: string;
   date: Date;
   amount: number;
   wallet: string;
+  walletId: string | null;
+  walletRef: { name: string } | null;
   note: string | null;
   source: TransactionSource;
   appCategory: { name: string } | null;
@@ -65,6 +82,8 @@ function toLedgerItem(t: RawTransaction): LedgerItem {
     date: t.date,
     amount: t.amount,
     wallet: t.wallet,
+    walletId: t.walletId,
+    walletName: t.walletRef?.name ?? null,
     note: t.note,
     categoryName: resolveCategoryName(t),
     source: t.source,
@@ -101,8 +120,8 @@ function matchesCategory(item: LedgerItem, category?: string): boolean {
   return !category || item.categoryName === category;
 }
 
-function matchesWallet(item: LedgerItem, wallet?: string): boolean {
-  return !wallet || item.wallet === wallet;
+function matchesWallet(item: LedgerItem, walletId?: string): boolean {
+  return !walletId || item.walletId === walletId;
 }
 
 function matchesType(item: LedgerItem, type?: "expense" | "income"): boolean {
@@ -120,7 +139,7 @@ function matchesFilters(item: LedgerItem, filters?: LedgerFilters): boolean {
   if (!filters) return true;
   return (
     matchesCategory(item, filters.category) &&
-    matchesWallet(item, filters.wallet) &&
+    matchesWallet(item, filters.walletId) &&
     matchesType(item, filters.type) &&
     matchesSearch(item, filters.search)
   );
@@ -180,7 +199,11 @@ function buildGroups(items: LedgerItem[], groupBy: LedgerGroupBy): LedgerGroup[]
         : { key: UNCATEGORIZED_KEY, label: UNCATEGORIZED_LABEL },
     );
   }
-  return buildKeyedGroups(items, (item) => ({ key: item.wallet, label: item.wallet }));
+  return buildKeyedGroups(items, (item) =>
+    item.walletId && item.walletName
+      ? { key: item.walletId, label: item.walletName }
+      : { key: UNASSIGNED_WALLET_KEY, label: UNASSIGNED_WALLET_LABEL },
+  );
 }
 
 // Flat per-category totals across the CURRENT (filtered) item set — deliberately
@@ -228,6 +251,7 @@ export async function getTransactionList(
     include: {
       appCategory: true,
       moneyLoverCategory: { include: { mapping: { include: { appCategory: true } } } },
+      walletRef: { select: { name: true } },
     },
     orderBy: { date: "desc" },
   });
