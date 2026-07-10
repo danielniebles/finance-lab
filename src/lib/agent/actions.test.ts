@@ -58,6 +58,10 @@ vi.mock("@/lib/db", () => ({
     debtor: { delete: vi.fn() },
     loanPayment: { delete: vi.fn() },
     creditCard: { delete: vi.fn() },
+    // resolveWalletId (ADR-036/037) — buildWalletResolver() prefetches these
+    // once per batch; default to "no wallets/accounts" (null resolution).
+    wallet: { findMany: vi.fn().mockResolvedValue([]) },
+    savingsAccount: { findMany: vi.fn().mockResolvedValue([]) },
     $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => {
       // Simulates Prisma's interactive-transaction rollback semantics: if the
       // callback throws, discard anything staged during this call so the

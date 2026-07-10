@@ -6,6 +6,11 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// resolveWalletId (ADR-036/037) queries wallet + savingsAccount on every
+// createTransaction/updateTransaction call — mocked here to resolve to "no
+// match" (null) by default so these tests don't need to know about wallets.
+// The actual name-match/fallback/precedence logic is covered separately in
+// src/lib/resolve-wallet.test.ts.
 vi.mock("@/lib/db", () => ({
   db: {
     transaction: {
@@ -14,6 +19,8 @@ vi.mock("@/lib/db", () => ({
       update: vi.fn(),
       findUniqueOrThrow: vi.fn(),
     },
+    wallet: { findMany: vi.fn().mockResolvedValue([]) },
+    savingsAccount: { findMany: vi.fn().mockResolvedValue([]) },
   },
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));

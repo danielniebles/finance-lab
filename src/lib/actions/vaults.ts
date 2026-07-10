@@ -121,6 +121,12 @@ export async function archiveVault(id: string) {
 
 // ─── Vault entries ────────────────────────────────────────────────────────────
 
+/**
+ * sourceWalletId (ADR-036/037) defaults to the source account's
+ * savingsWalletId when sourceAccountId is set — C1 always funds a vault
+ * contribution from the account's savings partition; per-transaction wallet
+ * selection is a C2 follow-up (HANDOFF §1).
+ */
 export async function addVaultEntry(
   vaultId: string,
   amount: number,
@@ -138,6 +144,15 @@ export async function addVaultEntry(
     }
   }
 
+  let sourceWalletId: string | null = null;
+  if (sourceAccountId) {
+    const account = await db.savingsAccount.findUniqueOrThrow({
+      where: { id: sourceAccountId },
+      select: { savingsWalletId: true },
+    });
+    sourceWalletId = account.savingsWalletId;
+  }
+
   await db.vaultEntry.create({
     data: {
       vaultId,
@@ -145,6 +160,7 @@ export async function addVaultEntry(
       date: date ?? new Date(),
       notes: notes ?? null,
       sourceAccountId: sourceAccountId ?? null,
+      sourceWalletId,
     },
   });
 

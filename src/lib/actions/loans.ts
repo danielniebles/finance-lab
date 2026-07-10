@@ -8,6 +8,16 @@ const PATH = "/loans";
 
 // ─── Accounts ────────────────────────────────────────────────────────────────
 
+/**
+ * Creates a new SavingsAccount AND its single default Wallet (ADR-036/037 —
+ * an account with no split always has exactly one wallet). The wallet's
+ * openingBalance is 0 and openingDate is the account's opening date (the
+ * same date the INITIAL entry is dated, or now) — a brand-new account has no
+ * pre-migration history to protect against, so there's no reconciliation gap
+ * to anchor against, unlike the C1 migration's existing accounts. Wrapped in
+ * a transaction: an account with no wallet is a broken invariant everywhere
+ * balances are computed.
+ */
 export async function createAccount(data: {
   name: string;
   accountType: AccountType;
@@ -16,27 +26,64 @@ export async function createAccount(data: {
   initialBalance?: number;
   initialDate?: Date;
 }) {
-  const { initialBalance, initialDate, ...accountData } = data;
-  const account = await db.savingsAccount.create({ data: accountData });
-  if (initialBalance !== undefined && initialBalance !== 0) {
-    await db.accountEntry.create({
+  const { initialBalance, initialDate, includeInAvailable, ...accountData } = data;
+  const openingDate = initialDate ?? new Date();
+
+  await db.$transaction(async (tx) => {
+    const account = await tx.savingsAccount.create({ data: accountData });
+
+    const wallet = await tx.wallet.create({
       data: {
         accountId: account.id,
-        type: EntryType.INITIAL,
-        amount: initialBalance,
-        date: initialDate ?? new Date(),
-        notes: "Initial balance",
+        name: account.name,
+        isSavings: true,
+        includeInAvailable,
+        openingBalance: 0,
+        openingDate,
       },
     });
-  }
+
+    await tx.savingsAccount.update({
+      where: { id: account.id },
+      data: { savingsWalletId: wallet.id, defaultWalletId: wallet.id },
+    });
+
+    if (initialBalance !== undefined && initialBalance !== 0) {
+      await tx.accountEntry.create({
+        data: {
+          accountId: account.id,
+          type: EntryType.INITIAL,
+          amount: initialBalance,
+          date: openingDate,
+          notes: "Initial balance",
+        },
+      });
+    }
+  });
+
   revalidatePath(PATH);
 }
 
+/**
+ * `includeInAvailable` now lives on Wallet (ADR-036), not SavingsAccount.
+ * This legacy account-level checkbox edits only the account's savings
+ * wallet — for a single-wallet account that's the whole story (identical to
+ * pre-migration behavior); for a multi-partition account (Bancolombia) it's
+ * a deliberate stopgap that leaves the other partitions' flags untouched,
+ * pending the real per-wallet settings screen (HANDOFF open question #6, C2).
+ */
 export async function updateAccount(
   id: string,
   data: { name: string; accountType: AccountType; color: string; includeInAvailable: boolean }
 ) {
-  await db.savingsAccount.update({ where: { id }, data });
+  const { includeInAvailable, ...accountData } = data;
+  const account = await db.savingsAccount.update({ where: { id }, data: accountData });
+  if (account.savingsWalletId) {
+    await db.wallet.update({
+      where: { id: account.savingsWalletId },
+      data: { includeInAvailable },
+    });
+  }
   revalidatePath(PATH);
 }
 
@@ -103,6 +150,11 @@ export async function deleteDebtor(id: string) {
 
 // ─── Loans ────────────────────────────────────────────────────────────────────
 
+/**
+ * walletId (ADR-036/037) defaults to the account's savingsWalletId — C1
+ * always sources a loan from the account's savings partition; per-transaction
+ * wallet selection is a C2 follow-up (HANDOFF §1).
+ */
 export async function createLoan(data: {
   debtorId: string;
   accountId: string;
@@ -111,16 +163,27 @@ export async function createLoan(data: {
   expectedBy?: Date;
   notes?: string;
 }) {
-  const created = await db.loan.create({ data });
+  const account = await db.savingsAccount.findUniqueOrThrow({
+    where: { id: data.accountId },
+    select: { savingsWalletId: true },
+  });
+  const created = await db.loan.create({
+    data: { ...data, walletId: account.savingsWalletId },
+  });
   revalidatePath(PATH);
   return created;
 }
 
+/** Re-resolves walletId (ADR-036/037) to the (possibly new) account's savingsWalletId. */
 export async function updateLoan(
   id: string,
   data: { accountId: string; amount: number; date: Date; expectedBy?: Date; notes?: string }
 ) {
-  await db.loan.update({ where: { id }, data });
+  const account = await db.savingsAccount.findUniqueOrThrow({
+    where: { id: data.accountId },
+    select: { savingsWalletId: true },
+  });
+  await db.loan.update({ where: { id }, data: { ...data, walletId: account.savingsWalletId } });
   revalidatePath(PATH);
 }
 

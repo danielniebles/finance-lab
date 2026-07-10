@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { parseMoneyLoverBuffer, type RawTransaction } from "@/lib/parse-moneylover";
 import { revalidatePath } from "next/cache";
 import { BatchStatus } from "@/generated/prisma";
+import { buildWalletResolver } from "@/lib/resolve-wallet";
 
 /** Calendar-day key (ignores time-of-day) for the conservative dedup match. */
 function dayKey(date: Date): string {
@@ -70,6 +71,11 @@ export async function importBuffer(buffer: Buffer, filename: string, status?: Ba
   const manualKeys = new Set(manualTransactions.map((t) => dedupKey(t.date, t.amount)));
   const { toImport, skipped } = partitionDuplicates(transactions, manualKeys);
 
+  // Resolved ONCE for the whole batch (ADR-036/037, HANDOFF §3b) — this
+  // write site bypasses createTransaction()'s choke point (bulk createMany),
+  // so the same resolveWalletId() rule is replicated inline here.
+  const resolveWallet = await buildWalletResolver();
+
   await db.$transaction(async (tx) => {
     // Delete existing batch for same month/year (replace strategy). Only ever
     // touches MONEYLOVER rows via cascade delete — MANUAL rows have batchId: null.
@@ -103,6 +109,7 @@ export async function importBuffer(buffer: Buffer, filename: string, status?: Ba
         date: t.date,
         amount: t.amount,
         wallet: t.wallet,
+        walletId: resolveWallet(t.wallet),
         note: t.note,
         batchId: batch.id,
         moneyLoverCategoryId: categoryIdMap[t.category],

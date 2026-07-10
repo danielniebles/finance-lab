@@ -10,6 +10,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/db", () => ({
   db: {
     transaction: { findMany: vi.fn() },
+    // resolveWalletId (ADR-036/037) — buildWalletResolver() prefetches these
+    // once per import batch; default to "no wallets/accounts" so resolution
+    // is a no-op (null) unless a test opts in.
+    wallet: { findMany: vi.fn() },
+    savingsAccount: { findMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -27,6 +32,8 @@ const CATEGORY_NAME = "Food & Dining";
 
 const dbMock = db as unknown as {
   transaction: { findMany: ReturnType<typeof vi.fn> };
+  wallet: { findMany: ReturnType<typeof vi.fn> };
+  savingsAccount: { findMany: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 };
 
@@ -48,6 +55,8 @@ beforeEach(() => {
   vi.resetAllMocks();
   process.env.FINANCIAL_MONTH_START_DAY = "1";
   dbMock.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(makeTxContext()));
+  dbMock.wallet.findMany.mockResolvedValue([]);
+  dbMock.savingsAccount.findMany.mockResolvedValue([]);
 });
 
 const PARSED_BASE = {

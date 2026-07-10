@@ -44,6 +44,7 @@ import {
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { TransactionSource } from "@/generated/prisma";
+import { buildWalletResolver } from "@/lib/resolve-wallet";
 import type {
   VaultKind,
   VaultGoalType,
@@ -453,6 +454,14 @@ async function executeAddTransactionsBatch(
   const batch = params.batch as BatchDescriptor;
   const included = batch.items.filter((item) => item.included);
 
+  // Resolved ONCE for the whole batch (ADR-036/037, HANDOFF §3b) — every
+  // included row shares the same wallet label (batch.cardLabel), so a single
+  // resolveWalletId() lookup covers the whole batch. This write site
+  // bypasses createTransaction()'s choke point (interactive $transaction),
+  // so the same resolver rule is replicated inline here.
+  const resolveWallet = await buildWalletResolver();
+  const walletId = resolveWallet(batch.cardLabel);
+
   const createdIds = await db.$transaction(async (tx) => {
     const ids: string[] = [];
     for (const item of included) {
@@ -462,6 +471,7 @@ async function executeAddTransactionsBatch(
           date: item.date ? new Date(item.date) : new Date(),
           appCategoryId: item.appCategoryId,
           wallet: batch.cardLabel,
+          walletId,
           note: item.vendor,
           source: TransactionSource.MANUAL,
           batchId: null,

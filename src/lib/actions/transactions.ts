@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { TransactionSource } from "@/generated/prisma";
+import { resolveWalletId } from "@/lib/resolve-wallet";
 
 const PATHS = ["/expenses", "/overview", "/trends"] as const;
 
@@ -14,6 +15,12 @@ function revalidateAll() {
  * Creates a bot/manually-captured expense record — the "bot primary" path.
  * Not part of any ImportBatch (batchId null) and not linked to a
  * MoneyLoverCategory; the category is direct via appCategoryId.
+ *
+ * This is the choke point for walletId resolution (ADR-036/037, HANDOFF
+ * §3b): every caller here (the agent's propose_add_transaction, counterparty
+ * auto-record) gets a resolved walletId for free. The two write sites that
+ * bypass this helper (import.ts's createMany, the batch card-screenshot
+ * create) replicate the same resolveWalletId() rule inline.
  */
 export async function createTransaction(data: {
   amount: number;
@@ -22,12 +29,14 @@ export async function createTransaction(data: {
   wallet: string;
   note?: string;
 }) {
+  const walletId = await resolveWalletId(data.wallet);
   const created = await db.transaction.create({
     data: {
       amount: data.amount,
       date: data.date,
       appCategoryId: data.appCategoryId,
       wallet: data.wallet,
+      walletId,
       note: data.note,
       source: TransactionSource.MANUAL,
       batchId: null,
@@ -126,6 +135,10 @@ export async function updateTransaction(
         }
       : {};
 
-  await db.transaction.update({ where: { id }, data: { ...data, ...detachFields } });
+  // Re-resolve walletId (ADR-036/037) when the wallet label itself changes —
+  // otherwise an edited row would keep pointing at its old wallet's balance.
+  const walletFields = data.wallet !== undefined ? { walletId: await resolveWalletId(data.wallet) } : {};
+
+  await db.transaction.update({ where: { id }, data: { ...data, ...detachFields, ...walletFields } });
   revalidateAll();
 }
