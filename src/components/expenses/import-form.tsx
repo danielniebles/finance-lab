@@ -104,7 +104,7 @@ export function ImportForm() {
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Upload className="size-4" />
+        <Upload className="size-5" />
         Import
       </Button>
 
@@ -126,7 +126,7 @@ export function ImportForm() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <Upload className="size-3" />
+              <Upload className="size-3.5" />
               Upload file
             </button>
             <button
@@ -139,7 +139,7 @@ export function ImportForm() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <HardDrive className="size-3" />
+              <HardDrive className="size-3.5" />
               Google Drive
             </button>
           </div>
@@ -179,13 +179,13 @@ export function ImportForm() {
                   disabled={drivePending}
                   title="Refresh"
                 >
-                  <RefreshCw className={cn("size-3", drivePending && "animate-spin")} />
+                  <RefreshCw className={cn("size-3.5", drivePending && "animate-spin")} />
                 </Button>
               </div>
 
               {drivePending ? (
                 <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
+                  <Loader2 className="size-5 animate-spin" />
                   <span className="text-sm">Loading files…</span>
                 </div>
               ) : driveFiles?.length === 0 ? (
@@ -206,7 +206,7 @@ export function ImportForm() {
                         disabled={drivePending}
                         className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors disabled:opacity-50 group"
                       >
-                        <FileSpreadsheet className="size-4 shrink-0 text-success" />
+                        <FileSpreadsheet className="size-5 shrink-0 text-success" />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium text-foreground truncate">{f.name}</p>
                           {dateMatch && (
@@ -237,9 +237,9 @@ export function ImportForm() {
             {tab === "upload" && (
               <Button type="submit" form="import-form" disabled={uploadPending}>
                 {uploadPending ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <Loader2 className="size-5 animate-spin" />
                 ) : (
-                  <Upload className="size-4" />
+                  <Upload className="size-5" />
                 )}
                 Import
               </Button>

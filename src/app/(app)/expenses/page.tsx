@@ -20,6 +20,7 @@ type Props = {
     walletId?: string;
     type?: string;
     search?: string;
+    groupFilter?: string;
   }>;
 };
 
@@ -41,6 +42,10 @@ function parseGroupBy(value?: string): LedgerGroupBy {
 
 function parseType(value?: string): "expense" | "income" | undefined {
   return value === "expense" || value === "income" ? value : undefined;
+}
+
+function parseGroupFilter(value?: string): "FIXED" | "VARIABLE" | undefined {
+  return value === "FIXED" || value === "VARIABLE" ? value : undefined;
 }
 
 export default async function ExpensesPage({ searchParams }: Props) {
@@ -101,6 +106,7 @@ export default async function ExpensesPage({ searchParams }: Props) {
             month={selectedMonth}
             year={selectedYear}
             walletId={params.walletId || undefined}
+            groupFilter={parseGroupFilter(params.groupFilter)}
           />
         </Suspense>
       )}

@@ -159,7 +159,7 @@ function ViewLink({ href, label = "View details" }: { href: string; label?: stri
       className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
     >
       {label}
-      <ArrowRight className="size-3" />
+      <ArrowRight className="size-3.5" />
     </Link>
   );
 }
@@ -310,7 +310,7 @@ export async function OverviewDashboard() {
                           const key = `${d.installment.id}-${d.installmentNum}`;
                           return (
                             <div key={key} className="flex items-center gap-2.5 min-w-0">
-                              <Circle className="size-4 shrink-0 text-muted-foreground/50" />
+                              <Circle className="size-5 shrink-0 text-muted-foreground/50" />
                               <span className="flex-1 truncate text-sm text-foreground">
                                 {d.installment.description}
                                 <span className="ml-1.5 text-xs text-muted-foreground/60">
@@ -336,7 +336,7 @@ export async function OverviewDashboard() {
                           const key = `${d.installment.id}-${d.installmentNum}`;
                           return (
                             <div key={key} className="flex items-center gap-2.5 min-w-0">
-                              <CheckCircle2 className="size-4 shrink-0 text-success" />
+                              <CheckCircle2 className="size-5 shrink-0 text-success" />
                               <span className="flex-1 truncate text-sm text-foreground">
                                 {d.installment.description}
                                 <span className="ml-1.5 text-xs text-muted-foreground/60">

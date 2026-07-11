@@ -143,7 +143,7 @@ export function RecurringList({ recurringData, recurringVaults }: Props) {
           Recurring expenses
         </h2>
         <Button variant="outline" size="sm" onClick={openCreate}>
-          <Plus className="size-3.5 mr-1.5" aria-hidden="true" />
+          <Plus className="size-4 mr-1.5" aria-hidden="true" />
           Add
         </Button>
       </div>
@@ -271,7 +271,7 @@ export function RecurringList({ recurringData, recurringVaults }: Props) {
                             aria-label={`Edit ${item.name}`}
                             onClick={() => openEdit(item)}
                           >
-                            <Pencil className="size-3.5" aria-hidden="true" />
+                            <Pencil className="size-4" aria-hidden="true" />
                           </Button>
                         </div>
                       </td>

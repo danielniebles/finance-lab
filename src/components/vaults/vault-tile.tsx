@@ -310,7 +310,7 @@ export function VaultTile({
             aria-label={`Edit ${name}`}
             onClick={onEdit}
           >
-            <Pencil className="size-3.5" aria-hidden="true" />
+            <Pencil className="size-4" aria-hidden="true" />
           </Button>
         </div>
       </div>

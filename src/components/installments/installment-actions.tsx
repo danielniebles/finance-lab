@@ -44,7 +44,7 @@ export function InstallmentActions(
     return (
       <>
         <Button size="sm" onClick={openAdd} className="gap-1.5">
-          <Plus className="size-3.5" />
+          <Plus className="size-4" />
           Add installment
         </Button>
         <InstallmentForm
@@ -69,7 +69,7 @@ export function InstallmentActions(
           className="size-7"
           onClick={() => openEdit(installment)}
         >
-          <Pencil className="size-3.5" />
+          <Pencil className="size-4" />
         </Button>
         <Button
           variant="ghost"
@@ -78,7 +78,7 @@ export function InstallmentActions(
           onClick={() => handleDelete(installment.id)}
           disabled={deletePending}
         >
-          <Trash2 className="size-3.5" />
+          <Trash2 className="size-4" />
         </Button>
       </div>
       <InstallmentForm

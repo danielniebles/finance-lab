@@ -37,9 +37,10 @@ type Props = {
   categoryBreakdown: CategoryRow[];
   month: number;
   year: number;
+  titleSuffix?: string;
 };
 
-export function CategoryBreakdownTable({ categoryBreakdown, month, year }: Props) {
+export function CategoryBreakdownTable({ categoryBreakdown, month, year, titleSuffix }: Props) {
   const [open, setOpen] = useState(false);
   const [selectedName, setSelectedName] = useState("");
   const [transactions, setTransactions] = useState<CategoryTransaction[]>([]);
@@ -59,7 +60,9 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year }: Props
     <>
       <Card className="overflow-hidden border-border/60">
         <CardHeader className="px-5 py-4 border-b border-border/60">
-          <CardTitle className="text-sm font-semibold">Spend by Category</CardTitle>
+          <CardTitle className="text-sm font-semibold">
+            Spend by Category{titleSuffix ? ` — ${titleSuffix}` : ""}
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <Table>

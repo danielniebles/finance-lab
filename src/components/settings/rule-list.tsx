@@ -332,7 +332,7 @@ function RuleRow({ rule, categories }: { rule: CounterpartyRuleRowData; categori
         <RuleFormFields values={values} categories={categories} onChange={handlePatch} />
         <div className="flex gap-1 shrink-0 pt-1">
           <Button type="submit" size="icon" className="size-7" disabled={pending} aria-label="Save rule">
-            <Check className="size-3" />
+            <Check className="size-3.5" />
           </Button>
           <Button
             type="button"
@@ -345,7 +345,7 @@ function RuleRow({ rule, categories }: { rule: CounterpartyRuleRowData; categori
               setEditing(false);
             }}
           >
-            <X className="size-3" />
+            <X className="size-3.5" />
           </Button>
         </div>
       </form>
@@ -386,7 +386,7 @@ function RuleRow({ rule, categories }: { rule: CounterpartyRuleRowData; categori
           aria-label="Edit rule"
           onClick={() => setEditing(true)}
         >
-          <Pencil className="size-3.5" />
+          <Pencil className="size-4" />
         </Button>
         <Button
           variant="ghost"
@@ -396,7 +396,7 @@ function RuleRow({ rule, categories }: { rule: CounterpartyRuleRowData; categori
           onClick={handleDelete}
           disabled={pending}
         >
-          <Trash2 className="size-3.5" />
+          <Trash2 className="size-4" />
         </Button>
       </div>
     </div>
@@ -430,7 +430,7 @@ function AddRuleRow({
       <RuleFormFields values={values} categories={categories} onChange={handlePatch} />
       <div className="flex gap-1 shrink-0 pt-1">
         <Button type="submit" size="icon" className="size-8" disabled={pending} aria-label="Create rule">
-          <Check className="size-3.5" />
+          <Check className="size-4" />
         </Button>
         <Button
           type="button"
@@ -440,7 +440,7 @@ function AddRuleRow({
           aria-label="Cancel"
           onClick={onDone}
         >
-          <X className="size-3.5" />
+          <X className="size-4" />
         </Button>
       </div>
     </form>
@@ -473,7 +473,7 @@ export function RuleList({
       ) : (
         <div className="p-4 border-t border-border">
           <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-            <Plus className="size-4" />
+            <Plus className="size-5" />
             Add rule
           </Button>
         </div>

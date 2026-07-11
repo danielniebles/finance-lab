@@ -58,12 +58,14 @@ beforeEach(() => {
 });
 
 describe("TransactionRow — default mode", () => {
-  it("renders note, category chip, wallet tag, and signed amount", () => {
+  it("renders note, category chip, and signed amount", () => {
     render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />);
 
-    expect(screen.getByText("Groceries run")).toBeInTheDocument();
+    // Note renders twice in the DOM (desktop inline copy + mobile own-line
+    // copy), toggled via responsive `hidden` classes rather than a
+    // conditional — only one is ever visually shown at a given breakpoint.
+    expect(screen.getAllByText("Groceries run").length).toBeGreaterThan(0);
     expect(screen.getByText("Groceries")).toBeInTheDocument();
-    expect(screen.getByText("· Nequi")).toBeInTheDocument();
     expect(screen.getByText(/^-/)).toBeInTheDocument();
   });
 

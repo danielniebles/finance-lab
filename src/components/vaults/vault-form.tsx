@@ -345,7 +345,7 @@ export function VaultForm({ open, mode, vault, onClose }: Props) {
                 )}
                 onClick={() => setField("color", null)}
               >
-                <X className="size-3 text-muted-foreground" aria-hidden />
+                <X className="size-3.5 text-muted-foreground" aria-hidden />
               </button>
             </div>
           </div>

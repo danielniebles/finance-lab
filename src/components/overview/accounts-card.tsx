@@ -46,7 +46,7 @@ function RowChevron() {
   return (
     <ArrowRight
       aria-hidden="true"
-      className="size-3.5 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/60 group-focus-visible:text-muted-foreground/60"
+      className="size-4 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/60 group-focus-visible:text-muted-foreground/60"
     />
   );
 }

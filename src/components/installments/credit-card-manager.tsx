@@ -142,7 +142,7 @@ export function CreditCardManager({ open, onClose, cards }: Props) {
                   onClick={() => startEdit(card)}
                   aria-label={`Edit ${card.name}`}
                 >
-                  <Pencil className="size-3" />
+                  <Pencil className="size-3.5" />
                 </Button>
                 <Button
                   variant="ghost"
@@ -153,7 +153,7 @@ export function CreditCardManager({ open, onClose, cards }: Props) {
                   aria-label={deletingId === card.id ? `Confirm delete ${card.name}` : `Delete ${card.name}`}
                   title={deletingId === card.id ? "Click again to confirm" : undefined}
                 >
-                  <Trash2 className="size-3" />
+                  <Trash2 className="size-3.5" />
                 </Button>
               </div>
             ))}

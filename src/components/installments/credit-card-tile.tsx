@@ -98,7 +98,7 @@ export function CreditCardTile({ card, masked, onEdit, onDelete, selected, onCar
             className="h-6 gap-1 text-xs flex-1"
             onClick={(e) => { e.stopPropagation(); onEdit(); }}
           >
-            <Pencil className="size-3" />
+            <Pencil className="size-3.5" />
             Edit
           </Button>
           <Button
@@ -109,7 +109,7 @@ export function CreditCardTile({ card, masked, onEdit, onDelete, selected, onCar
             disabled={deletePending}
             aria-label={`Delete ${card.name}`}
           >
-            <Trash2 className="size-3" />
+            <Trash2 className="size-3.5" />
           </Button>
         </div>
       </div>

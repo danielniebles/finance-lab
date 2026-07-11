@@ -166,7 +166,7 @@ function BudgetItemRow({
         />
         <BudgetTypeSelect value={budgetType} onChange={setBudgetType} />
         <Button type="submit" size="icon" className="size-7" disabled={pending}>
-          <Check className="size-3" />
+          <Check className="size-3.5" />
         </Button>
         <Button
           type="button"
@@ -175,7 +175,7 @@ function BudgetItemRow({
           className="size-7"
           onClick={() => setEditing(false)}
         >
-          <X className="size-3" />
+          <X className="size-3.5" />
         </Button>
       </form>
     );
@@ -198,7 +198,7 @@ function BudgetItemRow({
           className="size-6"
           onClick={() => setEditing(true)}
         >
-          <Pencil className="size-3" />
+          <Pencil className="size-3.5" />
         </Button>
         <Button
           variant="ghost"
@@ -207,7 +207,7 @@ function BudgetItemRow({
           onClick={handleDelete}
           disabled={pending}
         >
-          <Trash2 className="size-3" />
+          <Trash2 className="size-3.5" />
         </Button>
       </div>
     </div>
@@ -259,7 +259,7 @@ function AddBudgetItemRow({
       />
       <BudgetTypeSelect value={budgetType} onChange={setBudgetType} />
       <Button type="submit" size="icon" className="size-7" disabled={pending}>
-        <Check className="size-3" />
+        <Check className="size-3.5" />
       </Button>
       <Button
         type="button"
@@ -268,7 +268,7 @@ function AddBudgetItemRow({
         className="size-7"
         onClick={onDone}
       >
-        <X className="size-3" />
+        <X className="size-3.5" />
       </Button>
     </form>
   );
@@ -303,13 +303,13 @@ function CategorySwatchButton({ cat, onClick }: { cat: Category; onClick: () => 
       onClick={onClick}
       aria-label={`Customize icon and color for ${cat.name}`}
       className={cn(
-        "flex size-8 shrink-0 items-center justify-center rounded-full transition-colors",
+        "flex size-9 shrink-0 items-center justify-center rounded-full transition-colors",
         "hover:ring-2 hover:ring-ring/40",
         "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
         iconWrap
       )}
     >
-      <CategoryIcon className="size-4" />
+      <CategoryIcon className="size-5" />
     </button>
   );
 }
@@ -398,8 +398,8 @@ function CategoryStyleDialog({
 function CategoryStylePreview({ preview, name }: { preview: CategoryPalette; name: string }) {
   return (
     <div className="flex items-center gap-3">
-      <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-full", preview.iconWrap)}>
-        <preview.icon className="size-4" />
+      <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-full", preview.iconWrap)}>
+        <preview.icon className="size-5" />
       </span>
       <span
         className={cn(
@@ -466,12 +466,12 @@ function IconSwatchGrid({
             autoFocus={idx === 0}
             onClick={() => onSelect(key)}
             className={cn(
-              "flex size-9 items-center justify-center rounded-full transition-colors",
+              "flex size-10 items-center justify-center rounded-full transition-colors",
               swatchIconWrap,
               isSelected && (isCustom ? "ring-2 ring-primary" : "ring-1 ring-border/60")
             )}
           >
-            <Icon className="size-4" />
+            <Icon className="size-5" />
           </button>
         );
       })}
@@ -576,7 +576,7 @@ function CategoryRow({ cat }: { cat: Category }) {
             required
           />
           <Button type="submit" size="icon" className="size-7" disabled={pending}>
-            <Check className="size-3" />
+            <Check className="size-3.5" />
           </Button>
           <Button
             type="button"
@@ -585,7 +585,7 @@ function CategoryRow({ cat }: { cat: Category }) {
             className="size-7"
             onClick={() => { setName(cat.name); setEditingName(false); }}
           >
-            <X className="size-3" />
+            <X className="size-3.5" />
           </Button>
         </form>
       ) : (
@@ -650,7 +650,7 @@ function CategoryRowGrid({
         onClick={onToggleExpand}
         className="text-muted-foreground hover:text-foreground transition-colors"
       >
-        <ChevronDown className={`size-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        <ChevronDown className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
       </button>
 
       <div className="flex items-center gap-2 min-w-0">
@@ -679,7 +679,7 @@ function CategoryRowGrid({
 
       <div className="flex gap-1 justify-end opacity-0 group-hover/catrow:opacity-100 transition-opacity">
         <Button variant="ghost" size="icon" className="size-7" onClick={onEditName}>
-          <Pencil className="size-3.5" />
+          <Pencil className="size-4" />
         </Button>
         <Button
           variant="ghost"
@@ -688,7 +688,7 @@ function CategoryRowGrid({
           onClick={onDelete}
           disabled={pending}
         >
-          <Trash2 className="size-3.5" />
+          <Trash2 className="size-4" />
         </Button>
       </div>
     </div>
@@ -724,7 +724,7 @@ function CategoryBudgetPanel({
             className="h-6 gap-1 text-xs text-muted-foreground"
             onClick={onAddItem}
           >
-            <Plus className="size-3" />
+            <Plus className="size-3.5" />
             Add item
           </Button>
         </div>
@@ -760,10 +760,10 @@ function AddCategoryRow({ onDone }: { onDone: () => void }) {
       </div>
       <div className="flex gap-1">
         <Button type="submit" size="icon" className="size-8" disabled={pending}>
-          <Check className="size-3.5" />
+          <Check className="size-4" />
         </Button>
         <Button type="button" variant="ghost" size="icon" className="size-8" onClick={onDone}>
-          <X className="size-3.5" />
+          <X className="size-4" />
         </Button>
       </div>
     </form>
@@ -890,7 +890,7 @@ export function CategoryList({ categories }: { categories: Category[] }) {
 
       {!adding && (
         <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-          <Plus className="size-4" />
+          <Plus className="size-5" />
           Add category
         </Button>
       )}

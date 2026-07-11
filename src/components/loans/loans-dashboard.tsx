@@ -35,7 +35,7 @@ function KpiCard({
       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
       <div className="flex items-end gap-2">
         <p className={cn("font-mono text-lg font-semibold", color)}>{value}</p>
-        {warn && <AlertTriangle className="size-4 text-warning mb-0.5 shrink-0" />}
+        {warn && <AlertTriangle className="size-5 text-warning mb-0.5 shrink-0" />}
       </div>
       {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
     </div>
@@ -123,7 +123,7 @@ export function LoansDashboard({ data }: { data: LoansOverview }) {
             onClick={handlePrivacyToggle}
             title={privacyMode ? "Exit privacy mode" : "Enter privacy mode"}
           >
-            {privacyMode ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+            {privacyMode ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             Privacy
           </Button>
           <LoansClient accounts={data.accounts} debtors={data.debtors} mode="action-bar" />

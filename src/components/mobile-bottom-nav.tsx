@@ -38,7 +38,7 @@ export function MobileBottomNav() {
             )}
             aria-current={isActive ? "page" : undefined}
           >
-            <item.icon className="size-5" aria-hidden="true" />
+            <item.icon className="size-6" aria-hidden="true" />
             {item.title}
           </Link>
         );
@@ -51,7 +51,7 @@ export function MobileBottomNav() {
           isMoreActive ? "text-primary" : "text-muted-foreground",
         )}
       >
-        <MoreHorizontal className="size-5" aria-hidden="true" />
+        <MoreHorizontal className="size-6" aria-hidden="true" />
         More
       </button>
     </nav>

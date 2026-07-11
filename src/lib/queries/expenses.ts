@@ -73,7 +73,7 @@ type BudgetItemShape = { amount: number; budgetType: "FIXED" | "VARIABLE" };
  * budgetItems. Shared by getMonthlyAnalysis's per-category breakdown and
  * getCategories() so the derivation lives in exactly one place.
  */
-function deriveCategoryBudgetType(items: BudgetItemShape[]): {
+export function deriveCategoryBudgetType(items: BudgetItemShape[]): {
   budgetType: CategoryBudgetType;
   fixedBudgetPortion: number;
   variableBudgetPortion: number;
@@ -173,7 +173,13 @@ function buildSpendByCategory(
   return { spendByCategory, uncategorizedCount };
 }
 
-type AnalysisAppCategory = { id: string; name: string; budgetItems: BudgetItemShape[] };
+type AnalysisAppCategory = {
+  id: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+  budgetItems: BudgetItemShape[];
+};
 
 function buildCategoryBreakdown(
   appCategories: AnalysisAppCategory[],
@@ -195,6 +201,8 @@ function buildCategoryBreakdown(
     return {
       id: cat.id,
       name: cat.name,
+      icon: cat.icon,
+      color: cat.color,
       budgetType,
       fixedBudgetPortion,
       variableBudgetPortion,

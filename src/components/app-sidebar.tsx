@@ -87,7 +87,7 @@ export function AppSidebar() {
                     isActive={pathname.startsWith(item.href)}
                     tooltip={item.title}
                   >
-                    <item.icon className="size-4" />
+                    <item.icon className="size-5" />
                     <span>{item.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -100,10 +100,10 @@ export function AppSidebar() {
           <Collapsible defaultOpen={pathname.startsWith("/settings")}>
             <CollapsibleTrigger className="flex w-full items-center justify-between px-2 py-1 text-xs font-medium text-sidebar-foreground/70 group-data-[collapsible=icon]:justify-center">
               <span className="flex items-center gap-2">
-                <Settings className="size-4" />
+                <Settings className="size-5" />
                 <span className="group-data-[collapsible=icon]:hidden">Settings</span>
               </span>
-              <ChevronDown className="size-3 transition-transform data-[state=open]:rotate-180 group-data-[collapsible=icon]:hidden" />
+              <ChevronDown className="size-3.5 transition-transform data-[state=open]:rotate-180 group-data-[collapsible=icon]:hidden" />
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarGroupContent>
@@ -134,7 +134,7 @@ export function AppSidebar() {
           onClick={toggleTheme}
           className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
         >
-          {theme === "dark" ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+          {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
           <span className="group-data-[collapsible=icon]:hidden">
             {theme === "dark" ? "Light mode" : "Dark mode"}
           </span>

@@ -196,7 +196,7 @@ function DebtorPaymentsDialog({
                   disabled={deletePaymentPending}
                   onClick={() => startDeletePayment(async () => { await deleteLoanPayment(p.id); })}
                 >
-                  <Trash className="size-3" />
+                  <Trash className="size-3.5" />
                 </Button>
               </div>
             ))}
@@ -218,7 +218,7 @@ function PrivacyRevealButton({ isRevealed, onReveal }: { isRevealed: boolean; on
       onClick={onReveal}
       title={isRevealed ? "Hide amounts" : "Show amounts"}
     >
-      {isRevealed ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+      {isRevealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
       {isRevealed ? "Hide" : "Show"}
     </Button>
   );
@@ -259,7 +259,7 @@ function DebtorActionButtons({
           className="h-7 gap-1 text-xs text-muted-foreground"
           onClick={onShowPayments}
         >
-          <ScrollText className="size-3" />
+          <ScrollText className="size-3.5" />
           Payments
         </Button>
       )}
@@ -271,7 +271,7 @@ function DebtorActionButtons({
           disabled={clearSettledPending}
           onClick={onClearSettled}
         >
-          <Trash className="size-3" />
+          <Trash className="size-3.5" />
           Clear settled ({settledCount})
         </Button>
       )}

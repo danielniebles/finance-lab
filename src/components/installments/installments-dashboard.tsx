@@ -114,7 +114,7 @@ export function InstallmentsDashboard({
             onClick={handlePrivacyToggle}
             title={privacyMode ? "Exit privacy mode" : "Enter privacy mode"}
           >
-            {privacyMode ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+            {privacyMode ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             Privacy
           </Button>
           <MonthNav month={month} year={year} />

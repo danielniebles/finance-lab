@@ -74,7 +74,7 @@ type Props = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function VaultsDashboard({ vaults, obligations, recurringData, recurringVaults, month, year, accounts }: Props) {
+export function VaultsDashboard({ vaults, obligations, recurringData, recurringVaults, accounts }: Props) {
   // Vault form dialog
   const [vaultFormOpen, setVaultFormOpen] = useState(false);
   const [vaultFormMode, setVaultFormMode] = useState<"create" | "edit">("create");
@@ -141,7 +141,7 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={openAddDialog}>
-          <Plus className="size-3.5 mr-1.5" aria-hidden="true" />
+          <Plus className="size-4 mr-1.5" aria-hidden="true" />
           New vault
         </Button>
       </div>
@@ -199,7 +199,7 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
             className="mt-4"
             onClick={openAddDialog}
           >
-            <Plus className="size-3.5 mr-1.5" aria-hidden="true" />
+            <Plus className="size-4 mr-1.5" aria-hidden="true" />
             New vault
           </Button>
         </div>

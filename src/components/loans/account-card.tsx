@@ -87,7 +87,7 @@ function EntryLogRowItem({
         onClick={() => onDelete(row.id)}
         disabled={deletePending}
       >
-        <Trash className="size-3" />
+        <Trash className="size-3.5" />
       </Button>
     </div>
   );
@@ -168,7 +168,7 @@ function AccountEntryLog({
             className="w-full gap-1.5"
             onClick={onAddEntry}
           >
-            <Plus className="size-3" />
+            <Plus className="size-3.5" />
             Add entry
           </Button>
         </div>
@@ -240,7 +240,7 @@ export function AccountCard({ account, masked }: { account: AccountWithBalance; 
               className="h-6 gap-1 text-xs flex-1"
               onClick={() => setEntryOpen(true)}
             >
-              <Plus className="size-3" />
+              <Plus className="size-3.5" />
               Add entry
             </Button>
             <Button
@@ -249,11 +249,11 @@ export function AccountCard({ account, masked }: { account: AccountWithBalance; 
               className="h-6 gap-1 text-xs"
               onClick={() => setLogOpen(true)}
             >
-              <ScrollText className="size-3" />
+              <ScrollText className="size-3.5" />
               Log
             </Button>
             <Button variant="ghost" size="icon" className="size-6" onClick={() => setEditOpen(true)}>
-              <Pencil className="size-3" />
+              <Pencil className="size-3.5" />
             </Button>
             <Button
               variant="ghost"
@@ -262,7 +262,7 @@ export function AccountCard({ account, masked }: { account: AccountWithBalance; 
               onClick={handleDelete}
               disabled={deletePending}
             >
-              <Trash2 className="size-3" />
+              <Trash2 className="size-3.5" />
             </Button>
           </div>
         </div>

@@ -174,7 +174,7 @@ function TransactionDefaultRow({
       onClick={onEdit}
       aria-label={rowAriaLabel(item)}
       className={cn(
-        "flex w-full flex-col gap-2 px-4 py-2.5 border-b border-border/40 last:border-0",
+        "flex w-full flex-col gap-1.5 px-4 py-2.5 border-b border-border/40 last:border-0",
         "sm:flex-row sm:items-center sm:gap-3 sm:py-2",
         "text-left cursor-pointer transition-colors",
         "hover:bg-muted hover:text-foreground dark:hover:bg-muted/50",
@@ -182,14 +182,17 @@ function TransactionDefaultRow({
         "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
       )}
     >
-      <div className="flex items-center gap-3 min-w-0 sm:flex-1">
+      {/* Icon chip + category + amount — the whole row on desktop (note grows
+          to fill the middle); on mobile this is just the top line, with the
+          note demoted to its own line below since it doesn't fit here. */}
+      <div className="flex w-full min-w-0 items-center gap-3">
         {groupBy !== "day" && (
           <span className="text-xs tabular-nums text-muted-foreground w-11 shrink-0">
             {formatRowDate(item.date)}
           </span>
         )}
-        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-full", iconWrap)}>
-          <CategoryIcon className="size-4" />
+        <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-full", iconWrap)}>
+          <CategoryIcon className="size-5" />
         </span>
         {groupBy !== "category" && item.categoryName && (
           <span
@@ -201,24 +204,13 @@ function TransactionDefaultRow({
             {item.categoryName}
           </span>
         )}
-        <span className="text-sm truncate flex-1 min-w-0">{item.note || "—"}</span>
-      </div>
-
-      {/* Meta + amount: own line on mobile (avoids the amount colliding
-          with the wallet label), inline on sm+ via `contents` so desktop
-          keeps the original single-row layout. */}
-      <div className="flex items-center justify-between gap-2 sm:contents">
-        <div className="flex items-center gap-2 min-w-0 sm:contents">
-          {groupBy !== "wallet" && (
-            <span className="text-xs text-muted-foreground shrink-0">· {item.walletName ?? item.wallet}</span>
-          )}
-          {item.source === "MANUAL" && (
-            <span className="text-xs text-muted-foreground shrink-0">manual</span>
-          )}
-        </div>
+        {item.source === "MANUAL" && (
+          <span className="text-xs text-muted-foreground shrink-0">manual</span>
+        )}
+        <span className="hidden sm:block text-sm truncate flex-1 min-w-0">{item.note || "—"}</span>
         <span
           className={cn(
-            "font-mono text-sm tabular-nums shrink-0 text-right sm:min-w-24",
+            "ml-auto font-mono text-sm tabular-nums shrink-0 sm:min-w-24 sm:text-right",
             item.amount < 0 ? "text-destructive" : "text-success"
           )}
         >
@@ -226,6 +218,11 @@ function TransactionDefaultRow({
           {formatCOP(Math.abs(item.amount))}
         </span>
       </div>
+
+      {/* Description — own line on mobile only (shown inline above on sm+). */}
+      <p className="truncate pl-12 text-sm text-muted-foreground sm:hidden">
+        {item.note || "—"}
+      </p>
     </button>
   );
 }

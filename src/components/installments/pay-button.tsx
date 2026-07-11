@@ -40,7 +40,7 @@ export function PayButton({
         disabled={pending}
         className="flex items-center gap-1.5 text-sm text-success hover:text-muted-foreground transition-colors disabled:opacity-50"
       >
-        <CheckCircle2 className="size-4" />
+        <CheckCircle2 className="size-5" />
         <span className="font-mono text-xs">
           {paidAt.toLocaleDateString("es-CO", { month: "short", day: "numeric", timeZone: "UTC" })}
         </span>
@@ -56,7 +56,7 @@ export function PayButton({
       disabled={pending}
       className="h-7 gap-1.5 text-xs"
     >
-      <Circle className="size-3" />
+      <Circle className="size-3.5" />
       Mark paid
     </Button>
   );

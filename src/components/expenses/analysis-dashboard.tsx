@@ -1,12 +1,16 @@
+import Link from "next/link";
 import { getMonthlyAnalysis } from "@/lib/queries/expenses";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Minus, AlertTriangle } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, AlertTriangle, Filter, X } from "lucide-react";
+import { resolveEffectiveCategoryStyle } from "@/lib/category-style";
 import { CategoryBreakdownTable, SeverityBadge } from "@/components/expenses/category-breakdown-table";
 
-type Props = { month: number; year: number; walletId?: string };
+type GroupFilter = "FIXED" | "VARIABLE";
 
-export async function AnalysisDashboard({ month, year, walletId }: Props) {
+type Props = { month: number; year: number; walletId?: string; groupFilter?: GroupFilter };
+
+export async function AnalysisDashboard({ month, year, walletId, groupFilter }: Props) {
   const data = await getMonthlyAnalysis(month, year, walletId);
 
   if (data.totalIncome === 0 && data.totalExpenses === 0) {
@@ -19,7 +23,23 @@ export async function AnalysisDashboard({ month, year, walletId }: Props) {
 
   const fixedControl = data.fixedBudget - data.fixedActual;
   const variableControl = data.variableBudget - data.variableActual;
+  const fixedPercentUsed = data.fixedBudget > 0 ? (data.fixedActual / data.fixedBudget) * 100 : null;
+  const variablePercentUsed = data.variableBudget > 0 ? (data.variableActual / data.variableBudget) * 100 : null;
   const burnRateAlert = data.variableBurnRate !== null && data.variableBurnRate > 100;
+
+  const topFixedCategories = [...data.categoryBreakdown]
+    .filter((c) => c.budgetType === "FIXED" && c.spent > 0)
+    .sort((a, b) => b.spent - a.spent)
+    .slice(0, 3);
+  const topVariableCategories = [...data.categoryBreakdown]
+    .filter((c) => c.budgetType !== "FIXED" && c.spent > 0)
+    .sort((a, b) => b.spent - a.spent)
+    .slice(0, 3);
+
+  const tableRows =
+    groupFilter === "FIXED" ? data.categoryBreakdown.filter((c) => c.budgetType === "FIXED")
+    : groupFilter === "VARIABLE" ? data.categoryBreakdown.filter((c) => c.budgetType !== "FIXED")
+    : data.categoryBreakdown;
 
   return (
     <div className="space-y-5">
@@ -37,7 +57,7 @@ export async function AnalysisDashboard({ month, year, walletId }: Props) {
       {data.topOffenders.length > 0 && (
         <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4">
           <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="size-4 text-destructive" />
+            <AlertTriangle className="size-5 text-destructive" />
             <h3 className="text-sm font-semibold text-destructive">Top Issues</h3>
           </div>
           <div className="grid gap-2 sm:grid-cols-3">
@@ -89,69 +109,47 @@ export async function AnalysisDashboard({ month, year, walletId }: Props) {
         />
       </div>
 
-      {/* ── Fixed · Variable pills + Savings ──────────────────────────── */}
+      {/* ── Fixed · Variable · Savings ─────────────────────────────────── */}
       <div className="grid gap-3 lg:grid-cols-3">
+        <BudgetGroupCard
+          title="Fixed Expenses"
+          pillLabel="ESSENTIAL"
+          pillClass="border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+          ringColorClass="stroke-blue-500"
+          percentUsed={fixedPercentUsed}
+          actual={data.fixedActual}
+          budget={data.fixedBudget}
+          control={fixedControl}
+          controlLabel="Efficiency"
+          topCategoriesLabel="Priority outlays"
+          topCategories={topFixedCategories}
+          filterHref={buildAnalysisUrl(month, year, walletId, "FIXED")}
+          isActiveFilter={groupFilter === "FIXED"}
+        />
 
-        {/* Fixed pill */}
-        <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-blue-600 dark:text-blue-400">
-              FIXED
-            </span>
-          </div>
-          <div className="space-y-2">
-            <PillRow label="Actual" value={data.fixedActual} />
-            <PillRow label="Budget" value={data.fixedBudget} />
-            <div className="mt-1 border-t border-border/40 pt-2">
-              <PillRow
-                label="Control (Budget − Actual)"
-                prominent
-                value={fixedControl}
-                highlight={fixedControl >= 0 ? "good" : "bad"}
-              />
-            </div>
-            <div className="mt-1 border-t border-border/40 pt-2">
-              <VarianceRows variance={data.fixedVariance} />
-            </div>
-          </div>
-        </div>
-
-        {/* Variable pill */}
-        <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-violet-600 dark:text-violet-400">
-              VARIABLE
-            </span>
-            {burnRateAlert && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-destructive/30 bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive">
-                <AlertTriangle className="size-3" />
-                {data.variableBurnRate!.toFixed(0)}% burn rate
+        <BudgetGroupCard
+          title="Variable Expenses"
+          pillLabel="DISCRETIONARY"
+          pillClass="border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+          ringColorClass="stroke-violet-500"
+          percentUsed={variablePercentUsed}
+          actual={data.variableActual}
+          budget={data.variableBudget}
+          control={variableControl}
+          controlLabel="Burn rate"
+          topCategoriesLabel="Top variances"
+          topCategories={topVariableCategories}
+          filterHref={buildAnalysisUrl(month, year, walletId, "VARIABLE")}
+          isActiveFilter={groupFilter === "VARIABLE"}
+          extraBadge={
+            burnRateAlert ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
+                <AlertTriangle className="size-3.5" />
+                {data.variableBurnRate!.toFixed(0)}%
               </span>
-            )}
-          </div>
-          <div className="space-y-2">
-            <PillRow label="Actual" value={data.variableActual} />
-            <PillRow label="Budget" value={data.variableBudget} />
-            <div className="mt-1 border-t border-border/40 pt-2">
-              <PillRow
-                label="Control (Budget − Actual)"
-                prominent
-                value={variableControl}
-                highlight={variableControl >= 0 ? "good" : "bad"}
-              />
-              {data.variableBurnRate !== null && !burnRateAlert && (
-                <PillRow
-                  label="Burn Rate"
-                  rawValue={`${data.variableBurnRate.toFixed(1)}%`}
-                  highlight="good"
-                />
-              )}
-            </div>
-            <div className="mt-1 border-t border-border/40 pt-2">
-              <VarianceRows variance={data.variableVariance} />
-            </div>
-          </div>
-        </div>
+            ) : undefined
+          }
+        />
 
         {/* Savings */}
         <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
@@ -200,16 +198,211 @@ export async function AnalysisDashboard({ month, year, walletId }: Props) {
       </div>
 
       {/* ── Category breakdown table ───────────────────────────────────── */}
-      <CategoryBreakdownTable
-        categoryBreakdown={data.categoryBreakdown}
-        month={month}
-        year={year}
-      />
+      <div id="category-breakdown" className="space-y-2 scroll-mt-4">
+        {groupFilter && (
+          <GroupFilterChip
+            groupFilter={groupFilter}
+            clearHref={buildAnalysisUrl(month, year, walletId)}
+          />
+        )}
+        <CategoryBreakdownTable
+          categoryBreakdown={tableRows}
+          month={month}
+          year={year}
+          titleSuffix={groupFilter === "FIXED" ? "Fixed" : groupFilter === "VARIABLE" ? "Variable" : undefined}
+        />
+      </div>
     </div>
   );
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
+
+// Same-page filter (not a separate view) — a card's "Filter table below" link
+// re-renders this server component with ?groupFilter=FIXED|VARIABLE, which
+// narrows `tableRows` before it reaches CategoryBreakdownTable. Preserves
+// view=analysis + month/year/walletId so the rest of the page is unaffected.
+function buildAnalysisUrl(month: number, year: number, walletId?: string, groupFilter?: GroupFilter): string {
+  const params = new URLSearchParams({ view: "analysis", month: String(month), year: String(year) });
+  if (walletId) params.set("walletId", walletId);
+  if (groupFilter) params.set("groupFilter", groupFilter);
+  return `/expenses?${params.toString()}#category-breakdown`;
+}
+
+function GroupFilterChip({ groupFilter, clearHref }: { groupFilter: GroupFilter; clearHref: string }) {
+  const label = groupFilter === "FIXED" ? "Fixed expenses only" : "Variable expenses only";
+  return (
+    <div className="flex items-center gap-1.5 w-fit rounded-full border border-primary/30 bg-primary/10 py-1 pl-3 pr-1.5 text-xs font-medium text-primary">
+      {label}
+      <Link
+        href={clearHref}
+        aria-label="Clear filter"
+        className="flex size-4.5 items-center justify-center rounded-full transition-colors hover:bg-primary/20"
+      >
+        <X className="size-3.5" />
+      </Link>
+    </div>
+  );
+}
+
+type TopCategory = { id: string; name: string; spent: number; icon: string | null; color: string | null };
+
+function BudgetGroupCard({
+  title,
+  pillLabel,
+  pillClass,
+  ringColorClass,
+  percentUsed,
+  actual,
+  budget,
+  control,
+  controlLabel,
+  topCategoriesLabel,
+  topCategories,
+  filterHref,
+  isActiveFilter,
+  extraBadge,
+}: {
+  title: string;
+  pillLabel: string;
+  pillClass: string;
+  ringColorClass: string;
+  percentUsed: number | null;
+  actual: number;
+  budget: number;
+  control: number;
+  controlLabel: string;
+  topCategoriesLabel: string;
+  topCategories: TopCategory[];
+  filterHref: string;
+  isActiveFilter: boolean;
+  extraBadge?: React.ReactNode;
+}) {
+  const isUnder = control >= 0;
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-card p-4 space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="font-heading text-sm font-semibold">{title}</h3>
+        <div className="flex items-center gap-1.5">
+          {extraBadge}
+          <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-wide", pillClass)}>
+            {pillLabel}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <CircularProgress percent={percentUsed ?? 0} colorClass={ringColorClass} />
+        <div className="flex-1 min-w-0 space-y-2">
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Actual spending
+            </p>
+            <p className="font-mono text-lg font-semibold tabular-nums">{formatCOP(actual)}</p>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Budget</span>
+            <span className="font-mono text-sm tabular-nums text-muted-foreground">{formatCOP(budget)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-2">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              {controlLabel}
+            </span>
+            <span
+              className={cn(
+                "font-mono text-sm font-semibold tabular-nums",
+                isUnder ? "text-success" : "text-destructive"
+              )}
+            >
+              {isUnder ? "+" : "-"}
+              {formatCOP(Math.abs(control))} {isUnder ? "Under" : "Overage"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {topCategories.length > 0 && (
+        <div className="space-y-1.5 border-t border-border/40 pt-3">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {topCategoriesLabel}
+          </p>
+          {topCategories.map((cat) => {
+            const { icon: CategoryIcon, iconWrap } = resolveEffectiveCategoryStyle(
+              cat.name, cat.icon, cat.color
+            );
+            return (
+              <div
+                key={cat.id}
+                className="flex items-center gap-2.5 rounded-lg border border-border/40 px-2.5 py-2"
+              >
+                <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-full", iconWrap)}>
+                  <CategoryIcon className="size-5" />
+                </span>
+                <span className="text-sm truncate flex-1 min-w-0">{cat.name}</span>
+                <span className="font-mono text-sm tabular-nums shrink-0">{formatCOP(cat.spent)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <Link
+        href={isActiveFilter ? "#category-breakdown" : filterHref}
+        className={cn(
+          "flex items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-medium transition-colors",
+          isActiveFilter
+            ? "border-primary/40 bg-primary/10 text-primary"
+            : "border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+        )}
+      >
+        <Filter className="size-3.5" />
+        {isActiveFilter ? "Filtering table below" : "Filter table below"}
+      </Link>
+    </div>
+  );
+}
+
+function CircularProgress({
+  percent,
+  colorClass,
+  size = 88,
+  strokeWidth = 8,
+}: {
+  percent: number;
+  colorClass: string;
+  size?: number;
+  strokeWidth?: number;
+}) {
+  const clamped = Math.min(Math.max(percent, 0), 100);
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - clamped / 100);
+
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2} cy={size / 2} r={radius}
+          strokeWidth={strokeWidth} fill="none"
+          className="stroke-muted/40"
+        />
+        <circle
+          cx={size / 2} cy={size / 2} r={radius}
+          strokeWidth={strokeWidth} fill="none"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          className={cn("transition-all", colorClass)}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="font-mono text-base font-bold tabular-nums">{Math.round(clamped)}%</span>
+        <span className="text-[9px] uppercase tracking-wide text-muted-foreground">Used</span>
+      </div>
+    </div>
+  );
+}
 
 export function StatCard({
   label,
@@ -255,76 +448,11 @@ export function StatCard({
           {display}
         </p>
         {showTrend && (
-          <TrendIcon className={cn("size-4 shrink-0 mb-0.5", valueColor)} />
+          <TrendIcon className={cn("size-5 shrink-0 mb-0.5", valueColor)} />
         )}
       </div>
       {hint && (
         <p className="text-xs text-muted-foreground/60 mt-1">{hint}</p>
-      )}
-    </div>
-  );
-}
-
-type VarianceCat = { name: string; control: number };
-
-type Variance = {
-  surplusCount: number;
-  surplusTotal: number;
-  surplusCategories: VarianceCat[];
-  deficitCount: number;
-  deficitTotal: number;
-  deficitCategories: VarianceCat[];
-  offsetCoverage: number | null;
-};
-
-function VarianceRows({ variance: v }: { variance: Variance }) {
-  const covered = v.offsetCoverage !== null && v.offsetCoverage >= 100;
-  return (
-    <div className="space-y-1.5">
-      {v.surplusCount > 0 && (
-        <>
-          <PillRow
-            label={`Under budget (${v.surplusCount} cat${v.surplusCount !== 1 ? "s" : ""})`}
-            rawValue={`+${formatCOP(v.surplusTotal)}`}
-            highlight="good"
-          />
-          <div className="pl-2 space-y-0.5">
-            {v.surplusCategories.map((c) => (
-              <div key={c.name} className="flex items-center justify-between gap-2">
-                <span className="text-xs text-muted-foreground truncate">{c.name}</span>
-                <span className="font-mono text-xs tabular-nums text-success/70 shrink-0">
-                  +{formatCOP(c.control)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-      {v.deficitCount > 0 && (
-        <>
-          <PillRow
-            label={`Over budget (${v.deficitCount} cat${v.deficitCount !== 1 ? "s" : ""})`}
-            rawValue={v.deficitTotal > 0 ? `-${formatCOP(v.deficitTotal)}` : formatCOP(0)}
-            highlight={v.deficitTotal > 0 ? "bad" : "good"}
-          />
-          <div className="pl-2 space-y-0.5">
-            {v.deficitCategories.map((c) => (
-              <div key={c.name} className="flex items-center justify-between gap-2">
-                <span className="text-xs text-muted-foreground truncate">{c.name}</span>
-                <span className="font-mono text-xs tabular-nums text-destructive/70 shrink-0">
-                  -{formatCOP(Math.abs(c.control))}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-      {v.offsetCoverage !== null && v.deficitTotal > 0 && (
-        <PillRow
-          label="Overspend covered by savings"
-          rawValue={`${v.offsetCoverage.toFixed(0)}%`}
-          highlight={covered ? "good" : "bad"}
-        />
       )}
     </div>
   );

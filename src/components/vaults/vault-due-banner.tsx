@@ -61,7 +61,7 @@ export function VaultDueBanner({ obligations }: Props) {
       {/* Header strip */}
       <div className="px-5 py-3 bg-warning/5 border-b border-warning/20 flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-2.5">
-          <AlertTriangle className="size-4 text-warning shrink-0" aria-hidden="true" />
+          <AlertTriangle className="size-5 text-warning shrink-0" aria-hidden="true" />
           <p className="font-heading text-sm font-semibold text-foreground">Save this month</p>
         </div>
         <div className="flex items-center gap-4 flex-wrap">

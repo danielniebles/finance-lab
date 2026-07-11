@@ -24,7 +24,7 @@ export default function ChatPage() {
             className="gap-1.5 text-muted-foreground"
             onClick={clearHistory}
           >
-            <Trash2 className="size-3.5" />
+            <Trash2 className="size-4" />
             Clear history
           </Button>
         )}

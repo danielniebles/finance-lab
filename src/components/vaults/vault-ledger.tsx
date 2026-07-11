@@ -78,7 +78,7 @@ function EntryRow({ entry }: { entry: VaultEntryRow }) {
         onClick={handleDelete}
         disabled={pending}
       >
-        <Trash2 className="size-3.5 text-muted-foreground" aria-hidden />
+        <Trash2 className="size-4 text-muted-foreground" aria-hidden />
       </Button>
     </div>
   );

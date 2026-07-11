@@ -46,10 +46,10 @@ export function FloatingChat() {
               render={<Link href="/chat" onClick={() => closeChat()} />}
               nativeButton={false}
             >
-              <Maximize2 className="size-3.5" />
+              <Maximize2 className="size-4" />
             </Button>
             <Button variant="ghost" size="icon" className="size-6" onClick={closeChat}>
-              <X className="size-3.5" />
+              <X className="size-4" />
             </Button>
           </div>
         </div>
@@ -69,7 +69,7 @@ export function FloatingChat() {
         className="fixed bottom-22 right-6 z-50 size-12 rounded-full shadow-lg md:bottom-6"
         onClick={() => (isOpen ? closeChat() : openChat())}
       >
-        {isOpen ? <X className="size-5" /> : <MessageCircle className="size-5" />}
+        {isOpen ? <X className="size-6" /> : <MessageCircle className="size-6" />}
       </Button>
     </>
   );

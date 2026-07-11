@@ -121,7 +121,7 @@ function MappingRow({
             onClick={onUnmap}
             disabled={isPending}
           >
-            <X className="size-3.5" />
+            <X className="size-4" />
           </Button>
         )}
       </div>

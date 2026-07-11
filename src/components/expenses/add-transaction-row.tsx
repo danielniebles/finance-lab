@@ -148,7 +148,7 @@ function CollapsedTrigger({ onExpand }: { onExpand: () => void }) {
       onClick={onExpand}
       className="h-auto w-full justify-start gap-1.5 rounded-xl border border-dashed border-border/60 px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
     >
-      <Plus className="size-3.5" />
+      <Plus className="size-4" />
       Add transaction
     </Button>
   );
@@ -228,7 +228,7 @@ function ExpandedCreateForm({
           disabled={submitDisabled}
           aria-label="Add transaction"
         >
-          <Check className="size-3.5" />
+          <Check className="size-4" />
         </Button>
         <Button
           type="button"
@@ -238,7 +238,7 @@ function ExpandedCreateForm({
           aria-label="Cancel"
           onClick={onCancel}
         >
-          <X className="size-3.5" />
+          <X className="size-4" />
         </Button>
       </div>
     </form>

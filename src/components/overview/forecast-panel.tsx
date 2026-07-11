@@ -18,7 +18,7 @@ export async function ForecastPanel({ month, year }: ForecastPanelProps) {
       <Card className="border-border/60">
         <CardContent className="px-5 py-4">
           <div className="flex items-center gap-3 text-muted-foreground">
-            <Clock className="size-4 shrink-0" />
+            <Clock className="size-5 shrink-0" />
             <p className="text-sm">
               Need a few more months of history to forecast
             </p>
@@ -82,9 +82,9 @@ export async function ForecastPanel({ month, year }: ForecastPanelProps) {
             {vsTargetStr && (
               <div className="flex items-center gap-1 mb-0.5">
                 {vsTargetPositive ? (
-                  <TrendingUp className="size-3.5 text-success" />
+                  <TrendingUp className="size-4 text-success" />
                 ) : (
-                  <TrendingDown className="size-3.5 text-destructive" />
+                  <TrendingDown className="size-4 text-destructive" />
                 )}
                 <span
                   className={cn(

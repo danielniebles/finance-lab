@@ -305,7 +305,7 @@ export function ActionCard({ proposal }: Props) {
       ) : isApproved ? (
         <div className="space-y-1 pt-1">
           <div className="flex items-center gap-1.5 text-success text-xs font-medium">
-            <CheckCircle2 className="size-3.5" aria-hidden="true" />
+            <CheckCircle2 className="size-4" aria-hidden="true" />
             Approved
           </div>
           {proposal.resolvedMessage && proposal.resolvedMessage !== DEFAULT_APPROVE_MESSAGE && (
@@ -315,7 +315,7 @@ export function ActionCard({ proposal }: Props) {
       ) : (
         // dismissed
         <div className="flex items-center gap-1.5 text-muted-foreground text-xs pt-1">
-          <XCircle className="size-3.5" aria-hidden="true" />
+          <XCircle className="size-4" aria-hidden="true" />
           Dismissed
         </div>
       )}

@@ -101,7 +101,7 @@ export function PeriodSelector({
         disabled={!hasPrev}
         onClick={() => availableMonths && prevEntry ? navigate(prevEntry) : navigateDelta(-1)}
       >
-        <ChevronLeft className="size-4" />
+        <ChevronLeft className="size-5" />
       </Button>
 
       <div className="text-center min-w-36">
@@ -126,7 +126,7 @@ export function PeriodSelector({
         disabled={!hasNext}
         onClick={() => availableMonths && nextEntry ? navigate(nextEntry) : navigateDelta(1)}
       >
-        <ChevronRight className="size-4" />
+        <ChevronRight className="size-5" />
       </Button>
 
       {!isCurrentMonth && (

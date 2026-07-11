@@ -54,7 +54,7 @@ export function ChatInput({
             disabled={disabled}
             aria-label="Undo last action"
           >
-            <Undo2 className="size-3" aria-hidden="true" />
+            <Undo2 className="size-3.5" aria-hidden="true" />
             Undo last
           </Button>
         </div>
@@ -77,7 +77,7 @@ export function ChatInput({
           onClick={handleSend}
           disabled={disabled || !value.trim()}
         >
-          <SendHorizonal className="size-4" />
+          <SendHorizonal className="size-5" />
         </Button>
       </div>
     </div>

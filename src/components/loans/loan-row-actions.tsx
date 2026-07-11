@@ -28,7 +28,7 @@ export function LoanRowActions({
     <>
       <div className="flex items-center gap-0.5 justify-end">
         <Button variant="ghost" size="icon" className="size-6" onClick={() => setEditOpen(true)}>
-          <Pencil className="size-3" />
+          <Pencil className="size-3.5" />
         </Button>
         <Button
           variant="ghost"
@@ -37,7 +37,7 @@ export function LoanRowActions({
           onClick={handleDelete}
           disabled={deletePending}
         >
-          <Trash2 className="size-3" />
+          <Trash2 className="size-3.5" />
         </Button>
       </div>
       <LoanForm

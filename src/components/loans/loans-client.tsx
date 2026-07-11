@@ -56,15 +56,15 @@ export function LoansClient({ accounts, debtors, mode, debtorId }: Props) {
       <>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen("transfer")}>
-            <ArrowRightLeft className="size-3.5" />
+            <ArrowRightLeft className="size-4" />
             Transfer
           </Button>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen("payment")}>
-            <HandCoins className="size-3.5" />
+            <HandCoins className="size-4" />
             Record payment
           </Button>
           <Button size="sm" className="gap-1.5" onClick={() => setOpen("loan")}>
-            <Plus className="size-3.5" />
+            <Plus className="size-4" />
             New loan
           </Button>
         </div>
@@ -77,7 +77,7 @@ export function LoansClient({ accounts, debtors, mode, debtorId }: Props) {
     return (
       <>
         <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen("account")}>
-          <Plus className="size-3.5" />
+          <Plus className="size-4" />
           Add account
         </Button>
         {forms}
@@ -89,7 +89,7 @@ export function LoansClient({ accounts, debtors, mode, debtorId }: Props) {
     return (
       <>
         <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen("debtor")}>
-          <Plus className="size-3.5" />
+          <Plus className="size-4" />
           Add debtor
         </Button>
         {forms}
@@ -101,7 +101,7 @@ export function LoansClient({ accounts, debtors, mode, debtorId }: Props) {
     return (
       <>
         <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => setOpen("loan")}>
-          <Plus className="size-3" />
+          <Plus className="size-3.5" />
           Loan
         </Button>
         {forms}
@@ -113,7 +113,7 @@ export function LoansClient({ accounts, debtors, mode, debtorId }: Props) {
     return (
       <>
         <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setOpen("payment")}>
-          <HandCoins className="size-3.5" />
+          <HandCoins className="size-4" />
           Pay
         </Button>
         {forms}
