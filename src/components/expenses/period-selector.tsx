@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MONTH_NAMES } from "@/lib/format";
+import { buildExpensesUrl, type ExpensesSearchParams } from "@/lib/build-expenses-url";
 
 function currentFinancialMonth(startDay: number): { month: number; year: number } {
   const today = new Date();
@@ -32,11 +33,13 @@ export function PeriodSelector({
   selectedYear,
   startDay = 1,
   availableMonths,
+  currentParams,
 }: {
   selectedMonth: number;
   selectedYear: number;
   startDay?: number;
   availableMonths?: MonthEntry[];
+  currentParams: ExpensesSearchParams;
 }) {
   const router = useRouter();
   const current = currentFinancialMonth(startDay);
@@ -66,8 +69,12 @@ export function PeriodSelector({
     }
   }
 
+  // Preserve every other param (view, walletId, groupBy, category, type,
+  // search) — changing month must never reset the current view/filters.
   function navigate(entry: MonthEntry) {
-    router.push(`/expenses?month=${entry.month}&year=${entry.year}`);
+    router.push(
+      buildExpensesUrl(currentParams, { month: String(entry.month), year: String(entry.year) }),
+    );
   }
 
   function navigateDelta(delta: number) {
@@ -75,7 +82,7 @@ export function PeriodSelector({
     let y = selectedYear;
     if (m > 12) { m = 1; y++; }
     if (m < 1)  { m = 12; y--; }
-    router.push(`/expenses?month=${m}&year=${y}`);
+    router.push(buildExpensesUrl(currentParams, { month: String(m), year: String(y) }));
   }
 
   const hasPrev = availableMonths ? !!prevEntry : true;
@@ -128,7 +135,9 @@ export function PeriodSelector({
           size="sm"
           className="text-muted-foreground"
           onClick={() =>
-            router.push(`/expenses?month=${current.month}&year=${current.year}`)
+            router.push(
+              buildExpensesUrl(currentParams, { month: String(current.month), year: String(current.year) }),
+            )
           }
         >
           Today

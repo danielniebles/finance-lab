@@ -137,11 +137,6 @@
       "count": 1
     }
   },
-  "src/lib/actions/categories.ts": {
-    "sonarjs/no-duplicate-string": {
-      "count": 1
-    }
-  },
   "src/lib/actions/installments.ts": {
     "sonarjs/no-duplicate-string": {
       "count": 1

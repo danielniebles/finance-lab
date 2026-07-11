@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { buildExpensesUrl, type ExpensesSearchParams } from "@/lib/build-expenses-url";
 
 type View = "analysis" | "ledger";
 
@@ -9,17 +10,22 @@ type Props = {
   view: View;
   month: number;
   year: number;
+  currentParams: ExpensesSearchParams;
 };
 
 // Small tab pair on the existing expenses/page.tsx (?view=analysis|ledger), not
 // a new route or a shadcn Tabs primitive — see the design spec's "Analysis/Ledger
 // tab styling" open question for why promoting to a real Tabs component is
 // deliberately out of scope here.
-export function ViewTabs({ view, month, year }: Props) {
+export function ViewTabs({ view, month, year, currentParams }: Props) {
   const router = useRouter();
 
+  // Preserve every other param (walletId, groupBy, category, type, search) —
+  // switching tabs should never drop the current filter.
   function navigate(next: View) {
-    router.push(`/expenses?month=${month}&year=${year}&view=${next}`);
+    router.push(
+      buildExpensesUrl(currentParams, { month: String(month), year: String(year), view: next }),
+    );
   }
 
   return (

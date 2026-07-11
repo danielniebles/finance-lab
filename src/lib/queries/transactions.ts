@@ -31,6 +31,12 @@ export type LedgerItem = {
   walletName: string | null;
   note: string | null;
   categoryName: string | null;
+  // Effective category's style overrides (Category icon & color picker).
+  // Null means "auto" — Frontend derives the display icon/color from
+  // categoryName via getCategoryStyle(); non-null is an explicit override
+  // from the same AppCategory row categoryName was resolved from.
+  categoryIcon: string | null;
+  categoryColor: string | null;
   source: TransactionSource;
 };
 
@@ -55,6 +61,8 @@ const UNCATEGORIZED_LABEL = "Sin categoría";
 export const UNASSIGNED_WALLET_KEY = "unassigned";
 export const UNASSIGNED_WALLET_LABEL = "Sin asignar";
 
+type RawAppCategory = { name: string; icon: string | null; color: string | null };
+
 type RawTransaction = {
   id: string;
   date: Date;
@@ -64,19 +72,22 @@ type RawTransaction = {
   walletRef: { name: string } | null;
   note: string | null;
   source: TransactionSource;
-  appCategory: { name: string } | null;
-  moneyLoverCategory: { mapping: { appCategory: { name: string } } | null } | null;
+  appCategory: RawAppCategory | null;
+  moneyLoverCategory: { mapping: { appCategory: RawAppCategory } | null } | null;
 };
 
 // Category resolution rule (ADR-030), applied everywhere a transaction's
 // effective category is read: direct appCategoryId (MANUAL) wins, else fall
 // back to the MoneyLoverCategory's mapping (MONEYLOVER). Mirrors
 // getMonthlyAnalysis's buildSpendByCategory in src/lib/queries/expenses.ts.
-function resolveCategoryName(t: RawTransaction): string | null {
-  return t.appCategory?.name ?? t.moneyLoverCategory?.mapping?.appCategory?.name ?? null;
+// name/icon/color are always read off this SAME resolved row — never mixed
+// across the direct and mapped sources.
+function resolveAppCategory(t: RawTransaction): RawAppCategory | null {
+  return t.appCategory ?? t.moneyLoverCategory?.mapping?.appCategory ?? null;
 }
 
 function toLedgerItem(t: RawTransaction): LedgerItem {
+  const category = resolveAppCategory(t);
   return {
     id: t.id,
     date: t.date,
@@ -85,7 +96,9 @@ function toLedgerItem(t: RawTransaction): LedgerItem {
     walletId: t.walletId,
     walletName: t.walletRef?.name ?? null,
     note: t.note,
-    categoryName: resolveCategoryName(t),
+    categoryName: category?.name ?? null,
+    categoryIcon: category?.icon ?? null,
+    categoryColor: category?.color ?? null,
     source: t.source,
   };
 }

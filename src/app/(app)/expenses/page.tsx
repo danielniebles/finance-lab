@@ -50,7 +50,7 @@ export default async function ExpensesPage({ searchParams }: Props) {
 
   const selectedMonth = params.month ? parseInt(params.month) : fallback.month;
   const selectedYear = params.year ? parseInt(params.year) : fallback.year;
-  const view = params.view === "ledger" ? "ledger" : "analysis";
+  const view = params.view === "analysis" ? "analysis" : "ledger";
 
   const importedMonths = await getAvailableMonths();
 
@@ -64,12 +64,13 @@ export default async function ExpensesPage({ searchParams }: Props) {
             selectedYear={selectedYear}
             startDay={startDay}
             availableMonths={importedMonths}
+            currentParams={params}
           />
           <ImportForm />
         </div>
       </div>
 
-      <ViewTabs view={view} month={selectedMonth} year={selectedYear} />
+      <ViewTabs view={view} month={selectedMonth} year={selectedYear} currentParams={params} />
 
       {view === "ledger" ? (
         <Suspense
@@ -96,7 +97,11 @@ export default async function ExpensesPage({ searchParams }: Props) {
             <div className="text-muted-foreground text-sm">Loading analysis…</div>
           }
         >
-          <AnalysisDashboard month={selectedMonth} year={selectedYear} />
+          <AnalysisDashboard
+            month={selectedMonth}
+            year={selectedYear}
+            walletId={params.walletId || undefined}
+          />
         </Suspense>
       )}
     </div>

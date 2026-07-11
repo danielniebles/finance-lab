@@ -1,13 +1,13 @@
 import { getMonthlyAnalysis } from "@/lib/queries/expenses";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Minus, AlertTriangle, Clock } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, AlertTriangle } from "lucide-react";
 import { CategoryBreakdownTable, SeverityBadge } from "@/components/expenses/category-breakdown-table";
 
-type Props = { month: number; year: number };
+type Props = { month: number; year: number; walletId?: string };
 
-export async function AnalysisDashboard({ month, year }: Props) {
-  const data = await getMonthlyAnalysis(month, year);
+export async function AnalysisDashboard({ month, year, walletId }: Props) {
+  const data = await getMonthlyAnalysis(month, year, walletId);
 
   if (data.totalIncome === 0 && data.totalExpenses === 0) {
     return (
@@ -23,14 +23,6 @@ export async function AnalysisDashboard({ month, year }: Props) {
 
   return (
     <div className="space-y-5">
-      {/* In-progress notice */}
-      {data.isInProgress && (
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/8 px-4 py-3 flex items-center gap-2.5 text-sm text-amber-600 dark:text-amber-400">
-          <Clock className="size-4 shrink-0" aria-hidden="true" />
-          <span>This month&apos;s data is partial — the import is still in progress. Figures will update as more transactions are added.</span>
-        </div>
-      )}
-
       {/* Unmapped warning */}
       {data.uncategorizedCount > 0 && (
         <div className="rounded-lg border border-warning/20 bg-warning/8 px-4 py-3 text-sm text-warning">

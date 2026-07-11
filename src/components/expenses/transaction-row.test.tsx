@@ -46,6 +46,8 @@ function makeItem(overrides: Partial<LedgerItem> = {}): LedgerItem {
     walletName: null,
     note: "Groceries run",
     categoryName: "Groceries",
+    categoryIcon: null,
+    categoryColor: null,
     source: "MONEYLOVER",
     ...overrides,
   };

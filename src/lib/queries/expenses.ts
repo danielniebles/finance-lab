@@ -250,13 +250,13 @@ function computeTopOffenders(categoryBreakdown: BreakdownRow[]) {
     .slice(0, 3);
 }
 
-export async function getMonthlyAnalysis(month: number, year: number) {
+export async function getMonthlyAnalysis(month: number, year: number, walletId?: string) {
   const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
   const { start, end } = getFinancialPeriodBounds(month, year, startDay);
 
   const [transactions, appCategories, batch] = await Promise.all([
     db.transaction.findMany({
-      where: { date: { gte: start, lt: end } },
+      where: { date: { gte: start, lt: end }, ...(walletId ? { walletId } : {}) },
       include: {
         appCategory: true,
         moneyLoverCategory: {

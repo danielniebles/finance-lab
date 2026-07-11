@@ -41,6 +41,12 @@ model MoneyLoverCategory {
 model AppCategory {
   id                String             @id @default(cuid())
   name              String             @unique
+  // Independent, nullable style overrides (Category icon & color picker).
+  // Null = auto-derive from name via getCategoryStyle(); non-null = explicit
+  // override. icon is a key into ICON_REGISTRY, color is a PALETTE key —
+  // both validated against closed key lists at the action layer, not here.
+  icon              String?
+  color             String?
   mappings          CategoryMapping[]
   budgetItems       BudgetItem[]
   transactions      Transaction[]

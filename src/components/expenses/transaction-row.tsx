@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { formatCOP, dateInputValue } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { getCategoryStyle } from "@/lib/category-style";
+import { resolveEffectiveCategoryStyle } from "@/lib/category-style";
 import { updateTransaction, deleteTransaction } from "@/lib/actions/transactions";
 import type { LedgerItem, LedgerGroupBy } from "@/lib/queries/transactions";
 import type { CategoryOption } from "@/lib/queries/expenses";
@@ -162,7 +162,11 @@ function TransactionDefaultRow({
   groupBy: LedgerGroupBy;
   onEdit: () => void;
 }) {
-  const { icon: CategoryIcon, badge, iconWrap } = getCategoryStyle(item.categoryName);
+  const { icon: CategoryIcon, badge, iconWrap } = resolveEffectiveCategoryStyle(
+    item.categoryName,
+    item.categoryIcon,
+    item.categoryColor
+  );
 
   return (
     <button

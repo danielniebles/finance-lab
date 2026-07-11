@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import {
   createAppCategory,
   updateAppCategory,
+  updateAppCategoryStyle,
   deleteAppCategory,
   createBudgetItem,
   updateBudgetItem,
@@ -19,9 +20,29 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Pencil, Trash2, Plus, Check, X, ChevronDown } from "lucide-react";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import {
+  ICON_REGISTRY,
+  CATEGORY_ICON_KEYS,
+  CATEGORY_COLOR_KEYS,
+  CATEGORY_SOLID_SWATCH,
+  resolveEffectiveCategoryStyle,
+  getAutoCategoryKeys,
+  categoryPaletteClasses,
+  categoryIconDisplayName,
+  categoryColorDisplayName,
+  type CategoryPalette,
+  type CategoryColorKey,
+} from "@/lib/category-style";
 
 type BudgetItemData = {
   id: string;
@@ -33,6 +54,12 @@ type BudgetItemData = {
 type Category = {
   id: string;
   name: string;
+  // Style overrides (Category icon & color picker). Null = auto-derive from
+  // name via getCategoryStyle(); non-null = explicit override. Populated
+  // automatically by settings/categories/page.tsx's findMany — Prisma's
+  // `include` only adds relations, it doesn't restrict scalar selection.
+  icon: string | null;
+  color: string | null;
   budgetItems: BudgetItemData[];
   _count: { mappings: number };
 };
@@ -250,6 +277,243 @@ function AddBudgetItemRow({
 // Grid columns: chevron | name+count | type | mappings | amount | actions
 const ROW_GRID = "grid grid-cols-[1.25rem_1fr_5.5rem_7rem_8rem_3.75rem] items-center gap-3 px-4 py-3";
 
+function StateChip({ custom }: { custom: boolean }) {
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2 py-0.5 text-xs font-medium",
+        custom ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+      )}
+    >
+      {custom ? "Custom" : "Auto"}
+    </span>
+  );
+}
+
+// Row-level launcher for CategoryStyleDialog. Renders the category's
+// *effective* style (custom override if set, else the name-derived
+// fallback) — identical iconWrap treatment used on ledger rows, so this
+// swatch always previews exactly what transactions in that category will
+// look like.
+function CategorySwatchButton({ cat, onClick }: { cat: Category; onClick: () => void }) {
+  const { icon: CategoryIcon, iconWrap } = resolveEffectiveCategoryStyle(cat.name, cat.icon, cat.color);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Customize icon and color for ${cat.name}`}
+      className={cn(
+        "flex size-8 shrink-0 items-center justify-center rounded-full transition-colors",
+        "hover:ring-2 hover:ring-ring/40",
+        "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        iconWrap
+      )}
+    >
+      <CategoryIcon className="size-4" />
+    </button>
+  );
+}
+
+function CategoryStyleDialog({
+  cat,
+  open,
+  pending,
+  draftIcon,
+  draftColor,
+  onDraftIconChange,
+  onDraftColorChange,
+  onSave,
+  onCancel,
+}: {
+  cat: Category;
+  open: boolean;
+  pending: boolean;
+  draftIcon: string | null;
+  draftColor: CategoryColorKey | null;
+  onDraftIconChange: (icon: string | null) => void;
+  onDraftColorChange: (color: CategoryColorKey | null) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const auto = getAutoCategoryKeys(cat.name);
+  const effectiveIconKey = draftIcon ?? auto.iconKey;
+  const effectiveColorKey = draftColor ?? auto.colorKey;
+  const preview = resolveEffectiveCategoryStyle(cat.name, draftIcon, draftColor);
+  const swatchIconWrap = effectiveColorKey
+    ? categoryPaletteClasses(effectiveColorKey).iconWrap
+    : "bg-muted text-muted-foreground";
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Customize icon &amp; color</DialogTitle>
+          <p className="text-sm text-muted-foreground">{cat.name}</p>
+        </DialogHeader>
+
+        <div className="space-y-6">
+          <CategoryStylePreview preview={preview} name={cat.name} />
+
+          <div className="space-y-2">
+            <SwatchSectionHeader
+              label="Icon"
+              custom={draftIcon !== null}
+              onReset={() => onDraftIconChange(null)}
+            />
+            <IconSwatchGrid
+              effectiveKey={effectiveIconKey}
+              isCustom={draftIcon !== null}
+              swatchIconWrap={swatchIconWrap}
+              onSelect={onDraftIconChange}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <SwatchSectionHeader
+              label="Color"
+              custom={draftColor !== null}
+              onReset={() => onDraftColorChange(null)}
+            />
+            <ColorSwatchGrid
+              effectiveKey={effectiveColorKey}
+              isCustom={draftColor !== null}
+              onSelect={onDraftColorChange}
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="button" disabled={pending} onClick={onSave}>
+            Save changes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CategoryStylePreview({ preview, name }: { preview: CategoryPalette; name: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-full", preview.iconWrap)}>
+        <preview.icon className="size-4" />
+      </span>
+      <span
+        className={cn(
+          "inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+          preview.badge
+        )}
+      >
+        {name}
+      </span>
+    </div>
+  );
+}
+
+function SwatchSectionHeader({
+  label,
+  custom,
+  onReset,
+}: {
+  label: string;
+  custom: boolean;
+  onReset: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-medium">{label}</span>
+      <StateChip custom={custom} />
+      {custom && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="ml-auto h-6 text-xs text-muted-foreground"
+          onClick={onReset}
+        >
+          Reset to auto
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function IconSwatchGrid({
+  effectiveKey,
+  isCustom,
+  swatchIconWrap,
+  onSelect,
+}: {
+  effectiveKey: string | null;
+  isCustom: boolean;
+  swatchIconWrap: string;
+  onSelect: (key: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+      {CATEGORY_ICON_KEYS.map((key, idx) => {
+        const Icon = ICON_REGISTRY[key];
+        const isSelected = key === effectiveKey;
+        return (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={isSelected}
+            aria-label={`${categoryIconDisplayName(key)} icon`}
+            autoFocus={idx === 0}
+            onClick={() => onSelect(key)}
+            className={cn(
+              "flex size-9 items-center justify-center rounded-full transition-colors",
+              swatchIconWrap,
+              isSelected && (isCustom ? "ring-2 ring-primary" : "ring-1 ring-border/60")
+            )}
+          >
+            <Icon className="size-4" />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ColorSwatchGrid({
+  effectiveKey,
+  isCustom,
+  onSelect,
+}: {
+  effectiveKey: CategoryColorKey | null;
+  isCustom: boolean;
+  onSelect: (key: CategoryColorKey) => void;
+}) {
+  return (
+    <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+      {CATEGORY_COLOR_KEYS.map((key) => {
+        const isSelected = key === effectiveKey;
+        return (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={isSelected}
+            aria-label={`${categoryColorDisplayName(key)} color`}
+            onClick={() => onSelect(key)}
+            className={cn(
+              "size-8 rounded-full transition-transform",
+              CATEGORY_SOLID_SWATCH[key],
+              isSelected &&
+                (isCustom
+                  ? "ring-2 ring-offset-2 ring-offset-card ring-foreground"
+                  : "ring-1 ring-border/60")
+            )}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function CategoryRow({ cat }: { cat: Category }) {
   const [expanded, setExpanded] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -257,8 +521,13 @@ function CategoryRow({ cat }: { cat: Category }) {
   const [addingItem, setAddingItem] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const total = cat.budgetItems.reduce((s, i) => s + i.amount, 0);
-  const effectiveType = getEffectiveType(cat.budgetItems);
+  const [styleDialogOpen, setStyleDialogOpen] = useState(false);
+  const [draftIcon, setDraftIcon] = useState<string | null>(cat.icon);
+  // cat.color is validated server-side against the closed CategoryColorKey
+  // set by updateAppCategoryStyle — cast at this single DB-read boundary
+  // rather than widening every downstream consumer back to `string`.
+  const [draftColor, setDraftColor] = useState<CategoryColorKey | null>(cat.color as CategoryColorKey | null);
+  const [stylePending, startStyleTransition] = useTransition();
 
   function handleNameSave(e: React.FormEvent) {
     e.preventDefault();
@@ -272,6 +541,27 @@ function CategoryRow({ cat }: { cat: Category }) {
     if (!confirm(`Delete "${cat.name}"? This will also remove its mappings and budget items.`))
       return;
     startTransition(() => deleteAppCategory(cat.id));
+  }
+
+  function openStyleDialog() {
+    setDraftIcon(cat.icon);
+    setDraftColor(cat.color as CategoryColorKey | null);
+    setStyleDialogOpen(true);
+  }
+
+  function closeStyleDialog() {
+    setStyleDialogOpen(false);
+  }
+
+  function handleStyleSave() {
+    startStyleTransition(async () => {
+      try {
+        await updateAppCategoryStyle(cat.id, { icon: draftIcon, color: draftColor });
+        setStyleDialogOpen(false);
+      } catch {
+        alert("Could not save icon/color changes. Please try again.");
+      }
+    });
   }
 
   return (
@@ -299,78 +589,144 @@ function CategoryRow({ cat }: { cat: Category }) {
           </Button>
         </form>
       ) : (
-        <div className={ROW_GRID}>
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ChevronDown className={`size-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
-          </button>
-
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="font-medium truncate">{cat.name}</span>
-            <span className="text-xs text-muted-foreground shrink-0">
-              {cat.budgetItems.length} item{cat.budgetItems.length !== 1 ? "s" : ""}
-            </span>
-          </div>
-
-          <TypeBadge type={effectiveType} />
-
-          {cat._count.mappings === 0 ? (
-            <span className="inline-flex items-center rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
-              No mappings
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground w-fit">
-              {cat._count.mappings} mapping{cat._count.mappings !== 1 ? "s" : ""}
-            </span>
-          )}
-
-          <span className="font-mono text-sm text-right">
-            {formatCOP(total)}
-          </span>
-
-          <div className="flex gap-1 justify-end opacity-0 group-hover/catrow:opacity-100 transition-opacity">
-            <Button variant="ghost" size="icon" className="size-7" onClick={() => setEditingName(true)}>
-              <Pencil className="size-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 text-destructive hover:text-destructive"
-              onClick={handleDelete}
-              disabled={pending}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
-          </div>
-        </div>
+        <CategoryRowGrid
+          cat={cat}
+          pending={pending}
+          expanded={expanded}
+          onToggleExpand={() => setExpanded((v) => !v)}
+          onOpenStyleDialog={openStyleDialog}
+          onEditName={() => setEditingName(true)}
+          onDelete={handleDelete}
+        />
       )}
 
-      {/* Expanded: budget items */}
       {expanded && (
-        <div className="border-t border-border/50 bg-muted/10">
-          {cat.budgetItems.length === 0 && !addingItem && (
-            <p className="py-2 pl-8 text-xs text-muted-foreground">No budget items yet.</p>
-          )}
-          {cat.budgetItems.map((item) => (
-            <BudgetItemRow key={item.id} item={item} />
-          ))}
-          {addingItem ? (
-            <AddBudgetItemRow categoryId={cat.id} onDone={() => setAddingItem(false)} />
-          ) : (
-            <div className="py-2 pl-8 pr-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 gap-1 text-xs text-muted-foreground"
-                onClick={() => setAddingItem(true)}
-              >
-                <Plus className="size-3" />
-                Add item
-              </Button>
-            </div>
-          )}
+        <CategoryBudgetPanel
+          cat={cat}
+          addingItem={addingItem}
+          onAddItem={() => setAddingItem(true)}
+          onDoneAddingItem={() => setAddingItem(false)}
+        />
+      )}
+
+      <CategoryStyleDialog
+        cat={cat}
+        open={styleDialogOpen}
+        pending={stylePending}
+        draftIcon={draftIcon}
+        draftColor={draftColor}
+        onDraftIconChange={setDraftIcon}
+        onDraftColorChange={setDraftColor}
+        onSave={handleStyleSave}
+        onCancel={closeStyleDialog}
+      />
+    </div>
+  );
+}
+
+function CategoryRowGrid({
+  cat,
+  pending,
+  expanded,
+  onToggleExpand,
+  onOpenStyleDialog,
+  onEditName,
+  onDelete,
+}: {
+  cat: Category;
+  pending: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onOpenStyleDialog: () => void;
+  onEditName: () => void;
+  onDelete: () => void;
+}) {
+  const total = cat.budgetItems.reduce((s, i) => s + i.amount, 0);
+  const effectiveType = getEffectiveType(cat.budgetItems);
+
+  return (
+    <div className={ROW_GRID}>
+      <button
+        onClick={onToggleExpand}
+        className="text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronDown className={`size-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+      </button>
+
+      <div className="flex items-center gap-2 min-w-0">
+        <CategorySwatchButton cat={cat} onClick={onOpenStyleDialog} />
+        <span className="font-medium truncate">{cat.name}</span>
+        <span className="text-xs text-muted-foreground shrink-0">
+          {cat.budgetItems.length} item{cat.budgetItems.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      <TypeBadge type={effectiveType} />
+
+      {cat._count.mappings === 0 ? (
+        <span className="inline-flex items-center rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+          No mappings
+        </span>
+      ) : (
+        <span className="text-xs text-muted-foreground w-fit">
+          {cat._count.mappings} mapping{cat._count.mappings !== 1 ? "s" : ""}
+        </span>
+      )}
+
+      <span className="font-mono text-sm text-right">
+        {formatCOP(total)}
+      </span>
+
+      <div className="flex gap-1 justify-end opacity-0 group-hover/catrow:opacity-100 transition-opacity">
+        <Button variant="ghost" size="icon" className="size-7" onClick={onEditName}>
+          <Pencil className="size-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7 text-destructive hover:text-destructive"
+          onClick={onDelete}
+          disabled={pending}
+        >
+          <Trash2 className="size-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CategoryBudgetPanel({
+  cat,
+  addingItem,
+  onAddItem,
+  onDoneAddingItem,
+}: {
+  cat: Category;
+  addingItem: boolean;
+  onAddItem: () => void;
+  onDoneAddingItem: () => void;
+}) {
+  return (
+    <div className="border-t border-border/50 bg-muted/10">
+      {cat.budgetItems.length === 0 && !addingItem && (
+        <p className="py-2 pl-8 text-xs text-muted-foreground">No budget items yet.</p>
+      )}
+      {cat.budgetItems.map((item) => (
+        <BudgetItemRow key={item.id} item={item} />
+      ))}
+      {addingItem ? (
+        <AddBudgetItemRow categoryId={cat.id} onDone={onDoneAddingItem} />
+      ) : (
+        <div className="py-2 pl-8 pr-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 text-xs text-muted-foreground"
+            onClick={onAddItem}
+          >
+            <Plus className="size-3" />
+            Add item
+          </Button>
         </div>
       )}
     </div>
