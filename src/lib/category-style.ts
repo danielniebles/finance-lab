@@ -72,10 +72,6 @@ const PALETTE = {
     badge: "border-indigo-500/25 bg-indigo-500/8 text-indigo-600 dark:text-indigo-400",
     iconWrap: "bg-indigo-500/12 text-indigo-600 dark:text-indigo-400",
   },
-  slate: {
-    badge: "border-slate-500/25 bg-slate-500/8 text-slate-600 dark:text-slate-400",
-    iconWrap: "bg-slate-500/12 text-slate-600 dark:text-slate-400",
-  },
 } as const;
 
 const FALLBACK_ORDER: (keyof typeof PALETTE)[] = [
@@ -123,7 +119,11 @@ export function getCategoryStyle(categoryName: string | null): CategoryPalette {
   }
 
   if (!categoryName) {
-    return { icon: Tag, ...PALETTE.slate };
+    return {
+      icon: Tag,
+      badge: "border-border/60 bg-muted text-muted-foreground",
+      iconWrap: "bg-muted text-muted-foreground",
+    };
   }
 
   // Unknown category name: deterministic fallback color so the same name

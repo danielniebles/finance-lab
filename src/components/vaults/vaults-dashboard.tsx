@@ -39,7 +39,7 @@ function StatInline({
       <span className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
-      <span className={cn("font-mono text-xl font-semibold", valueColor)}>
+      <span className={cn("font-mono text-base sm:text-xl font-semibold", valueColor)}>
         {value}
       </span>
       {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
@@ -147,7 +147,7 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
       </div>
 
       {/* Due banner */}
-      <VaultDueBanner obligations={obligations} month={month} year={year} />
+      <VaultDueBanner obligations={obligations} />
 
       {/* Summary band */}
       {vaults.length > 0 && (
@@ -158,22 +158,22 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
           <h2 id="vaults-summary-heading" className="sr-only">
             Vault summary
           </h2>
-          <div className="grid grid-cols-3 divide-x divide-border bg-muted/30">
-            <div className="px-6 py-4">
+          <div className="grid grid-cols-1 divide-y divide-border bg-muted/30 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <div className="px-4 py-3 sm:px-6 sm:py-4">
               <StatInline
                 label="Total required"
                 value={formatCOP(obligations.totalRequired)}
                 sub="this month"
               />
             </div>
-            <div className="px-6 py-4">
+            <div className="px-4 py-3 sm:px-6 sm:py-4">
               <StatInline
                 label="Still needed"
                 value={formatCOP(obligations.totalStillNeeded)}
                 highlight={obligations.totalStillNeeded > 0 ? "bad" : "good"}
               />
             </div>
-            <div className="px-6 py-4">
+            <div className="px-4 py-3 sm:px-6 sm:py-4">
               <StatInline
                 label="Mandatory gap"
                 value={formatCOP(obligations.mandatoryStillNeeded)}

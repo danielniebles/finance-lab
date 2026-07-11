@@ -165,7 +165,7 @@ export function RecurringList({ recurringData, recurringVaults }: Props) {
                   <th className="px-4 py-2.5 text-left font-heading text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Cadence
                   </th>
-                  <th className="px-4 py-2.5 text-left font-heading text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-2.5 text-left font-heading text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
                     Next Due
                   </th>
                   <th className="px-4 py-2.5 text-right font-heading text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -205,8 +205,8 @@ export function RecurringList({ recurringData, recurringVaults }: Props) {
                       </td>
 
                       {/* Next Due */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5 flex-wrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
                           <span className="text-foreground">
                             {new Date(item.nextDueDate).toLocaleDateString("es-CO", {
                               year: "numeric",

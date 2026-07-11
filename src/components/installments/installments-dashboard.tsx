@@ -37,7 +37,7 @@ function StatInline({
       <span className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
-      <span className={`font-mono text-xl font-semibold ${valueColor}`}>{value}</span>
+      <span className={`font-mono text-base sm:text-xl font-semibold ${valueColor}`}>{value}</span>
       {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
     </div>
   );
@@ -173,35 +173,35 @@ export function InstallmentsDashboard({
 
 
         {/* Bottom band — KPI stats */}
-        <div className="grid grid-cols-5 divide-x divide-border bg-muted/30">
-          <div className="px-6 py-4">
+        <div className="grid grid-cols-2 divide-x divide-y divide-border bg-muted/30 sm:grid-cols-5 sm:divide-y-0">
+          <div className="px-4 py-3 sm:px-6 sm:py-4">
             <StatInline
               label="Total obligation"
               value={formatCOP(activeSummary.totalObligation)}
               sub="due this month"
             />
           </div>
-          <div className="px-6 py-4">
+          <div className="px-4 py-3 sm:px-6 sm:py-4">
             <StatInline
               label="Paid so far"
               value={formatCOP(activeSummary.totalPaid)}
               highlight={activeSummary.totalPaid > 0 ? "good" : "neutral"}
             />
           </div>
-          <div className="px-6 py-4">
+          <div className="px-4 py-3 sm:px-6 sm:py-4">
             <StatInline
               label="Still due"
               value={formatCOP(activeSummary.totalDue)}
               highlight={activeSummary.totalDue > 0 ? "bad" : "good"}
             />
           </div>
-          <div className="px-6 py-4">
+          <div className="px-4 py-3 sm:px-6 sm:py-4">
             <StatInline
               label="Active installments"
               value={String(activeSummary.activeCount)}
             />
           </div>
-          <div className="px-6 py-4">
+          <div className="px-4 py-3 sm:px-6 sm:py-4 col-span-2 sm:col-span-1">
             <StatInline
               label="Total debt"
               value={formatCOP(activeSummary.totalRemainingDebt)}

@@ -1,10 +1,8 @@
 "use client";
 
-import { AlertTriangle, MessageCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AlertTriangle } from "lucide-react";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useChat } from "@/components/chat/chat-provider";
 import type { VaultObligations } from "@/lib/queries/vaults";
 import type { VaultStatus } from "@/lib/vault-utils";
 
@@ -43,15 +41,11 @@ function stillNeededColor(status: VaultStatus): string {
 
 type Props = {
   obligations: VaultObligations;
-  month: number;
-  year: number;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function VaultDueBanner({ obligations, month, year }: Props) {
-  const { openChat } = useChat();
-
+export function VaultDueBanner({ obligations }: Props) {
   if (obligations.totalStillNeeded === 0) return null;
 
   const urgentVaults = obligations.vaults.filter(
@@ -92,62 +86,44 @@ export function VaultDueBanner({ obligations, month, year }: Props) {
       {urgentVaults.length > 0 && (
         <div className="divide-y divide-border/50">
           {urgentVaults.map((v) => (
-            <div key={v.id} className="px-5 py-3 flex items-center gap-3 flex-wrap">
-              {/* Kind chip */}
-              <span
-                className={cn(
-                  "text-[10px] font-semibold uppercase tracking-wider rounded-full px-1.5 py-0.5 shrink-0",
-                  v.kind === "MANDATORY"
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-muted text-muted-foreground",
-                )}
-              >
-                {v.kind === "MANDATORY" ? "Mandatory" : "Leisure"}
-              </span>
+            <div key={v.id} className="px-5 py-3 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+              {/* Kind chip + name: own line on mobile, inline on sm+ via `contents` */}
+              <div className="flex items-center gap-2 min-w-0 sm:contents">
+                <span
+                  className={cn(
+                    "text-[10px] font-semibold uppercase tracking-wider rounded-full px-1.5 py-0.5 shrink-0",
+                    v.kind === "MANDATORY"
+                      ? "bg-destructive/10 text-destructive"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {v.kind === "MANDATORY" ? "Mandatory" : "Leisure"}
+                </span>
+                <span className="flex-1 text-sm text-foreground truncate min-w-0">
+                  {v.name}
+                </span>
+              </div>
 
-              {/* Name */}
-              <span className="flex-1 text-sm text-foreground truncate min-w-0">
-                {v.name}
-              </span>
-
-              {/* Status badge */}
-              <span
-                role="status"
-                className={cn(
-                  "text-[10px] font-semibold uppercase tracking-wider rounded-full px-1.5 py-0.5 shrink-0",
-                  statusBadgeClasses(v.status),
-                )}
-              >
-                {v.status}
-              </span>
-
-              {/* Still needed */}
-              <span
-                className={cn(
-                  "font-mono text-sm font-semibold tabular-nums shrink-0",
-                  stillNeededColor(v.status),
-                )}
-              >
-                {formatCOP(v.stillNeeded)}
-              </span>
-
-              {/* Ask agent button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs shrink-0 gap-1.5 h-7"
-                aria-label={`Ask agent about ${v.name}`}
-                onClick={() =>
-                  openChat({
-                    module: "vaults",
-                    entityId: v.id,
-                    focus: { month, year },
-                  })
-                }
-              >
-                <MessageCircle className="size-3.5" aria-hidden="true" />
-                Ask agent
-              </Button>
+              {/* Status + still needed: own line on mobile, inline on sm+ */}
+              <div className="flex items-center justify-between gap-2 sm:contents">
+                <span
+                  role="status"
+                  className={cn(
+                    "text-[10px] font-semibold uppercase tracking-wider rounded-full px-1.5 py-0.5 shrink-0",
+                    statusBadgeClasses(v.status),
+                  )}
+                >
+                  {v.status}
+                </span>
+                <span
+                  className={cn(
+                    "font-mono text-sm font-semibold tabular-nums shrink-0",
+                    stillNeededColor(v.status),
+                  )}
+                >
+                  {formatCOP(v.stillNeeded)}
+                </span>
+              </div>
             </div>
           ))}
         </div>

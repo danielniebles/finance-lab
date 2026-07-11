@@ -30,7 +30,7 @@ export function FloatingChat() {
       {/* Panel */}
       <div
         className={cn(
-          "fixed bottom-20 right-6 z-50 w-80 rounded-2xl border border-border bg-card shadow-2xl flex flex-col transition-all duration-200 origin-bottom-right",
+          "fixed bottom-36 right-6 z-50 w-80 rounded-2xl border border-border bg-card shadow-2xl flex flex-col transition-all duration-200 origin-bottom-right md:bottom-20",
           isOpen ? "opacity-100 scale-100 pointer-events-auto" : "opacity-0 scale-95 pointer-events-none"
         )}
         style={{ height: "420px" }}
@@ -66,7 +66,7 @@ export function FloatingChat() {
       {/* Toggle button */}
       <Button
         size="icon"
-        className="fixed bottom-6 right-6 z-50 size-12 rounded-full shadow-lg"
+        className="fixed bottom-22 right-6 z-50 size-12 rounded-full shadow-lg md:bottom-6"
         onClick={() => (isOpen ? closeChat() : openChat())}
       >
         {isOpen ? <X className="size-5" /> : <MessageCircle className="size-5" />}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BarChart3, CreditCard, HandCoins, PiggyBank, Settings, ChevronDown, Bot, TrendingUp, Sun, Moon, LayoutDashboard } from "lucide-react";
 import {
   Sidebar,
@@ -18,6 +18,7 @@ import {
   SidebarMenuSubButton,
   SidebarHeader,
   SidebarFooter,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   Collapsible,
@@ -43,9 +44,17 @@ const settingsItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { isMobile, setOpenMobile } = useSidebar();
   const [theme, setThemeState] = useState<"dark" | "light">(() =>
     typeof document !== "undefined" && document.documentElement.classList.contains("light") ? "light" : "dark"
   );
+
+  // Close the mobile sheet whenever the route changes — nothing else does
+  // this today, so a nav click on mobile navigates but leaves the sheet open.
+  useEffect(() => {
+    if (isMobile) setOpenMobile(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
@@ -56,12 +65,12 @@ export function AppSidebar() {
   }
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader className="px-4 py-5">
-        <span className="font-heading text-base font-semibold tracking-tight text-foreground">
+        <span className="font-heading text-base font-semibold tracking-tight text-foreground group-data-[collapsible=icon]:hidden">
           Finance Lab
         </span>
-        <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+        <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground group-data-[collapsible=icon]:hidden">
           Personal Tracker
         </span>
       </SidebarHeader>
@@ -76,6 +85,7 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     render={<Link href={item.href} />}
                     isActive={pathname.startsWith(item.href)}
+                    tooltip={item.title}
                   >
                     <item.icon className="size-4" />
                     <span>{item.title}</span>
@@ -88,12 +98,12 @@ export function AppSidebar() {
 
         <SidebarGroup>
           <Collapsible defaultOpen={pathname.startsWith("/settings")}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between px-2 py-1 text-xs font-medium text-sidebar-foreground/70">
+            <CollapsibleTrigger className="flex w-full items-center justify-between px-2 py-1 text-xs font-medium text-sidebar-foreground/70 group-data-[collapsible=icon]:justify-center">
               <span className="flex items-center gap-2">
                 <Settings className="size-4" />
-                Settings
+                <span className="group-data-[collapsible=icon]:hidden">Settings</span>
               </span>
-              <ChevronDown className="size-3 transition-transform data-[state=open]:rotate-180" />
+              <ChevronDown className="size-3 transition-transform data-[state=open]:rotate-180 group-data-[collapsible=icon]:hidden" />
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarGroupContent>
@@ -122,10 +132,12 @@ export function AppSidebar() {
       <SidebarFooter className="px-3 py-3">
         <button
           onClick={toggleTheme}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors group-data-[collapsible=icon]:justify-center"
         >
           {theme === "dark" ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
-          {theme === "dark" ? "Light mode" : "Dark mode"}
+          <span className="group-data-[collapsible=icon]:hidden">
+            {theme === "dark" ? "Light mode" : "Dark mode"}
+          </span>
         </button>
       </SidebarFooter>
     </Sidebar>

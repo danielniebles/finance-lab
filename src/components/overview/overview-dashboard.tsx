@@ -142,7 +142,7 @@ function KpiCard({
     tone === "bad"  ? "text-destructive" :
     "text-foreground";
   return (
-    <div className="rounded-xl border border-border bg-card px-5 py-4 space-y-1">
+    <div className="rounded-xl border border-border bg-muted px-5 py-4 space-y-1">
       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className={cn("font-mono text-xl font-semibold", color)}>{value}</p>
       {sub && <p className="text-sm text-muted-foreground">{sub}</p>}

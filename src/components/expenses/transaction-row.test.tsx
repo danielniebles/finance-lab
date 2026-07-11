@@ -1,21 +1,27 @@
 // Component test for the Ledger tab's per-row edit/delete-confirm affordance
-// (ADR-035, TransactionRow). Covers: default rendering + redundant-column
-// suppression, default → edit → save (incl. the null-category "Sin
+// (ADR-035, TransactionRow). The row tap target opens a modal Dialog (shared
+// `Dialog` primitive, same pattern as InstallmentForm) rather than swapping
+// the row's own DOM in place. Covers: default rendering + redundant-column
+// suppression, default → edit dialog → save (incl. the null-category "Sin
 // categoría" clear case, the regression this test guards), default →
-// delete-confirm → confirm, Escape cancelling both inline modes back to
-// default, and delete-confirm's Cancel button receiving focus by default
-// (not Confirm — a destructive action should not default-focus its
-// irreversible option).
+// delete-confirm dialog → confirm, Escape cancelling both dialog views back
+// to default (via the Dialog primitive's built-in Escape handling — no more
+// hand-rolled onKeyDown), and delete-confirm's Cancel button receiving focus
+// by default (not Confirm — a destructive action should not default-focus
+// its irreversible option).
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TransactionRow } from "./transaction-row";
 import type { LedgerItem, LedgerGroupBy } from "@/lib/queries/transactions";
 import type { CategoryOption } from "@/lib/queries/expenses";
 
 const GROUP_BY_DAY: LedgerGroupBy = "day";
-const EDIT_BUTTON_NAME = "Edit transaction";
+// The row's accessible name is now contextual (built from note/category +
+// signed amount) so it disambiguates rows for screen reader users — match
+// on the stable leading string rather than the full dynamic label.
+const EDIT_BUTTON_NAME = /^Edit transaction/;
 
 const updateTransactionMock = vi.fn();
 const deleteTransactionMock = vi.fn();
@@ -78,11 +84,14 @@ describe("TransactionRow — default mode", () => {
 });
 
 describe("TransactionRow — edit mode", () => {
-  it("opens edit mode, edits the amount, and saves with the correct payload", async () => {
+  it("opens the edit dialog, edits the amount, and saves with the correct payload", async () => {
     const user = userEvent.setup();
     render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />);
 
     await user.click(screen.getByRole("button", { name: EDIT_BUTTON_NAME }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Edit transaction")).toBeInTheDocument();
 
     const amountInput = screen.getByLabelText("Amount");
     await user.clear(amountInput);
@@ -107,7 +116,8 @@ describe("TransactionRow — edit mode", () => {
 
     await user.click(screen.getByRole("button", { name: EDIT_BUTTON_NAME }));
 
-    await user.click(screen.getByText("Groceries", { selector: "span" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByText("Groceries", { selector: "span" }));
     await user.click(await screen.findByRole("option", { name: "Sin categoría" }));
 
     await user.click(screen.getByRole("button", { name: "Save changes" }));
@@ -141,7 +151,7 @@ describe("TransactionRow — edit mode", () => {
 
     await user.click(screen.getByRole("button", { name: EDIT_BUTTON_NAME }));
 
-    const noteInput = screen.getByLabelText("Note");
+    const noteInput = screen.getByLabelText(/^Note/);
     await user.clear(noteInput);
 
     await user.click(screen.getByRole("button", { name: "Save changes" }));
@@ -168,19 +178,29 @@ describe("TransactionRow — edit mode", () => {
     await user.click(screen.getByRole("button", { name: EDIT_BUTTON_NAME }));
 
     expect(screen.getByLabelText("Amount")).toHaveValue(-99000);
-    expect(screen.getByLabelText("Note")).toHaveValue("Updated note");
+    expect(screen.getByLabelText(/^Note/)).toHaveValue("Updated note");
   });
 });
 
 describe("TransactionRow — delete-confirm mode", () => {
+  // Delete is no longer reachable from the default row — it now lives in the
+  // edit form's action bar, so reaching delete-confirm is a two-step flow:
+  // tap the row to open edit mode, then click Delete inside the action bar.
+  async function openDeleteConfirm(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: EDIT_BUTTON_NAME }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+  }
+
   it("opens delete-confirm, focuses Cancel by default, and confirming deletes", async () => {
     const user = userEvent.setup();
     render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />);
 
-    await user.click(screen.getByRole("button", { name: "Delete transaction" }));
+    await openDeleteConfirm(user);
 
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Delete transaction?")).toBeInTheDocument();
     expect(screen.getByText("Delete this transaction?")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cancel delete" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
 
     await user.click(screen.getByRole("button", { name: "Confirm delete" }));
 
@@ -191,13 +211,13 @@ describe("TransactionRow — delete-confirm mode", () => {
     const user = userEvent.setup();
     render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />);
 
-    await user.click(screen.getByRole("button", { name: "Delete transaction" }));
+    await openDeleteConfirm(user);
     expect(screen.getByText("Delete this transaction?")).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
 
     expect(screen.queryByText("Delete this transaction?")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete transaction" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: EDIT_BUTTON_NAME })).toBeInTheDocument();
     expect(deleteTransactionMock).not.toHaveBeenCalled();
   });
 });

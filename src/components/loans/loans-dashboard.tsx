@@ -31,7 +31,7 @@ function KpiCard({
 }) {
   const color = highlight === "good" ? "text-success" : highlight === "bad" ? "text-destructive" : "text-foreground";
   return (
-    <div className="rounded-xl border border-border bg-card px-5 py-4 space-y-1">
+    <div className="rounded-xl border border-border bg-muted px-5 py-4 space-y-1">
       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
       <div className="flex items-end gap-2">
         <p className={cn("font-mono text-lg font-semibold", color)}>{value}</p>

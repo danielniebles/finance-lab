@@ -226,6 +226,7 @@ export function StatCard({
   tone,
   showTrend,
   hint,
+  surface = "card",
 }: {
   label: string;
   value?: number;
@@ -233,6 +234,7 @@ export function StatCard({
   tone: "good" | "bad" | "neutral";
   showTrend?: boolean;
   hint?: string;
+  surface?: "card" | "raised";
 }) {
   const valueColor =
     tone === "good" ? "text-success" :
@@ -247,7 +249,12 @@ export function StatCard({
   const display = rawValue ?? (value !== undefined ? formatCOP(Math.abs(value)) : "—");
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card px-4 py-4">
+    <div
+      className={cn(
+        "rounded-xl border border-border/60 px-4 py-4",
+        surface === "raised" ? "bg-muted" : "bg-card"
+      )}
+    >
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
         {label}
       </p>

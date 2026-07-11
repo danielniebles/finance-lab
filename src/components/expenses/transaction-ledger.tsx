@@ -66,8 +66,8 @@ export async function TransactionLedgerPage({ month, year, groupBy, filters }: P
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-        <StatCard label="Income" value={result.monthTotalIncome} tone="neutral" hint={walletHint} />
-        <StatCard label="Expenses" value={result.monthTotalExpense} tone="neutral" hint={walletHint} />
+        <StatCard label="Income" value={result.monthTotalIncome} tone="neutral" hint={walletHint} surface="raised" />
+        <StatCard label="Expenses" value={result.monthTotalExpense} tone="neutral" hint={walletHint} surface="raised" />
       </div>
 
       <CategorySummaryPanel rows={result.categorySummary} />
@@ -106,9 +106,12 @@ function CategorySummaryPanel({ rows }: { rows: CategorySummaryRow[] }) {
       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         Categories
       </p>
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         {rows.map((row) => (
-          <div key={row.name} className="flex items-center justify-between gap-2">
+          <div
+            key={row.name}
+            className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2"
+          >
             <span className="text-sm truncate">{row.name}</span>
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-xs text-muted-foreground">

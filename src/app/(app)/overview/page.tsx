@@ -17,7 +17,7 @@ export default async function OverviewPage() {
   return (
     <div className="space-y-6">
       <h1 className="font-heading text-2xl font-semibold">Overview</h1>
-      <VaultDueBanner obligations={obligations} month={month} year={year} />
+      <VaultDueBanner obligations={obligations} />
       <Suspense fallback={<div className="text-muted-foreground text-sm">Loading…</div>}>
         <AccountsCard />
       </Suspense>
