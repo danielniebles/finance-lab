@@ -58,27 +58,12 @@
     }
   },
   "src/components/overview/forecast-panel.tsx": {
-    "complexity": {
-      "count": 1
-    },
     "max-lines-per-function": {
-      "count": 1
-    },
-    "sonarjs/cognitive-complexity": {
       "count": 1
     }
   },
   "src/components/overview/overview-dashboard.tsx": {
-    "complexity": {
-      "count": 1
-    },
-    "max-lines-per-function": {
-      "count": 1
-    },
     "sonarjs/cognitive-complexity": {
-      "count": 1
-    },
-    "sonarjs/no-duplicate-string": {
       "count": 1
     }
   },

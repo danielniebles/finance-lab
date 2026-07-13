@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { formatCOP } from "@/lib/format";
 import { getWalletBalances } from "@/lib/queries/wallets";
+import { getLoansOverview } from "@/lib/queries/loans";
 import type { AccountWithWallets, WalletBalance } from "@/lib/queries/wallets";
 
 // ─── Shared row primitives ─────────────────────────────────────────────────────
@@ -42,29 +42,49 @@ function BalanceText({
   );
 }
 
-function RowChevron() {
+// ─── Grand total + liquidity pill ────────────────────────────────────────────
+// The liquidity status used to live as a full "Liquidity Health" zone inside
+// a separate Loans card. Per the Overview redesign (req 1), it's now a small
+// always-visible pill next to Total Balance instead — no top-level banner,
+// no dedicated section, just a low-footprint signal.
+
+function classifyLiquidity(ratio: number): { label: string; dotClass: string; toneClass: string } {
+  if (ratio < 30) return { label: "critical", dotClass: "bg-destructive", toneClass: "text-destructive bg-destructive/10" };
+  if (ratio < 50) return { label: "warning", dotClass: "bg-warning", toneClass: "text-warning bg-warning/10" };
+  return { label: "healthy", dotClass: "bg-success", toneClass: "text-success bg-success/10" };
+}
+
+function LiquidityPill({ ratio }: { ratio: number | null }) {
+  if (ratio === null) return null;
+  const { label, dotClass, toneClass } = classifyLiquidity(ratio);
   return (
-    <ArrowRight
-      aria-hidden="true"
-      className="size-4 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/60 group-focus-visible:text-muted-foreground/60"
-    />
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium shrink-0",
+        toneClass
+      )}
+    >
+      <span className={cn("size-1.5 rounded-full", dotClass, label === "critical" && "animate-pulse")} />
+      Liquidity: {label}
+    </span>
   );
 }
 
-// ─── Grand total ────────────────────────────────────────────────────────────────
-
-function GrandTotalBlock({ grandTotal }: { grandTotal: number }) {
+function GrandTotalBlock({ grandTotal, liquidityRatio }: { grandTotal: number; liquidityRatio: number | null }) {
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground">Total balance</p>
-      <p
-        className={cn(
-          "font-mono text-3xl max-sm:text-2xl font-semibold tabular-nums",
-          grandTotal < 0 ? "text-destructive" : "text-foreground"
-        )}
-      >
-        {formatCOP(grandTotal)}
-      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <p
+          className={cn(
+            "font-mono text-3xl max-sm:text-2xl font-semibold tabular-nums",
+            grandTotal < 0 ? "text-destructive" : "text-foreground"
+          )}
+        >
+          {formatCOP(grandTotal)}
+        </p>
+        <LiquidityPill ratio={liquidityRatio} />
+      </div>
     </div>
   );
 }
@@ -89,10 +109,7 @@ export function AccountLinkRow({
           <span className="truncate text-sm text-foreground">{account.name}</span>
           {!account.includeInOverviewTotal && <ExcludedBadge />}
         </span>
-        <span className="flex shrink-0 items-center gap-1.5">
-          <BalanceText balance={wallet.balance} />
-          <RowChevron />
-        </span>
+        <BalanceText balance={wallet.balance} />
       </Link>
     </li>
   );
@@ -127,10 +144,7 @@ export function WalletSubRow({ wallet }: { wallet: WalletBalance }) {
         className="group -mr-2 flex min-w-0 items-center justify-between gap-3 rounded-md py-2 pl-6 pr-2 transition-colors max-sm:pl-4 hover:bg-muted/20 focus-visible:bg-muted/20"
       >
         <span className="min-w-0 truncate text-sm text-foreground">{wallet.name}</span>
-        <span className="flex shrink-0 items-center gap-1.5">
-          <BalanceText balance={wallet.balance} />
-          <RowChevron />
-        </span>
+        <BalanceText balance={wallet.balance} />
       </Link>
     </li>
   );
@@ -166,7 +180,10 @@ export function AccountsEmptyState() {
 // ─── Card ───────────────────────────────────────────────────────────────────────
 
 export async function AccountsCard() {
-  const { accounts, grandTotal } = await getWalletBalances();
+  const [{ accounts, grandTotal }, loans] = await Promise.all([
+    getWalletBalances(),
+    getLoansOverview(),
+  ]);
 
   return (
     <Card className="border-border/60">
@@ -176,7 +193,7 @@ export async function AccountsCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="px-5 py-4">
-        <GrandTotalBlock grandTotal={grandTotal} />
+        <GrandTotalBlock grandTotal={grandTotal} liquidityRatio={loans.liquidityRatio} />
         {accounts.length === 0 ? (
           <AccountsEmptyState />
         ) : (

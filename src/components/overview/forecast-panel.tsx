@@ -1,7 +1,6 @@
 import { TrendingDown, TrendingUp, Clock } from "lucide-react";
 import { getForecast } from "@/lib/queries/forecast";
 import { formatCOP } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface ForecastPanelProps {
@@ -15,11 +14,11 @@ export async function ForecastPanel({ month, year }: ForecastPanelProps) {
   // ── Thin-data state ──────────────────────────────────────────────────────────
   if (data.dataSufficiency === "thin") {
     return (
-      <Card className="border-border/60">
+      <Card className="border-border/40 bg-muted/10">
         <CardContent className="px-5 py-4">
-          <div className="flex items-center gap-3 text-muted-foreground">
-            <Clock className="size-5 shrink-0" />
-            <p className="text-sm">
+          <div className="flex items-center gap-3 text-muted-foreground/70">
+            <Clock className="size-4 shrink-0" />
+            <p className="text-xs">
               Need a few more months of history to forecast
             </p>
           </div>
@@ -48,50 +47,38 @@ export async function ForecastPanel({ month, year }: ForecastPanelProps) {
 
   const vsTargetPositive = vsTarget !== null && vsTarget >= 0;
 
+  // De-emphasized on purpose (Overview redesign req 7): most entries here are
+  // low-confidence projections, not actuals, so this reads as supporting
+  // detail — smaller text, muted tones, a quieter background — rather than a
+  // primary KPI. Same data/icons as before, just turned down.
   return (
-    <Card className="border-border/60">
-      <CardHeader className="px-5 py-4 border-b border-border/60">
-        <CardTitle className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+    <Card className="border-border/40 bg-muted/10">
+      <CardHeader className="px-5 py-3 border-b border-border/40">
+        <CardTitle className="font-heading text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
           Forecast
         </CardTitle>
       </CardHeader>
-      <CardContent className="px-5 py-5 space-y-5">
+      <CardContent className="px-5 py-4 space-y-4">
 
         {/* A — Projected savings rate strip */}
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
             Projected Savings Rate
           </p>
 
-          <div className="flex items-end gap-3 flex-wrap">
-            <span
-              className={cn(
-                "font-mono text-3xl font-semibold tabular-nums leading-none",
-                projectedSavingsRate === null
-                  ? "text-foreground"
-                  : projectedSavingsRate >= 20
-                  ? "text-success"
-                  : projectedSavingsRate >= 10
-                  ? "text-warning"
-                  : "text-destructive",
-              )}
-            >
+          <div className="flex items-end gap-2.5 flex-wrap">
+            <span className="font-mono text-lg font-semibold tabular-nums leading-none text-muted-foreground">
               {rateStr}
             </span>
 
             {vsTargetStr && (
-              <div className="flex items-center gap-1 mb-0.5">
+              <div className="flex items-center gap-1">
                 {vsTargetPositive ? (
-                  <TrendingUp className="size-4 text-success" />
+                  <TrendingUp className="size-3.5 text-muted-foreground/70" />
                 ) : (
-                  <TrendingDown className="size-4 text-destructive" />
+                  <TrendingDown className="size-3.5 text-muted-foreground/70" />
                 )}
-                <span
-                  className={cn(
-                    "text-xs font-medium tabular-nums",
-                    vsTargetPositive ? "text-success" : "text-destructive",
-                  )}
-                >
+                <span className="text-xs font-medium tabular-nums text-muted-foreground/70">
                   {vsTargetStr}
                 </span>
               </div>
@@ -99,29 +86,29 @@ export async function ForecastPanel({ month, year }: ForecastPanelProps) {
           </div>
 
           {vsLastMonthStr && (
-            <p className="text-xs text-muted-foreground">{vsLastMonthStr}</p>
+            <p className="text-xs text-muted-foreground/70">{vsLastMonthStr}</p>
           )}
 
-          <p className="text-xs text-muted-foreground/60 italic">
+          <p className="text-xs text-muted-foreground/50 italic">
             Projected from history · not a guarantee
           </p>
         </div>
 
         {/* Divider */}
-        <div className="border-t border-border/60" />
+        <div className="border-t border-border/40" />
 
         {/* B — Drivers list */}
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
             Categories at Risk
           </p>
 
           {drivers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground/70">
               No categories projected to overshoot budget
             </p>
           ) : (
-            <div className="divide-y divide-border/50">
+            <div className="divide-y divide-border/30">
               {drivers.map((driver) => {
                 const isLowConfidence =
                   driver.prediction?.confidence === "low";
@@ -130,22 +117,22 @@ export async function ForecastPanel({ month, year }: ForecastPanelProps) {
                 return (
                   <div
                     key={driver.id}
-                    className="py-2.5 first:pt-0 last:pb-0 space-y-0.5"
+                    className="py-2 first:pt-0 last:pb-0 space-y-0.5"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm text-foreground truncate">
+                      <span className="text-xs text-muted-foreground truncate">
                         {driver.name}
                         {isLowConfidence && (
-                          <span className="ml-1.5 text-xs text-muted-foreground/60">
+                          <span className="ml-1.5 text-[10px] text-muted-foreground/50">
                             low confidence
                           </span>
                         )}
                       </span>
-                      <span className="font-mono text-sm tabular-nums text-destructive shrink-0">
+                      <span className="font-mono text-xs tabular-nums text-muted-foreground shrink-0">
                         +{prefix}{formatCOP(driver.overByExpected)}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-[11px] text-muted-foreground/60">
                       Budget:{" "}
                       <span className="font-mono tabular-nums">
                         {formatCOP(driver.budget)}

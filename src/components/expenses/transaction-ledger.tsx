@@ -1,3 +1,4 @@
+import { ArrowDown, ArrowUp } from "lucide-react";
 import {
   getTransactionList,
   type LedgerGroupBy,
@@ -5,6 +6,8 @@ import {
 } from "@/lib/queries/transactions";
 import { getCategories } from "@/lib/queries/expenses";
 import { getWalletBalances } from "@/lib/queries/wallets";
+import { formatCOP } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/expenses/analysis-dashboard";
 import { LedgerControls } from "@/components/expenses/ledger-controls";
 import { AddTransactionRow } from "@/components/expenses/add-transaction-row";
@@ -26,6 +29,81 @@ function hasAnyFilter(filters: LedgerFilters): boolean {
   // counting it would let a stale ?wallet= bookmark param report "active
   // filters" on an unfiltered result set.
   return Boolean(filters.category || filters.walletId || filters.type || filters.search);
+}
+
+// ─── Balance summary (top of ledger) ───────────────────────────────────────
+// Two layouts for the same three numbers: a compact single-card "hero" on
+// mobile (balance headline + income/expenses as sub-stats — screen is too
+// narrow for three side-by-side cards) and a three-card row on sm+.
+
+function BalanceSummaryMobile({
+  balance,
+  income,
+  expenses,
+}: {
+  balance: number;
+  income: number;
+  expenses: number;
+}) {
+  return (
+    <div className="sm:hidden rounded-xl border border-border/60 bg-muted p-4 space-y-3">
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+          Total Balance
+        </p>
+        <p
+          className={cn(
+            "font-mono text-2xl font-semibold tabular-nums",
+            balance < 0 ? "text-destructive" : "text-foreground"
+          )}
+        >
+          {formatCOP(balance)}
+        </p>
+      </div>
+      <div className="flex items-center gap-5 border-t border-border/40 pt-3">
+        <div className="flex items-center gap-1.5">
+          <ArrowDown className="size-3.5 text-success shrink-0" />
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Income</p>
+            <p className="font-mono text-sm font-medium text-success">{formatCOP(income)}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <ArrowUp className="size-3.5 text-destructive shrink-0" />
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Expenses</p>
+            <p className="font-mono text-sm font-medium text-destructive">{formatCOP(expenses)}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BalanceSummaryDesktop({
+  income,
+  expenses,
+  balance,
+  hint,
+}: {
+  income: number;
+  expenses: number;
+  balance: number;
+  hint?: string;
+}) {
+  return (
+    <div className="hidden sm:grid grid-cols-3 gap-3">
+      <StatCard label="Income" value={income} tone="good" hint={hint} surface="raised" />
+      <StatCard label="Expenses" value={expenses} tone="bad" hint={hint} surface="raised" />
+      <StatCard
+        label="Total Balance"
+        value={balance}
+        tone={balance < 0 ? "bad" : "good"}
+        hint={hint}
+        surface="raised"
+      />
+    </div>
+  );
 }
 
 // The Ledger tab's server entry point (rendered by expenses/page.tsx behind
@@ -61,12 +139,29 @@ export async function TransactionLedgerPage({ month, year, groupBy, filters }: P
   const activeWalletName = walletOptions.find((w) => w.id === filters.walletId)?.name;
   const walletHint = activeWalletName ? `${activeWalletName} only` : undefined;
 
+  // Total Balance = the filtered wallet's current balance, or the
+  // household-wide grand total (same includeInOverviewTotal-gated number the
+  // Overview page shows) when no single wallet is selected.
+  const selectedWalletBalance = filters.walletId
+    ? walletBalances.accounts
+        .flatMap((a) => a.wallets)
+        .find((w) => w.id === filters.walletId)?.balance
+    : undefined;
+  const totalBalance = selectedWalletBalance ?? walletBalances.grandTotal;
+
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-        <StatCard label="Income" value={result.monthTotalIncome} tone="neutral" hint={walletHint} surface="raised" />
-        <StatCard label="Expenses" value={result.monthTotalExpense} tone="neutral" hint={walletHint} surface="raised" />
-      </div>
+      <BalanceSummaryMobile
+        balance={totalBalance}
+        income={result.monthTotalIncome}
+        expenses={result.monthTotalExpense}
+      />
+      <BalanceSummaryDesktop
+        income={result.monthTotalIncome}
+        expenses={result.monthTotalExpense}
+        balance={totalBalance}
+        hint={walletHint}
+      />
 
       <CategorySummaryPanel rows={result.categorySummary} />
 
