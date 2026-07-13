@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LoansClient } from "./loans-client";
-import { LoanRowActions } from "./loan-row-actions";
+import { LoanForm } from "./loan-form";
 import { deleteLoanPayment, deleteSettledLoans } from "@/lib/actions/loans";
 import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/lib/queries/loans";
 import { MASK } from "./lib/constants";
@@ -72,58 +72,69 @@ function LoanRow({
   masked?: boolean;
 }) {
   const { pct, ageLabel, isOverdue, isStale } = computeLoanMeta(loan);
+  const [open, setOpen] = useState(false);
 
   return (
-    <TableRow className="group/loanrow border-border/50">
-      <TableCell className="px-2">
-        <span
-          className="mx-auto block size-2.5 rounded-full"
-          style={{ backgroundColor: loan.accountColor ?? "#888" }}
-          title={maskStr(loan.accountName, masked)}
-        />
-      </TableCell>
-      <TableCell className="px-4 text-muted-foreground text-xs">
-        {new Date(loan.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
-      </TableCell>
-      <TableCell className="px-4 font-mono text-xs text-muted-foreground">
-        {maskStr(formatCOP(loan.amount), masked)}
-      </TableCell>
-      <TableCell className="px-4">
-        {masked ? (
-          <div className="h-1.5 flex-1 rounded-full bg-muted/30" />
-        ) : (
-          <div className="flex items-center gap-2 min-w-32">
-            <div className="h-1.5 flex-1 rounded-full bg-muted/50 overflow-hidden">
-              <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pct}%` }} />
+    <>
+      <TableRow
+        className={cn(
+          "group/loanrow border-border/50",
+          !masked && "cursor-pointer transition-colors hover:bg-muted/40"
+        )}
+        onClick={masked ? undefined : () => setOpen(true)}
+      >
+        <TableCell className="px-2">
+          <span
+            className="mx-auto block size-2.5 rounded-full"
+            style={{ backgroundColor: loan.accountColor ?? "#888" }}
+            title={maskStr(loan.accountName, masked)}
+          />
+        </TableCell>
+        <TableCell className="px-4 text-muted-foreground text-xs">
+          {new Date(loan.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
+        </TableCell>
+        <TableCell className="px-4 font-mono text-xs text-muted-foreground">
+          {maskStr(formatCOP(loan.amount), masked)}
+        </TableCell>
+        <TableCell className="px-4">
+          {masked ? (
+            <div className="h-1.5 flex-1 rounded-full bg-muted/30" />
+          ) : (
+            <div className="flex items-center gap-2 min-w-32">
+              <div className="h-1.5 flex-1 rounded-full bg-muted/50 overflow-hidden">
+                <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pct}%` }} />
+              </div>
+              <span className="font-mono text-xs text-muted-foreground w-8 shrink-0 text-right">
+                {pct.toFixed(0)}%
+              </span>
             </div>
-            <span className="font-mono text-xs text-muted-foreground w-8 shrink-0 text-right">
-              {pct.toFixed(0)}%
-            </span>
+          )}
+        </TableCell>
+        <TableCell className={cn("px-4 font-mono text-sm font-medium text-right", masked ? "text-muted-foreground" : loan.isActive ? "text-foreground" : "text-muted-foreground")}>
+          {maskStr(loan.remaining > 0 ? formatCOP(loan.remaining) : "—", masked)}
+        </TableCell>
+        <TableCell className={cn("px-4 text-xs text-right hidden md:table-cell", isStale ? "text-warning font-medium" : "text-muted-foreground")}>
+          {ageLabel}
+        </TableCell>
+        <TableCell className="px-4">
+          <div className="flex justify-end">
+            <LoanStatusBadge isActive={loan.isActive} isOverdue={isOverdue} />
           </div>
-        )}
-      </TableCell>
-      <TableCell className={cn("px-4 font-mono text-sm font-medium text-right", masked ? "text-muted-foreground" : loan.isActive ? "text-foreground" : "text-muted-foreground")}>
-        {maskStr(loan.remaining > 0 ? formatCOP(loan.remaining) : "—", masked)}
-      </TableCell>
-      <TableCell className={cn("px-4 text-xs text-right hidden md:table-cell", isStale ? "text-warning font-medium" : "text-muted-foreground")}>
-        {ageLabel}
-      </TableCell>
-      <TableCell className="px-4">
-        <div className="flex justify-end">
-          <LoanStatusBadge isActive={loan.isActive} isOverdue={isOverdue} />
-        </div>
-      </TableCell>
-      <TableCell className="px-4 text-xs text-muted-foreground truncate max-w-40 hidden md:table-cell">
-        {loan.notes ?? "—"}
-      </TableCell>
-      <TableCell className="px-4 w-14">
-        {!masked && (
-          <div className="flex justify-end opacity-0 group-hover/loanrow:opacity-100 transition-opacity">
-            <LoanRowActions loan={loan} accounts={accounts} debtors={debtors} />
-          </div>
-        )}
-      </TableCell>
-    </TableRow>
+        </TableCell>
+        <TableCell className="px-4 text-xs text-muted-foreground truncate max-w-40 hidden md:table-cell">
+          {loan.notes ?? "—"}
+        </TableCell>
+      </TableRow>
+      {!masked && (
+        <LoanForm
+          open={open}
+          onClose={() => setOpen(false)}
+          accounts={accounts}
+          debtors={debtors}
+          editing={loan}
+        />
+      )}
+    </>
   );
 }
 
@@ -480,7 +491,7 @@ export function DebtorsSection({
                         <Table className="table-fixed">
                           <TableHeader>
                             <TableRow className="bg-muted/20 hover:bg-muted/20 border-border/50">
-                              <TableHead className="px-2 h-8 w-10 text-xs text-muted-foreground">Account</TableHead>
+                              <TableHead className="px-2 h-8 w-12 text-xs text-muted-foreground">Account</TableHead>
                               <TableHead className="px-4 h-8 w-30 text-xs text-muted-foreground">Date</TableHead>
                               <TableHead className="px-4 h-8 w-35 text-xs text-muted-foreground">Original</TableHead>
                               <TableHead className="px-4 h-8 w-33.75 text-xs text-muted-foreground">Repaid</TableHead>
@@ -488,7 +499,6 @@ export function DebtorsSection({
                               <TableHead className="px-4 h-8 w-15 text-right text-xs text-muted-foreground hidden md:table-cell">Age</TableHead>
                               <TableHead className="px-4 h-8 w-21.25 text-right text-xs text-muted-foreground">Status</TableHead>
                               <TableHead className="px-4 h-8 w-40 text-xs text-muted-foreground hidden md:table-cell">Notes</TableHead>
-                              <TableHead className="px-4 h-8 w-14" />
                             </TableRow>
                           </TableHeader>
                           <TableBody>

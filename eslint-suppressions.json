@@ -36,11 +36,6 @@
       "count": 1
     }
   },
-  "src/components/installments/all-installments-table.tsx": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
   "src/components/installments/credit-card-manager.tsx": {
     "max-lines-per-function": {
       "count": 1

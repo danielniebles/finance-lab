@@ -274,11 +274,12 @@ function AddBudgetItemRow({
   );
 }
 
-// Grid columns: chevron | name+count | type | mappings | amount | actions.
+// Grid columns: chevron | name+count | type | mappings | amount. The row
+// itself is clickable (opens the edit dialog) — no separate actions column.
 // Mappings and the item count are single digits/short numbers (not the old
 // "N mappings" / "No mappings" text), so those two columns stay narrow and
 // the name column — the thing this table exists to show — gets the space.
-const ROW_GRID = "grid grid-cols-[1.25rem_1fr_5rem_3rem_8rem_3.75rem] items-center gap-3 px-4 py-3";
+const ROW_GRID = "grid grid-cols-[1.25rem_1fr_5rem_3rem_8rem] items-center gap-3 px-4 py-3";
 
 function StateChip({ custom }: { custom: boolean }) {
   return (
@@ -303,7 +304,7 @@ function CategorySwatchButton({ cat, onClick }: { cat: Category; onClick: () => 
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
       aria-label={`Customize icon and color for ${cat.name}`}
       className={cn(
         "flex size-9 shrink-0 items-center justify-center rounded-full transition-colors",
@@ -517,12 +518,104 @@ function ColorSwatchGrid({
   );
 }
 
+function CategoryEditDialog({
+  cat,
+  open,
+  onClose,
+}: {
+  cat: Category;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(cat.name);
+  const [pending, startTransition] = useTransition();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  // Reset whenever the dialog (re)opens.
+  const [lastOpen, setLastOpen] = useState(open);
+  if (open !== lastOpen) {
+    setLastOpen(open);
+    if (open) {
+      setName(cat.name);
+      setConfirmingDelete(false);
+    }
+  }
+
+  function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    startTransition(async () => {
+      await updateAppCategory(cat.id, { name: name.trim() });
+      onClose();
+    });
+  }
+
+  function handleDelete() {
+    startTransition(async () => {
+      await deleteAppCategory(cat.id);
+      onClose();
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{confirmingDelete ? "Delete category?" : "Edit category"}</DialogTitle>
+        </DialogHeader>
+        {confirmingDelete ? (
+          <div className="space-y-4">
+            <p className="text-sm text-destructive">
+              Delete &quot;{cat.name}&quot;? This will also remove its mappings and budget items.
+            </p>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)} autoFocus>
+                Cancel
+              </Button>
+              <Button type="button" variant="destructive" disabled={pending} onClick={handleDelete}>
+                Confirm delete
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <form onSubmit={handleSave} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="category-name">Name</Label>
+              <Input
+                id="category-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoFocus
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="destructive"
+                className="sm:mr-auto"
+                disabled={pending}
+                onClick={() => setConfirmingDelete(true)}
+              >
+                Delete
+              </Button>
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={pending}>
+                Save changes
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function CategoryRow({ cat }: { cat: Category }) {
   const [expanded, setExpanded] = useState(false);
-  const [editingName, setEditingName] = useState(false);
-  const [name, setName] = useState(cat.name);
+  const [editOpen, setEditOpen] = useState(false);
   const [addingItem, setAddingItem] = useState(false);
-  const [pending, startTransition] = useTransition();
 
   const [styleDialogOpen, setStyleDialogOpen] = useState(false);
   const [draftIcon, setDraftIcon] = useState<string | null>(cat.icon);
@@ -531,20 +624,6 @@ function CategoryRow({ cat }: { cat: Category }) {
   // rather than widening every downstream consumer back to `string`.
   const [draftColor, setDraftColor] = useState<CategoryColorKey | null>(cat.color as CategoryColorKey | null);
   const [stylePending, startStyleTransition] = useTransition();
-
-  function handleNameSave(e: React.FormEvent) {
-    e.preventDefault();
-    startTransition(async () => {
-      await updateAppCategory(cat.id, { name: name.trim() });
-      setEditingName(false);
-    });
-  }
-
-  function handleDelete() {
-    if (!confirm(`Delete "${cat.name}"? This will also remove its mappings and budget items.`))
-      return;
-    startTransition(() => deleteAppCategory(cat.id));
-  }
 
   function openStyleDialog() {
     setDraftIcon(cat.icon);
@@ -569,39 +648,13 @@ function CategoryRow({ cat }: { cat: Category }) {
 
   return (
     <div className="border-b border-border last:border-0 group/catrow">
-      {editingName ? (
-        <form onSubmit={handleNameSave} className="flex items-center gap-2 px-4 py-3">
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="h-7 w-48 text-sm"
-            autoFocus
-            required
-          />
-          <Button type="submit" size="icon" className="size-7" disabled={pending}>
-            <Check className="size-3.5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            onClick={() => { setName(cat.name); setEditingName(false); }}
-          >
-            <X className="size-3.5" />
-          </Button>
-        </form>
-      ) : (
-        <CategoryRowGrid
-          cat={cat}
-          pending={pending}
-          expanded={expanded}
-          onToggleExpand={() => setExpanded((v) => !v)}
-          onOpenStyleDialog={openStyleDialog}
-          onEditName={() => setEditingName(true)}
-          onDelete={handleDelete}
-        />
-      )}
+      <CategoryRowGrid
+        cat={cat}
+        expanded={expanded}
+        onToggleExpand={() => setExpanded((v) => !v)}
+        onOpenStyleDialog={openStyleDialog}
+        onOpenEdit={() => setEditOpen(true)}
+      />
 
       {expanded && (
         <CategoryBudgetPanel
@@ -611,6 +664,8 @@ function CategoryRow({ cat }: { cat: Category }) {
           onDoneAddingItem={() => setAddingItem(false)}
         />
       )}
+
+      <CategoryEditDialog cat={cat} open={editOpen} onClose={() => setEditOpen(false)} />
 
       <CategoryStyleDialog
         cat={cat}
@@ -629,28 +684,27 @@ function CategoryRow({ cat }: { cat: Category }) {
 
 function CategoryRowGrid({
   cat,
-  pending,
   expanded,
   onToggleExpand,
   onOpenStyleDialog,
-  onEditName,
-  onDelete,
+  onOpenEdit,
 }: {
   cat: Category;
-  pending: boolean;
   expanded: boolean;
   onToggleExpand: () => void;
   onOpenStyleDialog: () => void;
-  onEditName: () => void;
-  onDelete: () => void;
+  onOpenEdit: () => void;
 }) {
   const total = cat.budgetItems.reduce((s, i) => s + i.amount, 0);
   const effectiveType = getEffectiveType(cat.budgetItems);
 
   return (
-    <div className={ROW_GRID}>
+    <div
+      className={cn(ROW_GRID, "cursor-pointer transition-colors hover:bg-muted/20")}
+      onClick={onOpenEdit}
+    >
       <button
-        onClick={onToggleExpand}
+        onClick={(e) => { e.stopPropagation(); onToggleExpand(); }}
         className="text-muted-foreground hover:text-foreground transition-colors"
       >
         <ChevronDown className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
@@ -682,21 +736,6 @@ function CategoryRowGrid({
       <span className="font-mono text-sm text-right">
         {formatCOP(total)}
       </span>
-
-      <div className="flex gap-1 justify-end opacity-0 group-hover/catrow:opacity-100 transition-opacity">
-        <Button variant="ghost" size="icon" className="size-7" onClick={onEditName}>
-          <Pencil className="size-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 text-destructive hover:text-destructive"
-          onClick={onDelete}
-          disabled={pending}
-        >
-          <Trash2 className="size-4" />
-        </Button>
-      </div>
     </div>
   );
 }
@@ -860,7 +899,6 @@ export function CategoryList({ categories }: { categories: Category[] }) {
               <span>Type</span>
               <span title="Mappings">Maps</span>
               <span className="text-right">Budget / mo</span>
-              <span />
             </div>
 
             {sorted.map((cat) => (

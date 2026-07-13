@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { InstallmentActions } from "./installment-actions";
+import { InstallmentForm } from "./installment-form";
 import { formatCOP } from "@/lib/format";
 import type { InstallmentRow } from "@/lib/queries/installments";
 
@@ -22,6 +23,85 @@ type FormData = {
 type Props = {
   installments: InstallmentRow[];
 } & Partial<FormData>;
+
+function InstallmentTableRow({
+  inst,
+  formCards,
+  formDebtors,
+  formAccounts,
+}: { inst: InstallmentRow } & FormData) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <TableRow
+        className="border-border cursor-pointer transition-colors hover:bg-muted/40"
+        onClick={() => setOpen(true)}
+      >
+        <TableCell className="px-4">
+          <div className="font-medium">{inst.description}</div>
+          {inst.notes && (
+            <div className="text-xs text-muted-foreground">{inst.notes}</div>
+          )}
+        </TableCell>
+        <TableCell className="px-4 hidden sm:table-cell">
+          {inst.cardName ? (
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <span
+                className="size-2 rounded-full shrink-0"
+                style={{ backgroundColor: inst.cardColor ?? undefined }}
+              />
+              {inst.cardName}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground/50">—</span>
+          )}
+        </TableCell>
+        <TableCell className="px-4 text-right font-mono text-sm">
+          {formatCOP(inst.totalAmount)}
+        </TableCell>
+        <TableCell className="px-4 text-right font-mono text-sm text-muted-foreground hidden sm:table-cell">
+          {formatCOP(inst.monthlyAmount)}
+          {inst.monthlyInterestRate != null && (
+            <span className="ml-1 text-muted-foreground/50 text-xs">+int</span>
+          )}
+        </TableCell>
+        <TableCell className="px-4 text-right font-mono text-sm text-muted-foreground hidden md:table-cell">
+          {inst.monthlyInterestRate != null
+            ? `${inst.monthlyInterestRate}% m.v.`
+            : "—"}
+        </TableCell>
+        <TableCell className="px-4 hidden sm:table-cell">
+          <div className="flex justify-center">
+            <ProgressBar paid={inst.installmentsPaid} total={inst.numInstallments} />
+          </div>
+        </TableCell>
+        <TableCell className="px-4 text-right font-mono text-xs text-muted-foreground hidden md:table-cell whitespace-nowrap">
+          {inst.endDate.toLocaleDateString("es-CO", {
+            month: "short",
+            year: "2-digit",
+          })}
+        </TableCell>
+        <TableCell className="px-4 text-right font-mono text-sm">
+          {inst.remaining > 0 ? formatCOP(inst.remaining) : "—"}
+        </TableCell>
+        <TableCell className="px-4">
+          <div className="flex justify-center">
+            <StatusBadge status={inst.status} />
+          </div>
+        </TableCell>
+      </TableRow>
+      <InstallmentForm
+        open={open}
+        onClose={() => setOpen(false)}
+        editing={inst}
+        cards={formCards}
+        debtors={formDebtors}
+        accounts={formAccounts}
+      />
+    </>
+  );
+}
 
 function StatusBadge({ status }: { status: "Active" | "Finished" }) {
   if (status === "Finished") {
@@ -84,7 +164,6 @@ export function AllInstallmentsTable({
             </button>
           )}
           <InstallmentActions
-            mode="add-button"
             formCards={formCards}
             formDebtors={formDebtors}
             formAccounts={formAccounts}
@@ -118,74 +197,17 @@ export function AllInstallmentsTable({
                 <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground hidden md:table-cell">Ends</TableHead>
                 <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Remaining</TableHead>
                 <TableHead className="px-4 text-center text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
-                <TableHead className="px-4" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {visible.map((inst) => (
-                <TableRow key={inst.id} className="border-border">
-                  <TableCell className="px-4">
-                    <div className="font-medium">{inst.description}</div>
-                    {inst.notes && (
-                      <div className="text-xs text-muted-foreground">{inst.notes}</div>
-                    )}
-                  </TableCell>
-                  <TableCell className="px-4 hidden sm:table-cell">
-                    {inst.cardName ? (
-                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        <span
-                          className="size-2 rounded-full shrink-0"
-                          style={{ backgroundColor: inst.cardColor ?? undefined }}
-                        />
-                        {inst.cardName}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/50">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="px-4 text-right font-mono text-sm">
-                    {formatCOP(inst.totalAmount)}
-                  </TableCell>
-                  <TableCell className="px-4 text-right font-mono text-sm text-muted-foreground hidden sm:table-cell">
-                    {formatCOP(inst.monthlyAmount)}
-                    {inst.monthlyInterestRate != null && (
-                      <span className="ml-1 text-muted-foreground/50 text-xs">+int</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="px-4 text-right font-mono text-sm text-muted-foreground hidden md:table-cell">
-                    {inst.monthlyInterestRate != null
-                      ? `${inst.monthlyInterestRate}% m.v.`
-                      : "—"}
-                  </TableCell>
-                  <TableCell className="px-4 hidden sm:table-cell">
-                    <div className="flex justify-center">
-                      <ProgressBar paid={inst.installmentsPaid} total={inst.numInstallments} />
-                    </div>
-                  </TableCell>
-                  <TableCell className="px-4 text-right font-mono text-xs text-muted-foreground hidden md:table-cell whitespace-nowrap">
-                    {inst.endDate.toLocaleDateString("es-CO", {
-                      month: "short",
-                      year: "2-digit",
-                    })}
-                  </TableCell>
-                  <TableCell className="px-4 text-right font-mono text-sm">
-                    {inst.remaining > 0 ? formatCOP(inst.remaining) : "—"}
-                  </TableCell>
-                  <TableCell className="px-4">
-                    <div className="flex justify-center">
-                      <StatusBadge status={inst.status} />
-                    </div>
-                  </TableCell>
-                  <TableCell className="px-4">
-                    <InstallmentActions
-                      mode="row-actions"
-                      installment={inst}
-                      formCards={formCards}
-                      formDebtors={formDebtors}
-                      formAccounts={formAccounts}
-                    />
-                  </TableCell>
-                </TableRow>
+                <InstallmentTableRow
+                  key={inst.id}
+                  inst={inst}
+                  formCards={formCards}
+                  formDebtors={formDebtors}
+                  formAccounts={formAccounts}
+                />
               ))}
             </TableBody>
           </Table>

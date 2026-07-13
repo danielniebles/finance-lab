@@ -17,7 +17,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { createInstallment, updateInstallment } from "@/lib/actions/installments";
+import { createInstallment, updateInstallment, deleteInstallment } from "@/lib/actions/installments";
 import { computeInstallmentDue, eaToMonthly, monthlyToEA } from "@/lib/installment-utils";
 import { cn } from "@/lib/utils";
 import type { InstallmentRow } from "@/lib/queries/installments";
@@ -89,12 +89,18 @@ export function InstallmentForm({
     editing ? toFormState(editing) : EMPTY
   );
   const [pending, startTransition] = useTransition();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  // Re-sync when dialog opens with a different item
-  const [lastEditing, setLastEditing] = useState(editing);
-  if (editing !== lastEditing) {
-    setLastEditing(editing);
-    setForm(editing ? toFormState(editing) : EMPTY);
+  // Re-sync whenever the dialog transitions to open — each row now owns a
+  // dedicated form instance (editing is fixed per instance), so the reset
+  // needs to key off `open`, not `editing` changing.
+  const [lastOpen, setLastOpen] = useState(open);
+  if (open !== lastOpen) {
+    setLastOpen(open);
+    if (open) {
+      setForm(editing ? toFormState(editing) : EMPTY);
+      setConfirmingDelete(false);
+    }
   }
 
   function set<K extends keyof FormState>(field: K, value: FormState[K]) {
@@ -151,6 +157,14 @@ export function InstallmentForm({
     });
   }
 
+  function handleDelete() {
+    if (!editing) return;
+    startTransition(async () => {
+      await deleteInstallment(editing.id);
+      onClose();
+    });
+  }
+
   // Live preview — always compute using monthly rate
   const totalAmount = parseFloat(form.totalAmount);
   const numInstallments = parseInt(form.numInstallments, 10);
@@ -167,8 +181,27 @@ export function InstallmentForm({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{editing ? "Edit installment" : "New installment"}</DialogTitle>
+          <DialogTitle>
+            {confirmingDelete
+              ? "Delete installment?"
+              : editing ? "Edit installment" : "New installment"}
+          </DialogTitle>
         </DialogHeader>
+        {confirmingDelete ? (
+          <div className="space-y-4">
+            <p className="text-sm text-destructive">
+              Delete this installment and all its payment records?
+            </p>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)} autoFocus>
+                Cancel
+              </Button>
+              <Button type="button" variant="destructive" disabled={pending} onClick={handleDelete}>
+                Confirm delete
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="description">Description</Label>
@@ -404,6 +437,17 @@ export function InstallmentForm({
           </div>
 
           <DialogFooter>
+            {editing && (
+              <Button
+                type="button"
+                variant="destructive"
+                className="sm:mr-auto"
+                disabled={pending}
+                onClick={() => setConfirmingDelete(true)}
+              >
+                Delete
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
@@ -412,6 +456,7 @@ export function InstallmentForm({
             </Button>
           </DialogFooter>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   );
