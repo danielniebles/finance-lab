@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Sora, DM_Sans, JetBrains_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import { Toaster } from "sonner";
@@ -28,6 +28,15 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Finance Lab",
   description: "Personal finance tracker",
+  appleWebApp: {
+    capable: true,
+    title: "Finance Lab",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1a2030",
 };
 
 export default async function RootLayout({
