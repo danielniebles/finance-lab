@@ -61,13 +61,45 @@ describe("buildWalletResolver — defaultWalletId fallback", () => {
 });
 
 describe("buildWalletResolver — no match", () => {
-  it("returns null when the label matches neither a wallet nor an account name", async () => {
+  it("returns null when the label matches nothing AND there's no Bancolombia account to fall back to", async () => {
     mockCatalog(
       [{ id: "w-nequi", name: "Nequi" }],
       [{ name: "Nequi", defaultWalletId: "w-nequi" }],
     );
     const resolve = await buildWalletResolver();
     expect(resolve("Unknown Label")).toBeNull();
+  });
+});
+
+describe("buildWalletResolver — unresolved-label fallback to Bancolombia's default wallet", () => {
+  it("falls back to Bancolombia's defaultWalletId for a bot guess that matches nothing", async () => {
+    mockCatalog(
+      [
+        { id: "w-debit", name: "debit/daily" },
+        { id: "w-savings", name: "savings" },
+      ],
+      [{ name: "Bancolombia", defaultWalletId: "w-debit" }],
+    );
+    const resolve = await buildWalletResolver();
+    expect(resolve("Debit")).toBe("w-debit");
+    expect(resolve("Debit Card")).toBe("w-debit");
+    expect(resolve("")).toBe("w-debit");
+  });
+
+  it("still prefers an exact wallet-name or account-name match over the fallback", async () => {
+    mockCatalog(
+      [
+        { id: "w-debit", name: "debit/daily" },
+        { id: "w-savings", name: "savings" },
+      ],
+      [
+        { name: "Bancolombia", defaultWalletId: "w-debit" },
+        { name: "Nu", defaultWalletId: "w-nu-default" },
+      ],
+    );
+    const resolve = await buildWalletResolver();
+    expect(resolve("savings")).toBe("w-savings");
+    expect(resolve("Nu")).toBe("w-nu-default");
   });
 });
 
