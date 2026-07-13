@@ -75,11 +75,12 @@ function LoanRow({
 
   return (
     <TableRow className="group/loanrow border-border/50">
-      <TableCell className="px-4">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: loan.accountColor ?? "#888" }} />
-          <span className="text-muted-foreground text-xs truncate">{maskStr(loan.accountName, masked)}</span>
-        </div>
+      <TableCell className="px-2">
+        <span
+          className="mx-auto block size-2.5 rounded-full"
+          style={{ backgroundColor: loan.accountColor ?? "#888" }}
+          title={maskStr(loan.accountName, masked)}
+        />
       </TableCell>
       <TableCell className="px-4 text-muted-foreground text-xs">
         {new Date(loan.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
@@ -479,10 +480,10 @@ export function DebtorsSection({
                         <Table className="table-fixed">
                           <TableHeader>
                             <TableRow className="bg-muted/20 hover:bg-muted/20 border-border/50">
-                              <TableHead className="px-4 h-8 w-32.5 text-xs text-muted-foreground">Account</TableHead>
-                              <TableHead className="px-4 h-8 w-23.75 text-xs text-muted-foreground">Date</TableHead>
-                              <TableHead className="px-4 h-8 w-27.5 text-xs text-muted-foreground">Original</TableHead>
-                              <TableHead className="px-4 h-8 w-38.75 text-xs text-muted-foreground">Repaid</TableHead>
+                              <TableHead className="px-2 h-8 w-10 text-xs text-muted-foreground">Account</TableHead>
+                              <TableHead className="px-4 h-8 w-30 text-xs text-muted-foreground">Date</TableHead>
+                              <TableHead className="px-4 h-8 w-35 text-xs text-muted-foreground">Original</TableHead>
+                              <TableHead className="px-4 h-8 w-33.75 text-xs text-muted-foreground">Repaid</TableHead>
                               <TableHead className="px-4 h-8 w-31.25 text-right text-xs text-muted-foreground">Remaining</TableHead>
                               <TableHead className="px-4 h-8 w-15 text-right text-xs text-muted-foreground hidden md:table-cell">Age</TableHead>
                               <TableHead className="px-4 h-8 w-21.25 text-right text-xs text-muted-foreground">Status</TableHead>

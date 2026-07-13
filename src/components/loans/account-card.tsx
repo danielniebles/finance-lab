@@ -177,6 +177,24 @@ function AccountEntryLog({
   );
 }
 
+function ExclusionBadges({ isExcluded, isExcludedFromTotal }: { isExcluded: boolean; isExcludedFromTotal: boolean }) {
+  if (!isExcluded && !isExcludedFromTotal) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {isExcluded && (
+        <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">
+          excluded
+        </span>
+      )}
+      {isExcludedFromTotal && (
+        <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">
+          hidden
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ─── Account card ─────────────────────────────────────────────────────────────
 
 export function AccountCard({ account, masked }: { account: AccountWithBalance; masked?: boolean }) {
@@ -188,6 +206,7 @@ export function AccountCard({ account, masked }: { account: AccountWithBalance; 
 
   const isNegative = account.balance < 0;
   const isExcluded = !account.includeInAvailable;
+  const isExcludedFromTotal = !account.includeInOverviewTotal;
 
   function handleDelete() {
     if (!confirm(`Delete "${account.name}"? This will also remove all its entries and loans.`)) return;
@@ -200,22 +219,18 @@ export function AccountCard({ account, masked }: { account: AccountWithBalance; 
 
   return (
     <>
-      <div className={cn("rounded-xl border bg-card overflow-hidden", isExcluded && "opacity-60")}>
+      <div className={cn("rounded-xl border bg-card overflow-hidden", (isExcluded || isExcludedFromTotal) && "opacity-60")}>
         <div className="p-4 flex flex-col gap-3 h-full">
           {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="size-3 rounded-full shrink-0" style={{ backgroundColor: account.color ?? "#888" }} />
-              <span className="font-medium text-sm">{account.name}</span>
-            </div>
-            <div className="flex items-center gap-1">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="size-3 rounded-full shrink-0" style={{ backgroundColor: account.color ?? "#888" }} />
+                <span className="font-medium text-sm truncate">{account.name}</span>
+              </div>
               <AccountTypeBadge type={account.accountType} />
-              {isExcluded && (
-                <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground ml-1">
-                  excluded
-                </span>
-              )}
             </div>
+            <ExclusionBadges isExcluded={isExcluded} isExcludedFromTotal={isExcludedFromTotal} />
           </div>
 
           {/* Balance */}

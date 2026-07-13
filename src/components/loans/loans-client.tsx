@@ -59,10 +59,6 @@ export function LoansClient({ accounts, debtors, mode, debtorId }: Props) {
             <ArrowRightLeft className="size-4" />
             Transfer
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen("payment")}>
-            <HandCoins className="size-4" />
-            Record payment
-          </Button>
           <Button size="sm" className="gap-1.5" onClick={() => setOpen("loan")}>
             <Plus className="size-4" />
             New loan

@@ -16,6 +16,9 @@ export type AccountWithBalance = {
    * follow-up (HANDOFF §4) on top of getWalletBalances().
    */
   includeInAvailable: boolean;
+  // Gates membership in the Overview "Total balance" grand total — a
+  // separate concern from includeInAvailable's liquidity gating.
+  includeInOverviewTotal: boolean;
   balance: number;
   loansOut: number;
   entries: { id: string; type: "INITIAL" | "ADJUSTMENT"; amount: number; date: Date; notes: string | null }[];
@@ -156,6 +159,7 @@ function buildAccountsWithBalance(
       accountType: acc.accountType as "BANK" | "DIGITAL" | "PENSION",
       color: acc.color,
       includeInAvailable: savingsWalletRollup?.includeInAvailable ?? true,
+      includeInOverviewTotal: acc.includeInOverviewTotal ?? true,
       balance,
       loansOut,
       entries: acc.entries,

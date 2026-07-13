@@ -23,6 +23,7 @@ export async function createAccount(data: {
   accountType: AccountType;
   color: string;
   includeInAvailable: boolean;
+  includeInOverviewTotal: boolean;
   initialBalance?: number;
   initialDate?: Date;
 }) {
@@ -74,7 +75,13 @@ export async function createAccount(data: {
  */
 export async function updateAccount(
   id: string,
-  data: { name: string; accountType: AccountType; color: string; includeInAvailable: boolean }
+  data: {
+    name: string;
+    accountType: AccountType;
+    color: string;
+    includeInAvailable: boolean;
+    includeInOverviewTotal: boolean;
+  }
 ) {
   const { includeInAvailable, ...accountData } = data;
   const account = await db.savingsAccount.update({ where: { id }, data: accountData });

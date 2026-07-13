@@ -87,6 +87,7 @@ export function AccountLinkRow({
         <span className="flex min-w-0 items-center gap-2">
           <ColorDot color={account.color} />
           <span className="truncate text-sm text-foreground">{account.name}</span>
+          {!account.includeInOverviewTotal && <ExcludedBadge />}
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
           <BalanceText balance={wallet.balance} />
@@ -97,12 +98,21 @@ export function AccountLinkRow({
   );
 }
 
+function ExcludedBadge() {
+  return (
+    <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground shrink-0">
+      hidden
+    </span>
+  );
+}
+
 function AccountSubtotalRow({ account }: { account: AccountWithWallets }) {
   return (
     <div className="-ml-2 -mr-2 flex min-w-0 items-center justify-between gap-3 py-2.5 pl-2 pr-2">
       <span className="flex min-w-0 items-center gap-2">
         <ColorDot color={account.color} />
         <span className="truncate text-sm font-medium text-foreground">{account.name}</span>
+        {!account.includeInOverviewTotal && <ExcludedBadge />}
       </span>
       <BalanceText balance={account.balance} weight="semibold" />
     </div>

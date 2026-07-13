@@ -178,6 +178,9 @@ model SavingsAccount {
   name               String         @unique
   accountType        AccountType
   color              String? // hex color for UI dot
+  // Gates membership in the Overview "Total balance" grand total (getWalletBalances).
+  // Separate from Wallet.includeInAvailable, which gates the Loans liquidity KPI.
+  includeInOverviewTotal Boolean    @default(true)
   entries            AccountEntry[]
   loansGiven         Loan[]
   transfersFrom      Transfer[]     @relation("TransferFrom")

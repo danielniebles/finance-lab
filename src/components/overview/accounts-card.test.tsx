@@ -40,6 +40,7 @@ function makeAccount(overrides: Partial<AccountWithWallets> = {}): AccountWithWa
     name: "Bancolombia",
     accountType: "BANK",
     color: "#4f46e5",
+    includeInOverviewTotal: true,
     balance: wallets.reduce((sum, w) => sum + w.balance, 0),
     wallets,
     ...overrides,

@@ -85,9 +85,13 @@ function AccountTypeSelect({
 }
 
 function IncludeCheckbox({
+  id,
+  label,
   checked,
   onChange,
 }: {
+  id: string;
+  label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
@@ -95,13 +99,13 @@ function IncludeCheckbox({
     <div className="flex items-center gap-2">
       <input
         type="checkbox"
-        id="include"
+        id={id}
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         className="size-4 rounded"
       />
-      <Label htmlFor="include" className="font-normal cursor-pointer">
-        Include in Available balance
+      <Label htmlFor={id} className="font-normal cursor-pointer">
+        {label}
       </Label>
     </div>
   );
@@ -131,6 +135,7 @@ type AccountFormData = {
   accountType: AccountType;
   color: string;
   includeInAvailable: boolean;
+  includeInOverviewTotal: boolean;
 };
 
 async function saveAccount(
@@ -156,6 +161,16 @@ async function saveAccount(
   }
 }
 
+/** Resolves useState initial values from the editing target, or form defaults for a new account. */
+function initialAccountFormState(editing: AccountWithBalance | null) {
+  return {
+    accountType: (editing?.accountType as AccountType) ?? AccountType.BANK,
+    color: editing?.color ?? "#EAB308",
+    includeInAvailable: editing?.includeInAvailable ?? true,
+    includeInOverviewTotal: editing?.includeInOverviewTotal ?? true,
+  };
+}
+
 /** Inner form — keyed so it remounts fresh when editing target changes. */
 function AccountFormInner({
   editing,
@@ -164,18 +179,20 @@ function AccountFormInner({
   editing: AccountWithBalance | null;
   onClose: () => void;
 }) {
-  const [accountType, setAccountType] = useState<AccountType>(
-    (editing?.accountType as AccountType) ?? AccountType.BANK
-  );
-  const [color, setColor] = useState(editing?.color ?? "#EAB308");
-  const [includeInAvailable, setIncludeInAvailable] = useState(
-    editing?.includeInAvailable ?? true
-  );
+  const initial = initialAccountFormState(editing);
+  const [accountType, setAccountType] = useState<AccountType>(initial.accountType);
+  const [color, setColor] = useState(initial.color);
+  const [includeInAvailable, setIncludeInAvailable] = useState(initial.includeInAvailable);
+  const [includeInOverviewTotal, setIncludeInOverviewTotal] = useState(initial.includeInOverviewTotal);
 
   const [state, action] = useActionState(
     async (_prev: FormState, formData: FormData): Promise<FormState> => {
       const name = (formData.get("name") as string).trim();
-      const result = await saveAccount(editing, { name, accountType, color, includeInAvailable }, formData);
+      const result = await saveAccount(
+        editing,
+        { name, accountType, color, includeInAvailable, includeInOverviewTotal },
+        formData
+      );
       if (!result) onClose();
       return result;
     },
@@ -206,7 +223,18 @@ function AccountFormInner({
         </div>
       </div>
 
-      <IncludeCheckbox checked={includeInAvailable} onChange={setIncludeInAvailable} />
+      <IncludeCheckbox
+        id="include-available"
+        label="Include in Available balance (Loans liquidity)"
+        checked={includeInAvailable}
+        onChange={setIncludeInAvailable}
+      />
+      <IncludeCheckbox
+        id="include-overview-total"
+        label="Include in Overview total balance"
+        checked={includeInOverviewTotal}
+        onChange={setIncludeInOverviewTotal}
+      />
 
       {!editing && <InitialBalanceFields />}
 

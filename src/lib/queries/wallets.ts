@@ -16,20 +16,26 @@ export type AccountWithWallets = {
   name: string;
   accountType: "BANK" | "DIGITAL" | "PENSION";
   color: string | null;
+  // Gates membership in `grandTotal` below — an account the user doesn't
+  // want folded into the headline number (e.g. a pension account) is still
+  // listed here, just excluded from the sum.
+  includeInOverviewTotal: boolean;
   balance: number; // Σ this account's wallets
   wallets: WalletBalance[];
 };
 
 export type WalletBalancesResult = {
   accounts: AccountWithWallets[];
-  grandTotal: number; // Σ ALL wallet.balance — the real bank balance (Home number)
+  grandTotal: number; // Σ wallet.balance for accounts with includeInOverviewTotal (Home number)
 };
 
 /**
  * Per-wallet balances + a grand total across every institution (ADR-036/037,
- * HANDOFF §3). This is the Home/Overview number — every partition included,
- * grand total = the actual bank balance. Contrast with `getLoansOverview`
- * (`queries/loans.ts`), which reports only the `isSavings` subset.
+ * HANDOFF §3). This is the Home/Overview number — every partition of an
+ * included account counts, grand total = the user's chosen subset of the
+ * real bank balance (SavingsAccount.includeInOverviewTotal). Contrast with
+ * `getLoansOverview` (`queries/loans.ts`), which reports only the
+ * `isSavings` subset gated by the separate Wallet.includeInAvailable flag.
  */
 export async function getWalletBalances(): Promise<WalletBalancesResult> {
   const [accounts, walletTransactions] = await Promise.all([
@@ -70,12 +76,15 @@ export async function getWalletBalances(): Promise<WalletBalancesResult> {
       name: acc.name,
       accountType: acc.accountType as "BANK" | "DIGITAL" | "PENSION",
       color: acc.color,
+      includeInOverviewTotal: acc.includeInOverviewTotal ?? true,
       balance: wallets.reduce((sum, w) => sum + w.balance, 0),
       wallets,
     };
   });
 
-  const grandTotal = accountsWithWallets.reduce((sum, a) => sum + a.balance, 0);
+  const grandTotal = accountsWithWallets
+    .filter((a) => a.includeInOverviewTotal)
+    .reduce((sum, a) => sum + a.balance, 0);
 
   return { accounts: accountsWithWallets, grandTotal };
 }
