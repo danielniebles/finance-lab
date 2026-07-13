@@ -13,7 +13,7 @@ export default async function CategoriesPage() {
   });
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="mx-auto max-w-4xl space-y-6">
       <h1 className="text-2xl font-semibold">Categories</h1>
       <p className="text-sm text-muted-foreground">
         Define your simplified budget categories. Each category has a monthly budget that applies to every month.

@@ -274,8 +274,11 @@ function AddBudgetItemRow({
   );
 }
 
-// Grid columns: chevron | name+count | type | mappings | amount | actions
-const ROW_GRID = "grid grid-cols-[1.25rem_1fr_5.5rem_7rem_8rem_3.75rem] items-center gap-3 px-4 py-3";
+// Grid columns: chevron | name+count | type | mappings | amount | actions.
+// Mappings and the item count are single digits/short numbers (not the old
+// "N mappings" / "No mappings" text), so those two columns stay narrow and
+// the name column — the thing this table exists to show — gets the space.
+const ROW_GRID = "grid grid-cols-[1.25rem_1fr_5rem_3rem_8rem_3.75rem] items-center gap-3 px-4 py-3";
 
 function StateChip({ custom }: { custom: boolean }) {
   return (
@@ -453,7 +456,7 @@ function IconSwatchGrid({
   onSelect: (key: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+    <div className="grid grid-cols-5 gap-2 sm:grid-cols-8">
       {CATEGORY_ICON_KEYS.map((key, idx) => {
         const Icon = ICON_REGISTRY[key];
         const isSelected = key === effectiveKey;
@@ -656,22 +659,25 @@ function CategoryRowGrid({
       <div className="flex items-center gap-2 min-w-0">
         <CategorySwatchButton cat={cat} onClick={onOpenStyleDialog} />
         <span className="font-medium truncate">{cat.name}</span>
-        <span className="text-xs text-muted-foreground shrink-0">
-          {cat.budgetItems.length} item{cat.budgetItems.length !== 1 ? "s" : ""}
+        <span
+          className="text-xs text-muted-foreground shrink-0 tabular-nums"
+          title={`${cat.budgetItems.length} budget item${cat.budgetItems.length !== 1 ? "s" : ""}`}
+        >
+          {cat.budgetItems.length}
         </span>
       </div>
 
       <TypeBadge type={effectiveType} />
 
-      {cat._count.mappings === 0 ? (
-        <span className="inline-flex items-center rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
-          No mappings
-        </span>
-      ) : (
-        <span className="text-xs text-muted-foreground w-fit">
-          {cat._count.mappings} mapping{cat._count.mappings !== 1 ? "s" : ""}
-        </span>
-      )}
+      <span
+        className={cn(
+          "font-mono text-sm tabular-nums",
+          cat._count.mappings === 0 ? "font-semibold text-warning" : "text-muted-foreground"
+        )}
+        title={cat._count.mappings === 0 ? "No mappings" : undefined}
+      >
+        {cat._count.mappings}
+      </span>
 
       <span className="font-mono text-sm text-right">
         {formatCOP(total)}
@@ -840,40 +846,48 @@ export function CategoryList({ categories }: { categories: Category[] }) {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border divide-y-0 overflow-hidden">
-        {/* Column headers */}
-        <div className={`${ROW_GRID} border-b border-border/60 bg-muted/20 py-2 text-xs text-muted-foreground uppercase tracking-wide`}>
-          <span />
-          <span>Category</span>
-          <span>Type</span>
-          <span>Mappings</span>
-          <span className="text-right">Budget / mo</span>
-          <span />
+      <div className="rounded-xl border border-border overflow-hidden">
+        {/* Row content is a fixed-width grid (six columns) — narrower than
+            that on mobile, columns would either overflow the card or squeeze
+            into each other. Scrolling horizontally here keeps every column
+            legible instead. */}
+        <div className="overflow-x-auto">
+          <div className="min-w-[40rem] divide-y-0">
+            {/* Column headers */}
+            <div className={`${ROW_GRID} border-b border-border/60 bg-muted/20 py-2 text-xs text-muted-foreground uppercase tracking-wide`}>
+              <span />
+              <span>Category</span>
+              <span>Type</span>
+              <span title="Mappings">Maps</span>
+              <span className="text-right">Budget / mo</span>
+              <span />
+            </div>
+
+            {sorted.map((cat) => (
+              <CategoryRow key={cat.id} cat={cat} />
+            ))}
+
+            {categories.length === 0 && (
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                No categories yet. Add one below.
+              </div>
+            )}
+
+            {categories.length > 0 && sorted.length === 0 && (
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                No {FILTER_LABELS[filterType].toLowerCase()} categories.
+              </div>
+            )}
+
+            {adding && <AddCategoryRow onDone={() => setAdding(false)} />}
+          </div>
         </div>
-
-        {sorted.map((cat) => (
-          <CategoryRow key={cat.id} cat={cat} />
-        ))}
-
-        {categories.length === 0 && (
-          <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-            No categories yet. Add one below.
-          </div>
-        )}
-
-        {categories.length > 0 && sorted.length === 0 && (
-          <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-            No {FILTER_LABELS[filterType].toLowerCase()} categories.
-          </div>
-        )}
-
-        {adding && <AddCategoryRow onDone={() => setAdding(false)} />}
       </div>
 
       {/* Budget totals */}
       {categories.length > 0 && (
-        <div className="flex items-center gap-6 px-4 py-2.5 rounded-lg border border-border/40 text-sm">
-          <span className="text-xs text-muted-foreground uppercase tracking-wide mr-2">Totals</span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 rounded-lg border border-border/40 text-sm">
+          <span className="text-xs text-muted-foreground uppercase tracking-wide">Totals</span>
           <div className="flex items-center gap-1.5">
             <TypeBadge type="FIXED" />
             <span className="font-mono text-sm">{formatCOP(fixedTotal)}</span>
@@ -882,7 +896,7 @@ export function CategoryList({ categories }: { categories: Category[] }) {
             <TypeBadge type="VARIABLE" />
             <span className="font-mono text-sm">{formatCOP(variableTotal)}</span>
           </div>
-          <div className="ml-auto font-mono text-sm font-medium">
+          <div className="sm:ml-auto font-mono text-sm font-medium">
             {formatCOP(fixedTotal + variableTotal)} / mo
           </div>
         </div>

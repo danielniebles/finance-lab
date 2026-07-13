@@ -1,7 +1,6 @@
 "use client";
 
 import { formatCOP } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import type { LedgerGroup, LedgerGroupBy } from "@/lib/queries/transactions";
 import type { CategoryOption } from "@/lib/queries/expenses";
 import { TransactionRow } from "@/components/expenses/transaction-row";
@@ -50,14 +49,13 @@ function TransactionGroupSection({
 }
 
 function GroupHeader({ label, subtotal }: { label: string; subtotal: number }) {
-  const tone = subtotal < 0 ? "text-destructive" : subtotal > 0 ? "text-success" : "text-foreground";
   return (
     <div className="flex items-center justify-between px-4 py-2 bg-muted">
       <span className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
-      <span className={cn("font-mono text-lg font-semibold tabular-nums", tone)}>
-        {subtotal < 0 ? "-" : ""}
+      <span className="font-mono text-lg font-semibold tabular-nums text-foreground">
+        {subtotal < 0 ? "-" : "+"}
         {formatCOP(Math.abs(subtotal))}
       </span>
     </div>

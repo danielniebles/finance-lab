@@ -27,6 +27,14 @@ export const CATEGORY_ICON_KEYS = [
   "paw-print",
   "landmark",
   "wallet",
+  "beef",
+  "fish",
+  "carrot",
+  "paintbrush-vertical",
+  "briefcase-medical",
+  "drama",
+  "gamepad-2",
+  "hand-heart",
 ] as const;
 
 export type CategoryIconKey = (typeof CATEGORY_ICON_KEYS)[number];

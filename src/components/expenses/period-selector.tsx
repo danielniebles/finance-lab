@@ -105,18 +105,20 @@ export function PeriodSelector({
       </Button>
 
       <div className="text-center min-w-36">
-        <span className="font-heading text-sm font-semibold">
-          {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
-        </span>
-        {isInProgress && (
-          <span className="ml-2 inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
-            in progress
+        <div className="flex items-center justify-center gap-2">
+          <span className="font-heading text-sm font-semibold">
+            {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
           </span>
-        )}
+          {isInProgress && (
+            <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+              in progress
+            </span>
+          )}
+        </div>
         {startDay > 1 && (
-          <span className="ml-2 text-xs text-muted-foreground">
+          <div className="mt-0.5 text-xs text-muted-foreground">
             {periodRangeLabel(selectedMonth, selectedYear, startDay)}
-          </span>
+          </div>
         )}
       </div>
 

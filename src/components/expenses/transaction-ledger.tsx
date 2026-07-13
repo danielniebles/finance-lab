@@ -2,17 +2,15 @@ import {
   getTransactionList,
   type LedgerGroupBy,
   type LedgerFilters,
-  type CategorySummaryRow,
 } from "@/lib/queries/transactions";
 import { getCategories } from "@/lib/queries/expenses";
 import { getWalletBalances } from "@/lib/queries/wallets";
-import { formatCOP } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/expenses/analysis-dashboard";
 import { LedgerControls } from "@/components/expenses/ledger-controls";
 import { AddTransactionRow } from "@/components/expenses/add-transaction-row";
 import { TransactionGroupList } from "@/components/expenses/transaction-group-list";
 import { LedgerEmptyState } from "@/components/expenses/ledger-empty-state";
+import { CategorySummaryPanel } from "@/components/expenses/category-summary-panel";
 
 type Props = {
   month: number;
@@ -91,45 +89,6 @@ export async function TransactionLedgerPage({ month, year, groupBy, filters }: P
           <TransactionGroupList groups={result.groups} groupBy={groupBy} categories={categories} />
         )}
       </LedgerControls>
-    </div>
-  );
-}
-
-// Informational only — clicking a row here does NOT filter the list below
-// (CategorySelect already owns that action; a second hidden trigger for the
-// same re-query would be a duplicate control, per the design spec).
-function CategorySummaryPanel({ rows }: { rows: CategorySummaryRow[] }) {
-  if (rows.length === 0) return null;
-
-  return (
-    <div className="rounded-xl border border-border/60 bg-card p-4 space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Categories
-      </p>
-      <div className="space-y-1">
-        {rows.map((row) => (
-          <div
-            key={row.name}
-            className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2"
-          >
-            <span className="text-sm truncate">{row.name}</span>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs text-muted-foreground">
-                {row.count} txn{row.count !== 1 ? "s" : ""}
-              </span>
-              <span
-                className={cn(
-                  "font-mono text-sm tabular-nums",
-                  row.total < 0 ? "text-destructive" : "text-success"
-                )}
-              >
-                {row.total < 0 ? "-" : ""}
-                {formatCOP(Math.abs(row.total))}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

@@ -77,7 +77,7 @@ describe("TransactionGroupList — redundant-column suppression", () => {
     expect(screen.getByText("Groceries")).toBeInTheDocument();
   });
 
-  it("renders the group header label and a negative, sign-colored subtotal", () => {
+  it("renders the group header label and a signed subtotal in neutral text", () => {
     const { container } = render(
       <TransactionGroupList groups={GROUPS} groupBy="day" categories={CATEGORIES} />
     );
@@ -86,6 +86,7 @@ describe("TransactionGroupList — redundant-column suppression", () => {
     const header = container.querySelector(".bg-muted");
     const subtotal = header?.querySelector(".font-mono");
     expect(subtotal?.textContent).toMatch(/^-\$\s?50[.,]000$/);
-    expect(subtotal).toHaveClass("text-destructive");
+    expect(subtotal).toHaveClass("text-foreground");
+    expect(subtotal).not.toHaveClass("text-destructive");
   });
 });

@@ -13,6 +13,7 @@ import {
   categoryIconDisplayName,
   categoryColorDisplayName,
   ICON_REGISTRY,
+  CATEGORY_ICON_KEYS,
 } from "./category-style";
 
 describe("resolveEffectiveCategoryStyle", () => {
@@ -94,6 +95,6 @@ describe("categoryPaletteClasses / display name helpers", () => {
 
   it("ICON_REGISTRY does not expose the reserved Tag fallback as a selectable key", () => {
     expect(Object.values(ICON_REGISTRY)).not.toContain(Tag);
-    expect(Object.keys(ICON_REGISTRY)).toHaveLength(16);
+    expect(Object.keys(ICON_REGISTRY)).toHaveLength(CATEGORY_ICON_KEYS.length);
   });
 });

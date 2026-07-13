@@ -15,6 +15,14 @@ import {
   PawPrint,
   Landmark,
   Wallet,
+  Beef,
+  Fish,
+  Carrot,
+  PaintbrushVertical,
+  BriefcaseMedical,
+  Drama,
+  Gamepad2,
+  HandHeart,
   Tag,
   type LucideIcon,
 } from "lucide-react";
@@ -107,7 +115,7 @@ export const CATEGORY_SOLID_SWATCH: Record<CategoryColorKey, string> = {
   indigo: "bg-indigo-500",
 };
 
-// Stable registry of the 16 selectable icon keys (Category icon & color
+// Stable registry of the 24 selectable icon keys (Category icon & color
 // picker), keyed by the shared `CategoryIconKey` union imported from
 // src/lib/category-keys.ts — that same module's `CATEGORY_ICON_KEYS` is also
 // imported directly by src/lib/actions/categories.ts, so both sides
@@ -131,6 +139,14 @@ export const ICON_REGISTRY: Record<CategoryIconKey, LucideIcon> = {
   "paw-print": PawPrint,
   landmark: Landmark,
   wallet: Wallet,
+  beef: Beef,
+  fish: Fish,
+  carrot: Carrot,
+  "paintbrush-vertical": PaintbrushVertical,
+  "briefcase-medical": BriefcaseMedical,
+  drama: Drama,
+  "gamepad-2": Gamepad2,
+  "hand-heart": HandHeart,
 };
 
 // Display label for an icon/color picker swatch's aria-label, e.g.
@@ -211,7 +227,7 @@ function findIconKey(icon: LucideIcon): CategoryIconKey | null {
 // "Auto" value for a given category name, so the UI can ring-highlight it
 // when that field has no stored override yet. `iconKey` can be null (the
 // name-derived icon is the reserved `Tag` fallback, which isn't one of the
-// 16 selectable registry keys) — `colorKey` is always resolvable for any
+// 24 selectable registry keys) — `colorKey` is always resolvable for any
 // non-empty category name (rule match or deterministic hash fallback).
 export function getAutoCategoryKeys(categoryName: string | null): {
   iconKey: CategoryIconKey | null;

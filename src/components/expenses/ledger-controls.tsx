@@ -322,7 +322,7 @@ function SearchInput({
       onChange={(e) => setText(e.target.value)}
       placeholder="Buscar por nota…"
       aria-label="Buscar por nota"
-      className="h-8 w-48"
+      className="h-8 w-48 text-sm"
     />
   );
 }
