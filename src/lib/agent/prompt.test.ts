@@ -26,6 +26,14 @@ describe("buildSystemPrompt — counterparty rules (ADR-033)", () => {
   });
 });
 
+describe("buildSystemPrompt — no phantom proposal claims", () => {
+  const prompt = buildSystemPrompt({ now: new Date("2026-07-06") });
+
+  it("forbids claiming a drafted/proposed action without actually calling a propose_* tool", () => {
+    expect(prompt).toContain("unless you actually call a propose_* tool in this same turn");
+  });
+});
+
 describe("buildSystemPrompt — card-screenshot batch ingestion (ADR-034)", () => {
   const prompt = buildSystemPrompt({ now: new Date("2026-07-06") });
 

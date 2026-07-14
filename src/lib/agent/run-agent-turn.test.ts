@@ -133,7 +133,7 @@ import {
   RESOLVER_REGISTRY,
 } from "./proposals";
 import { PROPOSAL_ACTIONS } from "./actions";
-import { deduplicateHistory, collectTextBlocks } from "./run-agent-turn";
+import { deduplicateHistory, collectTextBlocks, isUnbackedProposalClaim } from "./run-agent-turn";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -1626,6 +1626,46 @@ describe("deduplicateHistory", () => {
     const original = [...history];
     deduplicateHistory(history);
     expect(history).toEqual(original);
+  });
+});
+
+// ─── isUnbackedProposalClaim ──────────────────────────────────────────────
+// Regression guard for the bug where the model ends a turn on plain text
+// ("Drafted for your approval... [Proposed: ... — awaiting your approval]")
+// with zero actual propose_* tool calls having run — nothing was ever
+// persisted, but the reply reads exactly like a real success.
+
+describe("isUnbackedProposalClaim", () => {
+  it("flags 'drafted for your approval' text with zero actions taken", () => {
+    expect(
+      isUnbackedProposalClaim(
+        "Drafted for your approval — $13.948 COP en Uber Maria, categoría Going Out, cuenta Debit. ✅",
+        0,
+      ),
+    ).toBe(true);
+  });
+
+  it("flags the '[Proposed: ... awaiting your approval]' summary line with zero actions taken", () => {
+    expect(
+      isUnbackedProposalClaim(
+        "[Proposed: Add expense: Debit — $ 13.948 — awaiting your approval]",
+        0,
+      ),
+    ).toBe(true);
+  });
+
+  it("does not flag the same text when a real proposal/auto-record was actually produced", () => {
+    expect(
+      isUnbackedProposalClaim("Drafted for your approval — $13.948 COP.", 1),
+    ).toBe(false);
+  });
+
+  it("does not flag ordinary text with no action-claiming language", () => {
+    expect(isUnbackedProposalClaim("Your savings rate this month is 22%.", 0)).toBe(false);
+  });
+
+  it("is case-insensitive", () => {
+    expect(isUnbackedProposalClaim("DRAFTED FOR YOUR APPROVAL", 0)).toBe(true);
   });
 });
 

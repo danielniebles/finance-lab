@@ -197,6 +197,20 @@ export function deduplicateHistory<T extends { role: "user" | "assistant" }>(
   return history;
 }
 
+// A model turn can end on plain text (stop_reason "end_turn", no tool_use
+// block at all) yet still use action-claiming language it picked up from its
+// own prior turns in history (e.g. "drafted for your approval") — nothing
+// else in the loop distinguishes that from a REAL proposal. This is a
+// defensive backstop for exactly that mismatch: text that CLAIMS a proposal
+// exists while zero proposals/auto-records were actually produced this turn.
+// Kept as a plain substring/regex check (not asking the model to self-report)
+// since the whole point is not to trust the model's own claim.
+const FALSE_PROPOSAL_CLAIM_RE = /drafted for your approval|awaiting your approval|proposed:/i;
+
+export function isUnbackedProposalClaim(text: string, actionsTakenCount: number): boolean {
+  return actionsTakenCount === 0 && FALSE_PROPOSAL_CLAIM_RE.test(text);
+}
+
 export function collectTextBlocks(
   blocks: Anthropic.Messages.ContentBlock[],
   onTextDelta?: (delta: string) => void,
@@ -281,6 +295,20 @@ export async function runAgentTurn(args: {
       historyLength: history.length,
       lastTool,
     });
+  }
+
+  // Backstop against a phantom "success" reply (see isUnbackedProposalClaim
+  // above): if the model's final text claims a drafted/proposed action but
+  // this turn produced zero real proposals or auto-records, the claim is
+  // false — replace it so neither the user nor the persisted ChatMessage
+  // history ever records an action that didn't happen.
+  if (isUnbackedProposalClaim(fullText, proposals.length + autoRecorded.length)) {
+    console.error("[run-agent-turn] Model claimed a drafted proposal with no backing tool call:", {
+      fullText,
+      historyLength: history.length,
+      lastTool,
+    });
+    fullText = "Something went wrong drafting that — nothing was recorded. Please try again.";
   }
 
   return { text: fullText, proposals, autoRecorded };
