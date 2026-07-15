@@ -14,7 +14,8 @@ import { VaultLedger } from "./vault-ledger";
 import { RecurringList } from "./recurring-list";
 import type { VaultWithMetrics, VaultObligations } from "@/lib/queries/vaults";
 import type { getRecurringExpenses } from "@/lib/queries/recurring";
-import type { AccountOption } from "@/lib/queries/accounts";
+import type { AccountWithWallets } from "@/lib/queries/wallets";
+import type { CategoryOption } from "@/lib/queries/expenses";
 
 // ─── StatInline — mirrors installments-dashboard pattern ─────────────────────
 
@@ -70,12 +71,13 @@ type Props = {
   recurringVaults: VaultWithMetrics[];
   month: number;
   year: number;
-  accounts: AccountOption[];
+  walletAccounts: AccountWithWallets[];
+  categories: CategoryOption[];
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function VaultsDashboard({ vaults, obligations, recurringData, recurringVaults, accounts }: Props) {
+export function VaultsDashboard({ vaults, obligations, recurringData, recurringVaults, walletAccounts, categories }: Props) {
   // Vault form dialog
   const [vaultFormOpen, setVaultFormOpen] = useState(false);
   const [vaultFormMode, setVaultFormMode] = useState<"create" | "edit">("create");
@@ -262,7 +264,8 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
         onClose={() =>
           setEntryState((prev) => ({ ...prev, open: false }))
         }
-        accounts={accounts}
+        walletAccounts={walletAccounts}
+        categories={categories}
       />
 
       {/* Ledger sheet */}

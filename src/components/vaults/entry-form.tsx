@@ -16,7 +16,8 @@ import {
 import { addVaultEntry } from "@/lib/actions/vaults";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { AccountOption } from "@/lib/queries/accounts";
+import type { AccountWithWallets } from "@/lib/queries/wallets";
+import type { CategoryOption } from "@/lib/queries/expenses";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -29,7 +30,8 @@ type Props = {
   vaultName: string;
   currentBalance: number;
   onClose: () => void;
-  accounts: AccountOption[];
+  walletAccounts: AccountWithWallets[];
+  categories: CategoryOption[];
 };
 
 // ─── Form state ───────────────────────────────────────────────────────────────
@@ -38,7 +40,8 @@ type FormState = {
   amount: string;
   date: string;
   notes: string;
-  sourceAccountId: string;
+  walletId: string;
+  appCategoryId: string;
 };
 
 function today(): string {
@@ -49,8 +52,21 @@ const EMPTY_FORM: FormState = {
   amount: "",
   date: today(),
   notes: "",
-  sourceAccountId: "",
+  walletId: "",
+  appCategoryId: "",
 };
+
+type WalletChoice = { id: string; label: string; balance: number };
+
+function flattenWalletChoices(walletAccounts: AccountWithWallets[]): WalletChoice[] {
+  return walletAccounts.flatMap((account) =>
+    account.wallets.map((wallet) => ({
+      id: wallet.id,
+      label: `${account.name} — ${wallet.name}`,
+      balance: wallet.balance,
+    })),
+  );
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -61,7 +77,8 @@ export function EntryForm({
   vaultName,
   currentBalance,
   onClose,
-  accounts,
+  walletAccounts,
+  categories,
 }: Props) {
   const [direction, setDirection] = useState<Direction>(initialDirection);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -72,13 +89,13 @@ export function EntryForm({
     if (!isOpen) handleClose();
     else {
       setDirection(initialDirection);
-      setForm({ ...EMPTY_FORM, date: today(), sourceAccountId: "" });
+      setForm(EMPTY_FORM);
       setError(null);
     }
   }
 
   function handleClose() {
-    setForm({ ...EMPTY_FORM, date: today(), sourceAccountId: "" });
+    setForm(EMPTY_FORM);
     setError(null);
     onClose();
   }
@@ -93,21 +110,31 @@ export function EntryForm({
     !isNaN(parsedAmount) &&
     parsedAmount > currentBalance;
 
-  const selectedAccount = accounts.find((a) => a.id === form.sourceAccountId);
+  const walletChoices = flattenWalletChoices(walletAccounts);
+  const selectedWallet = walletChoices.find((w) => w.id === form.walletId);
+  const needsCategory = direction === "contribute" && form.walletId !== "";
+  const selectedCategory = categories.find((c) => c.id === form.appCategoryId);
+
+  const canSubmit =
+    !!form.amount &&
+    !isNaN(parsedAmount) &&
+    parsedAmount > 0 &&
+    (!needsCategory || form.appCategoryId !== "");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.amount || isNaN(parsedAmount) || parsedAmount <= 0) return;
+    if (!canSubmit) return;
     setError(null);
 
     const signedAmount = direction === "contribute" ? parsedAmount : -parsedAmount;
     const entryDate = form.date ? new Date(form.date) : undefined;
     const notes = form.notes.trim() || undefined;
-    const sourceAccountId = form.sourceAccountId || undefined;
+    const walletId = direction === "contribute" && form.walletId ? form.walletId : undefined;
+    const appCategoryId = walletId ? form.appCategoryId : undefined;
 
     startTransition(async () => {
       try {
-        await addVaultEntry(vaultId, signedAmount, entryDate, notes, sourceAccountId);
+        await addVaultEntry(vaultId, signedAmount, { date: entryDate, notes, walletId, appCategoryId });
         handleClose();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -236,42 +263,71 @@ export function EntryForm({
             />
           </div>
 
-          {/* From account — contributions only */}
-          {direction === "contribute" && accounts.length > 0 && (
+          {/* From wallet — contributions only */}
+          {direction === "contribute" && walletChoices.length > 0 && (
             <div className="space-y-1.5">
               <Label
-                htmlFor="entry-source-account"
+                htmlFor="entry-wallet"
                 className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground"
               >
-                From account{" "}
+                From wallet{" "}
                 <span className="text-muted-foreground font-normal normal-case tracking-normal">
                   (optional)
                 </span>
               </Label>
               <Select
-                value={form.sourceAccountId}
-                onValueChange={(v) => setField("sourceAccountId", v ?? "")}
+                value={form.walletId}
+                onValueChange={(v) => setField("walletId", v ?? "")}
               >
-                <SelectTrigger id="entry-source-account" className="h-9" disabled={pending}>
+                <SelectTrigger id="entry-wallet" className="h-9" disabled={pending}>
                   <span className="text-sm">
-                    {selectedAccount ? selectedAccount.name : "None (notional)"}
+                    {selectedWallet ? selectedWallet.label : "None (notional)"}
                   </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">None (notional)</SelectItem>
-                  {accounts.map((acc) => (
-                    <SelectItem key={acc.id} value={acc.id}>
-                      {acc.name} — {formatCOP(acc.balance)}
+                  {walletChoices.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.label} — {formatCOP(w.balance)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {selectedAccount && (
+              {selectedWallet && (
                 <p className="text-xs text-muted-foreground">
-                  Moves {parsedAmount > 0 ? formatCOP(parsedAmount) : "this amount"} out of{" "}
-                  {selectedAccount.name}&apos;s available balance.
+                  Records a {parsedAmount > 0 ? formatCOP(parsedAmount) : "matching"} expense against{" "}
+                  {selectedWallet.label} — reduces its balance like any other spend.
                 </p>
               )}
+            </div>
+          )}
+
+          {/* Category — required once a wallet is chosen */}
+          {needsCategory && (
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="entry-category"
+                className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+              >
+                Category
+              </Label>
+              <Select
+                value={form.appCategoryId}
+                onValueChange={(v) => setField("appCategoryId", v ?? "")}
+              >
+                <SelectTrigger id="entry-category" className="h-9" disabled={pending}>
+                  <span className="text-sm">
+                    {selectedCategory ? selectedCategory.name : "Choose a category"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 
@@ -294,7 +350,7 @@ export function EntryForm({
             </Button>
             <Button
               type="submit"
-              disabled={pending}
+              disabled={pending || !canSubmit}
               className={
                 direction === "withdraw"
                   ? "bg-destructive/10 text-destructive hover:bg-destructive/20 border-0 shadow-none"

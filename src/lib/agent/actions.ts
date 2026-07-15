@@ -122,25 +122,21 @@ async function executeUpdateVault(
 async function executeVaultContribution(
   params: Record<string, unknown>,
 ): Promise<void> {
-  await addVaultEntry(
-    params.vaultId as string,
-    Number(params.amount),
-    params.date != null ? new Date(params.date as string) : undefined,
-    params.notes as string | undefined,
-    (params.sourceAccountId as string | undefined) ?? null,
-  );
+  await addVaultEntry(params.vaultId as string, Number(params.amount), {
+    date: params.date != null ? new Date(params.date as string) : undefined,
+    notes: params.notes as string | undefined,
+    sourceAccountId: (params.sourceAccountId as string | undefined) ?? null,
+  });
 }
 
 async function executeVaultWithdrawal(
   params: Record<string, unknown>,
 ): Promise<void> {
-  await addVaultEntry(
-    params.vaultId as string,
-    -Number(params.amount),
-    params.date != null ? new Date(params.date as string) : undefined,
-    params.notes as string | undefined,
-    (params.sourceAccountId as string | undefined) ?? null,
-  );
+  await addVaultEntry(params.vaultId as string, -Number(params.amount), {
+    date: params.date != null ? new Date(params.date as string) : undefined,
+    notes: params.notes as string | undefined,
+    sourceAccountId: (params.sourceAccountId as string | undefined) ?? null,
+  });
 }
 
 async function executeArchiveVault(

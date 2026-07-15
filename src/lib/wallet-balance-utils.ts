@@ -100,7 +100,12 @@ export type AccountForWalletBalances = {
   savingsWalletId: string | null;
   wallets: WalletForBalance[];
   loansGiven: { walletId: string | null; amount: number; date: Date; payments: DatedFlow[] }[];
-  vaultEntriesFunded: { sourceWalletId: string | null; amount: number; date: Date }[];
+  /**
+   * transactionId set means this entry created a real Transaction — that
+   * money is already reflected in `transactions` via the normal sum, so it's
+   * excluded here to avoid subtracting it twice.
+   */
+  vaultEntriesFunded: { sourceWalletId: string | null; amount: number; date: Date; transactionId: string | null }[];
   entries: DatedFlow[];
   transfersTo: DatedFlow[];
   transfersFrom: DatedFlow[];
@@ -132,7 +137,7 @@ export function computeWalletBalancesForAccount(
       loanPayments: account.loansGiven
         .filter((l) => l.walletId === w.id)
         .flatMap((l) => l.payments),
-      vaultFunded: account.vaultEntriesFunded.filter((v) => v.sourceWalletId === w.id),
+      vaultFunded: account.vaultEntriesFunded.filter((v) => v.sourceWalletId === w.id && !v.transactionId),
       accountEntries: isSavingsWallet ? account.entries : [],
       transfersIn: isSavingsWallet ? account.transfersTo : [],
       transfersOut: isSavingsWallet ? account.transfersFrom : [],

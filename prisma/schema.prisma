@@ -93,6 +93,9 @@ model Transaction {
   // migration; `wallet` (the legacy string label) is kept as a fallback + audit trail.
   walletId             String?
   walletRef            Wallet?             @relation(fields: [walletId], references: [id])
+  // Back-relation for a VaultEntry this transaction was created for (wallet
+  // + category vault funding) — see VaultEntry.transactionId.
+  vaultEntry           VaultEntry?
 }
 
 enum BudgetType {
@@ -334,6 +337,13 @@ model VaultEntry {
   // savingsWalletId.
   sourceWalletId  String?
   sourceWallet    Wallet?         @relation("VaultFundingWallet", fields: [sourceWalletId], references: [id], onDelete: SetNull)
+  // When set, this contribution created a real, categorized Transaction
+  // (money genuinely left sourceWallet) — the wallet's balance is reduced
+  // via the normal transaction sum, NOT the sourceWalletId earmark rule
+  // (see wallet-balance-utils.ts). Null means either a notional entry (no
+  // sourceWalletId) or a legacy earmark-only entry predating this field.
+  transactionId   String?         @unique
+  transaction     Transaction?    @relation(fields: [transactionId], references: [id], onDelete: SetNull)
 }
 
 // ─── Module 5: Recurring Expenses ────────────────────────────────────────────
