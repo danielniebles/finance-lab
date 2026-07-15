@@ -16,7 +16,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               Finance Lab
             </span>
           </header>
-          <main className="flex-1 overflow-auto p-6 pb-24 md:pb-6">
+          <main className="flex-1 overflow-auto p-6 pb-28 md:pb-6">
             <div className="mx-auto w-full max-w-7xl">{children}</div>
           </main>
         </SidebarInset>

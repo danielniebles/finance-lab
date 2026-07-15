@@ -22,38 +22,42 @@ export function MobileBottomNav() {
   const isMoreActive = moreRoutes.some((href) => pathname.startsWith(href));
 
   return (
-    <nav
-      aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden"
+    <div
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] md:hidden"
     >
-      {items.map((item) => {
-        const isActive = pathname.startsWith(item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-medium transition-colors",
-              isActive ? "text-primary" : "text-muted-foreground",
-            )}
-            aria-current={isActive ? "page" : undefined}
-          >
-            <item.icon className="size-6" aria-hidden="true" />
-            {item.title}
-          </Link>
-        );
-      })}
-      <button
-        type="button"
-        onClick={() => setOpenMobile(true)}
-        className={cn(
-          "flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-medium transition-colors",
-          isMoreActive ? "text-primary" : "text-muted-foreground",
-        )}
+      <nav
+        aria-label="Primary"
+        className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/10 bg-card/70 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.4)] backdrop-blur-xl supports-[backdrop-filter]:bg-card/60"
       >
-        <MoreHorizontal className="size-6" aria-hidden="true" />
-        More
-      </button>
-    </nav>
+        {items.map((item) => {
+          const isActive = pathname.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex size-12 items-center justify-center rounded-full transition-colors",
+                isActive ? "bg-primary/15 text-primary" : "text-muted-foreground",
+              )}
+              aria-current={isActive ? "page" : undefined}
+            >
+              <item.icon className="size-5" aria-hidden="true" />
+              <span className="sr-only">{item.title}</span>
+            </Link>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => setOpenMobile(true)}
+          className={cn(
+            "flex size-12 items-center justify-center rounded-full transition-colors",
+            isMoreActive ? "bg-primary/15 text-primary" : "text-muted-foreground",
+          )}
+        >
+          <MoreHorizontal className="size-5" aria-hidden="true" />
+          <span className="sr-only">More</span>
+        </button>
+      </nav>
+    </div>
   );
 }
