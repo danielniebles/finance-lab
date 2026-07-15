@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
-import { monthlySetAside, isDueInMonth } from "@/lib/recurring-utils";
+import { monthlySetAside, monthsUntilDue, isDueInMonth } from "@/lib/recurring-utils";
+import { financialMonthYear } from "@/lib/financial-period-utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,23 +21,17 @@ export type RecurringExpenseRow = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function monthsUntilDueFromNow(nextDueDate: Date, month: number, year: number): number {
-  const dYear = nextDueDate.getFullYear();
-  const dMonth = nextDueDate.getMonth() + 1;
-  const diff = (dYear - year) * 12 + (dMonth - month);
-  return Math.max(1, diff);
-}
-
-function isOverdue(nextDueDate: Date, month: number, year: number): boolean {
-  const dYear = nextDueDate.getFullYear();
-  const dMonth = nextDueDate.getMonth() + 1;
+function isOverdue(nextDueDate: Date, month: number, year: number, startDay: number): boolean {
+  const { month: dMonth, year: dYear } = financialMonthYear(nextDueDate, startDay);
   return dYear < year || (dYear === year && dMonth < month);
 }
 
 // ─── Query ────────────────────────────────────────────────────────────────────
 
 /**
- * All active recurring expenses with computed set-aside + status for the month.
+ * All active recurring expenses with computed set-aside + status for the
+ * given (month, year) — interpreted as a financial month per
+ * FINANCIAL_MONTH_START_DAY, matching the Expenses module's convention.
  */
 export async function getRecurringExpenses(
   month: number,
@@ -47,6 +42,8 @@ export async function getRecurringExpenses(
   dueThisMonth: RecurringExpenseRow[];
   next90Days: RecurringExpenseRow[];
 }> {
+  const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
+
   const rows = await db.recurringExpense.findMany({
     where: { active: true },
     orderBy: { nextDueDate: "asc" },
@@ -57,10 +54,10 @@ export async function getRecurringExpenses(
 
   const items: RecurringExpenseRow[] = rows.map((r) => {
     const dueDate = r.nextDueDate;
-    const overdue = isOverdue(dueDate, month, year);
-    const dueInMonth = isDueInMonth(dueDate, month, year);
-    const setAside = monthlySetAside(r.estimatedAmount, dueDate, month, year);
-    const mUntilDue = monthsUntilDueFromNow(dueDate, month, year);
+    const overdue = isOverdue(dueDate, month, year, startDay);
+    const dueInMonth = isDueInMonth(dueDate, month, year, startDay);
+    const setAside = monthlySetAside(r.estimatedAmount, dueDate, month, year, startDay);
+    const mUntilDue = monthsUntilDue(dueDate, month, year, startDay);
 
     // Compute vault balance if there's a funding vault
     const vaultBalance = r.fundingVault

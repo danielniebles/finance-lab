@@ -1,5 +1,23 @@
 import { describe, it, expect } from "vitest";
-import { getFinancialPeriodBounds } from "./financial-period-utils";
+import { getFinancialPeriodBounds, financialMonthYear } from "./financial-period-utils";
+
+describe("financialMonthYear", () => {
+  it("returns the calendar month when startDay <= 1", () => {
+    expect(financialMonthYear(new Date(2026, 1, 25), 1)).toEqual({ month: 2, year: 2026 });
+  });
+
+  it("keeps a date before startDay in the current calendar month", () => {
+    expect(financialMonthYear(new Date(2026, 1, 24), 25)).toEqual({ month: 2, year: 2026 });
+  });
+
+  it("advances a date on/after startDay to the next calendar month", () => {
+    expect(financialMonthYear(new Date(2026, 1, 25), 25)).toEqual({ month: 3, year: 2026 });
+  });
+
+  it("rolls over the year at December", () => {
+    expect(financialMonthYear(new Date(2026, 11, 25), 25)).toEqual({ month: 1, year: 2027 });
+  });
+});
 
 describe("getFinancialPeriodBounds", () => {
   it("returns the exact calendar month when startDay defaults to 1", () => {

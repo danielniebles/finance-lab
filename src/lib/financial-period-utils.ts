@@ -3,10 +3,32 @@
 // pattern of small, pure, testable helper modules.
 //
 // The app's "month" is not necessarily the calendar month: FINANCIAL_MONTH_START_DAY
-// (see parse-moneylover.ts's financialMonthYear) lets a period start mid-month, e.g.
-// startDay=25 means the period for financial month "March" runs Feb 25 → Mar 24.
-// This module is the inverse: given a target (month, year), compute the date
-// bounds so callers can filter transactions by date range instead of by ImportBatch.
+// lets a period start mid-month, e.g. startDay=25 means the period for
+// financial month "March" runs Feb 25 → Mar 24. financialMonthYear classifies
+// a single date into its financial (month, year); getFinancialPeriodBounds is
+// the inverse — given a target (month, year), compute the date bounds so
+// callers can filter transactions by date range instead of by ImportBatch.
+
+/**
+ * Given a transaction date, returns the financial month and year it belongs to.
+ * If the day >= startDay, the transaction falls in the *next* calendar month's
+ * financial period. E.g. with startDay=25, Feb 25 → financial month March.
+ */
+export function financialMonthYear(date: Date, startDay: number): { month: number; year: number } {
+  const day = date.getDate();
+  const calMonth = date.getMonth() + 1; // 1-based
+  const calYear = date.getFullYear();
+
+  if (startDay <= 1 || day < startDay) {
+    return { month: calMonth, year: calYear };
+  }
+
+  // Advance by one month
+  if (calMonth === 12) {
+    return { month: 1, year: calYear + 1 };
+  }
+  return { month: calMonth + 1, year: calYear };
+}
 
 /**
  * Given a financial month/year and the configured start day, returns the

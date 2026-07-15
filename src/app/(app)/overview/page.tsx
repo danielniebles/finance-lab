@@ -6,11 +6,11 @@ import { AccountsCard } from "@/components/overview/accounts-card";
 import { GoalsCard } from "@/components/overview/goals-card";
 import { ForecastPanel } from "@/components/overview/forecast-panel";
 import { getVaultObligations } from "@/lib/queries/vaults";
+import { financialMonthYear } from "@/lib/financial-period-utils";
 
 export default async function OverviewPage() {
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
+  const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
+  const { month, year } = financialMonthYear(new Date(), startDay);
 
   const obligations = await getVaultObligations(month, year);
 

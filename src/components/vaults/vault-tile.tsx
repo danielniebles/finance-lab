@@ -41,7 +41,8 @@ function ringColor(status: VaultStatus): string {
   }
 }
 
-function requiredThisMonthColor(status: VaultStatus): string {
+function requiredThisMonthColor(status: VaultStatus, stillNeeded: number): string {
+  if (stillNeeded <= 0) return "text-success";
   switch (status) {
     case "Overdue":
       return "text-destructive";
@@ -79,6 +80,7 @@ export function VaultTile({
     balance,
     targetAmount,
     requiredThisMonth,
+    contributedThisMonth,
     monthsLeft,
     progressPct,
     color,
@@ -87,6 +89,10 @@ export function VaultTile({
   const circumference = 163.36; // 2 * Math.PI * 26
   const pct = progressPct ?? 0;
   const dashOffset = circumference * (1 - Math.min(pct, 100) / 100);
+  // How much is still missing to cover this month's target — not the flat
+  // target itself, so a vault already fully contributed to this month reads
+  // as $0 rather than repeating a number you've already met.
+  const stillNeededThisMonth = Math.max(0, requiredThisMonth - contributedThisMonth);
 
   const isMet = status === "Met";
   const isOverdue = status === "Overdue";
@@ -147,11 +153,11 @@ export function VaultTile({
               <p
                 className={cn(
                   "font-mono text-lg font-semibold tabular-nums",
-                  status === "Underfunded" ? "text-warning" : "text-foreground",
+                  stillNeededThisMonth <= 0 ? "text-success" : status === "Underfunded" ? "text-warning" : "text-foreground",
                 )}
-                aria-label={`Set-aside this month: ${formatCOP(requiredThisMonth)}`}
+                aria-label={`Set-aside this month: ${formatCOP(stillNeededThisMonth)}`}
               >
-                {formatCOP(requiredThisMonth)}
+                {formatCOP(stillNeededThisMonth)}
               </p>
             </div>
             <div>
@@ -242,11 +248,11 @@ export function VaultTile({
                   <p
                     className={cn(
                       "font-mono text-sm font-semibold tabular-nums",
-                      requiredThisMonthColor(status),
+                      requiredThisMonthColor(status, stillNeededThisMonth),
                     )}
-                    aria-label={`Needed this month: ${formatCOP(requiredThisMonth)}`}
+                    aria-label={`Needed this month: ${formatCOP(stillNeededThisMonth)}`}
                   >
-                    {formatCOP(requiredThisMonth)}
+                    {formatCOP(stillNeededThisMonth)}
                   </p>
                 </div>
               )}

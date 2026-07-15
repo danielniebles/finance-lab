@@ -4,11 +4,11 @@ import { VaultsDashboard } from "@/components/vaults/vaults-dashboard";
 import { getVaults, getVaultObligations } from "@/lib/queries/vaults";
 import { getRecurringExpenses } from "@/lib/queries/recurring";
 import { getSavingsAccounts } from "@/lib/queries/accounts";
+import { financialMonthYear } from "@/lib/financial-period-utils";
 
 export default async function VaultsPage() {
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
+  const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
+  const { month, year } = financialMonthYear(new Date(), startDay);
 
   const [vaults, obligations, recurringData, accounts] = await Promise.all([
     getVaults(),

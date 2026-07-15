@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { financialMonthYear } from "./financial-period-utils";
 
 export type RawTransaction = {
   externalId: number;
@@ -20,27 +21,6 @@ export type ParseResult = {
 
 // Categories to exclude from transaction storage entirely
 const IGNORED_CATEGORIES = new Set<string>();
-
-/**
- * Given a transaction date, returns the financial month and year it belongs to.
- * If the day >= startDay, the transaction falls in the *next* calendar month's
- * financial period. E.g. with startDay=25, Feb 25 → financial month March.
- */
-export function financialMonthYear(date: Date, startDay: number): { month: number; year: number } {
-  const day = date.getDate();
-  const calMonth = date.getMonth() + 1; // 1-based
-  const calYear = date.getFullYear();
-
-  if (startDay <= 1 || day < startDay) {
-    return { month: calMonth, year: calYear };
-  }
-
-  // Advance by one month
-  if (calMonth === 12) {
-    return { month: 1, year: calYear + 1 };
-  }
-  return { month: calMonth + 1, year: calYear };
-}
 
 /** Parses one XLSX row into a RawTransaction, or null if the row should be skipped. */
 function parseRow(row: Record<string, unknown>): RawTransaction | null {

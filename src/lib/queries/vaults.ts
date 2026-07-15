@@ -4,8 +4,10 @@ import {
   classifyVault,
   computeVaultMetrics,
   VaultStatus,
+  type VaultPeriod,
 } from "@/lib/vault-utils";
 import { monthlySetAside } from "@/lib/recurring-utils";
+import { financialMonthYear } from "@/lib/financial-period-utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,9 +45,10 @@ export type VaultWithMetrics = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function currentMonthYear(): { month: number; year: number } {
-  const now = new Date();
-  return { month: now.getMonth() + 1, year: now.getFullYear() };
+function currentFinancialPeriod(): VaultPeriod {
+  const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
+  const { month, year } = financialMonthYear(new Date(), startDay);
+  return { month, year, startDay };
 }
 
 function sumEntries(entries: { amount: number }[]): number {
@@ -54,27 +57,39 @@ function sumEntries(entries: { amount: number }[]): number {
 
 function sumEntriesInMonth(
   entries: { amount: number; date: Date }[],
-  month: number,
-  year: number,
+  period: VaultPeriod,
 ): number {
+  const { month, year, startDay = 1 } = period;
   return entries
     .filter((e) => {
-      const d = new Date(e.date);
-      return d.getMonth() + 1 === month && d.getFullYear() === year;
+      const { month: eMonth, year: eYear } = financialMonthYear(new Date(e.date), startDay);
+      return eMonth === month && eYear === year;
     })
     .reduce((acc, e) => acc + e.amount, 0);
+}
+
+function recurringRequiredFor(
+  recurringExpenses: { estimatedAmount: number; nextDueDate: Date }[],
+  period: VaultPeriod,
+): number {
+  const { month, year, startDay = 1 } = period;
+  return recurringExpenses.reduce(
+    (sum, item) => sum + monthlySetAside(item.estimatedAmount, item.nextDueDate, month, year, startDay),
+    0,
+  );
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 /**
- * All vaults with computed balance + metrics for the current month.
+ * All vaults with computed balance + metrics for the current financial month
+ * (per FINANCIAL_MONTH_START_DAY, matching the Expenses module's convention).
  * Excludes archived vaults by default.
  */
 export async function getVaults(
   opts?: { includeArchived?: boolean },
 ): Promise<VaultWithMetrics[]> {
-  const { month, year } = currentMonthYear();
+  const period = currentFinancialPeriod();
 
   const rows = await db.vault.findMany({
     where: opts?.includeArchived ? undefined : { archivedAt: null },
@@ -90,7 +105,7 @@ export async function getVaults(
 
   return rows.map((r) => {
     const balance = sumEntries(r.entries);
-    const contributedThisMonth = sumEntriesInMonth(r.entries, month, year);
+    const contributedThisMonth = sumEntriesInMonth(r.entries, period);
 
     const vaultShape = {
       goalType: r.goalType as "FIXED_DEADLINE" | "OPEN_ENDED" | "RECURRING",
@@ -100,23 +115,10 @@ export async function getVaults(
 
     // For RECURRING vaults, requiredThisMonth = sum of set-asides from linked active expenses
     const recurringRequired =
-      r.goalType === "RECURRING"
-        ? r.recurringExpenses.reduce(
-            (sum, item) =>
-              sum + monthlySetAside(item.estimatedAmount, item.nextDueDate, month, year),
-            0,
-          )
-        : undefined;
+      r.goalType === "RECURRING" ? recurringRequiredFor(r.recurringExpenses, period) : undefined;
 
-    const metrics = computeVaultMetrics(vaultShape, balance, month, year, recurringRequired);
-    const status = classifyVault(
-      vaultShape,
-      balance,
-      contributedThisMonth,
-      month,
-      year,
-      recurringRequired,
-    );
+    const metrics = computeVaultMetrics(vaultShape, balance, period, recurringRequired);
+    const status = classifyVault(vaultShape, balance, contributedThisMonth, period, recurringRequired);
 
     return {
       id: r.id,
@@ -171,13 +173,17 @@ export type VaultObligations = {
 };
 
 /**
- * Per-vault obligation for a specific month — powers the banner and the agent's
- * read tool. Only includes active (non-archived) FIXED_DEADLINE vaults.
+ * Per-vault obligation for a specific (financial) month — powers the banner
+ * and the agent's read tool. Only includes active (non-archived)
+ * FIXED_DEADLINE and RECURRING vaults.
  */
 export async function getVaultObligations(
   month: number,
   year: number,
 ): Promise<VaultObligations> {
+  const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
+  const period: VaultPeriod = { month, year, startDay };
+
   const rows = await db.vault.findMany({
     where: {
       archivedAt: null,
@@ -192,7 +198,7 @@ export async function getVaultObligations(
 
   const vaults: VaultObligationItem[] = rows.map((r) => {
     const balance = sumEntries(r.entries);
-    const contributedThisMonth = sumEntriesInMonth(r.entries, month, year);
+    const contributedThisMonth = sumEntriesInMonth(r.entries, period);
 
     const vaultShape = {
       goalType: r.goalType as "FIXED_DEADLINE" | "OPEN_ENDED" | "RECURRING",
@@ -201,23 +207,10 @@ export async function getVaultObligations(
     };
 
     const recurringRequired =
-      r.goalType === "RECURRING"
-        ? r.recurringExpenses.reduce(
-            (sum, item) =>
-              sum + monthlySetAside(item.estimatedAmount, item.nextDueDate, month, year),
-            0,
-          )
-        : undefined;
+      r.goalType === "RECURRING" ? recurringRequiredFor(r.recurringExpenses, period) : undefined;
 
-    const metrics = computeVaultMetrics(vaultShape, balance, month, year, recurringRequired);
-    const status = classifyVault(
-      vaultShape,
-      balance,
-      contributedThisMonth,
-      month,
-      year,
-      recurringRequired,
-    );
+    const metrics = computeVaultMetrics(vaultShape, balance, period, recurringRequired);
+    const status = classifyVault(vaultShape, balance, contributedThisMonth, period, recurringRequired);
 
     const stillNeeded = Math.max(
       0,
