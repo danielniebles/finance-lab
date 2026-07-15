@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { VaultTile } from "./vault-tile";
@@ -205,7 +206,25 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
         </div>
       ) : (
         <section aria-label="Vault tiles">
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {/* Mobile: carousel — a single stacked column of full tiles is a
+              lot of scrolling; swipe through them instead. */}
+          <Carousel opts={{ align: "start" }} className="sm:hidden">
+            <CarouselContent>
+              {vaults.map((v) => (
+                <CarouselItem key={v.id} className="basis-[85%]">
+                  <VaultTile
+                    vault={v}
+                    onContribute={() => openEntryDialog(v.id, "contribute")}
+                    onWithdraw={() => openEntryDialog(v.id, "withdraw")}
+                    onEdit={() => openEditDialog(v.id)}
+                    onHistory={() => openLedger(v.id)}
+                  />
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+          </Carousel>
+
+          <div className="hidden sm:grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {vaults.map((v) => (
               <VaultTile
                 key={v.id}

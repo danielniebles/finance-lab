@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Minus, AlertTriangle, Filter, X } from "lucide-react";
 import { resolveEffectiveCategoryStyle } from "@/lib/category-style";
 import { CategoryBreakdownTable, SeverityBadge } from "@/components/expenses/category-breakdown-table";
+import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 
 type GroupFilter = "FIXED" | "VARIABLE";
 
@@ -110,92 +111,81 @@ export async function AnalysisDashboard({ month, year, walletId, groupFilter }: 
       </div>
 
       {/* ── Fixed · Variable · Savings ─────────────────────────────────── */}
-      <div className="grid gap-3 lg:grid-cols-3">
-        <BudgetGroupCard
-          title="Fixed Expenses"
-          pillLabel="ESSENTIAL"
-          pillClass="border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400"
-          ringColorClass="stroke-blue-500"
-          percentUsed={fixedPercentUsed}
-          actual={data.fixedActual}
-          budget={data.fixedBudget}
-          control={fixedControl}
-          controlLabel="Efficiency"
-          topCategoriesLabel="Priority outlays"
-          topCategories={topFixedCategories}
-          filterHref={buildAnalysisUrl(month, year, walletId, "FIXED")}
-          isActiveFilter={groupFilter === "FIXED"}
-        />
-
-        <BudgetGroupCard
-          title="Variable Expenses"
-          pillLabel="DISCRETIONARY"
-          pillClass="border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
-          ringColorClass="stroke-violet-500"
-          percentUsed={variablePercentUsed}
-          actual={data.variableActual}
-          budget={data.variableBudget}
-          control={variableControl}
-          controlLabel="Burn rate"
-          topCategoriesLabel="Top variances"
-          topCategories={topVariableCategories}
-          filterHref={buildAnalysisUrl(month, year, walletId, "VARIABLE")}
-          isActiveFilter={groupFilter === "VARIABLE"}
-          extraBadge={
-            burnRateAlert ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
-                <AlertTriangle className="size-3.5" />
-                {data.variableBurnRate!.toFixed(0)}%
-              </span>
-            ) : undefined
-          }
-        />
-
-        {/* Savings */}
-        <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="inline-flex items-center rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold tracking-wide text-success">
-              SAVINGS
-            </span>
-            {data.savingsRate !== null && (
-              <span className={cn(
-                "font-mono text-lg font-semibold",
-                data.savingsRate >= 20 ? "text-success" : data.savingsRate >= 10 ? "text-foreground" : "text-destructive"
-              )}>
-                {data.savingsRate.toFixed(1)}%
-                <span className="ml-1 text-xs font-normal text-muted-foreground"> saved</span>
-              </span>
-            )}
-          </div>
-          <div className="space-y-2">
-            <PillRow
-              label="Actual (Salary − Spend)"
-              value={data.realSavings}
-              highlight={data.realSavings >= 0 ? "good" : "bad"}
-              prominent
-            />
-            <PillRow
-              label="Target (Salary − Budget)"
-              value={data.idealSavings}
-              highlight={data.idealSavings >= 0 ? "good" : "bad"}
-            />
-            <div className="mt-1 border-t border-border/40 pt-2">
-              <PillRow
-                label="Gap (Actual − Target)"
-                rawValue={`${data.savingsGap >= 0 ? "+" : ""}${formatCOP(data.savingsGap)}`}
-                highlight={data.savingsGap >= 0 ? "good" : "bad"}
+      {(() => {
+        const budgetCards = [
+          {
+            key: "fixed",
+            node: (
+              <BudgetGroupCard
+                title="Fixed Expenses"
+                pillLabel="ESSENTIAL"
+                pillClass="border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                ringColorClass="stroke-blue-500"
+                percentUsed={fixedPercentUsed}
+                actual={data.fixedActual}
+                budget={data.fixedBudget}
+                control={fixedControl}
+                controlLabel="Efficiency"
+                topCategoriesLabel="Priority outlays"
+                topCategories={topFixedCategories}
+                filterHref={buildAnalysisUrl(month, year, walletId, "FIXED")}
+                isActiveFilter={groupFilter === "FIXED"}
               />
-              {data.unplannedSpendTotal > 0 && (
-                <PillRow
-                  label="Unplanned spend"
-                  value={data.unplannedSpendTotal}
-                  highlight="bad"
-                />
-              )}
+            ),
+          },
+          {
+            key: "variable",
+            node: (
+              <BudgetGroupCard
+                title="Variable Expenses"
+                pillLabel="DISCRETIONARY"
+                pillClass="border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+                ringColorClass="stroke-violet-500"
+                percentUsed={variablePercentUsed}
+                actual={data.variableActual}
+                budget={data.variableBudget}
+                control={variableControl}
+                controlLabel="Burn rate"
+                topCategoriesLabel="Top variances"
+                topCategories={topVariableCategories}
+                filterHref={buildAnalysisUrl(month, year, walletId, "VARIABLE")}
+                isActiveFilter={groupFilter === "VARIABLE"}
+                extraBadge={
+                  burnRateAlert ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
+                      <AlertTriangle className="size-3.5" />
+                      {data.variableBurnRate!.toFixed(0)}%
+                    </span>
+                  ) : undefined
+                }
+              />
+            ),
+          },
+          { key: "savings", node: <SavingsCard data={data} /> },
+        ];
+
+        return (
+          <>
+            {/* Mobile/tablet: carousel — this row only becomes a 3-column
+                grid at lg, so it's stacked (and long) below that today. */}
+            <Carousel opts={{ align: "start" }} className="lg:hidden">
+              <CarouselContent>
+                {budgetCards.map((card) => (
+                  <CarouselItem key={card.key} className="basis-[88%]">
+                    {card.node}
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+            </Carousel>
+
+            <div className="hidden gap-3 lg:grid lg:grid-cols-3">
+              {budgetCards.map((card) => (
+                <div key={card.key}>{card.node}</div>
+              ))}
             </div>
-          </div>
-        </div>
-      </div>
+          </>
+        );
+      })()}
 
       {/* ── Category breakdown table ───────────────────────────────────── */}
       <div id="category-breakdown" className="space-y-2 scroll-mt-4">
@@ -247,6 +237,54 @@ function GroupFilterChip({ groupFilter, clearHref }: { groupFilter: GroupFilter;
 
 type TopCategory = { id: string; name: string; spent: number; icon: string | null; color: string | null };
 
+function SavingsCard({ data }: { data: Awaited<ReturnType<typeof getMonthlyAnalysis>> }) {
+  return (
+    <div className="h-full rounded-xl border border-border/60 bg-card p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex items-center rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold tracking-wide text-success">
+          SAVINGS
+        </span>
+        {data.savingsRate !== null && (
+          <span className={cn(
+            "font-mono text-lg font-semibold",
+            data.savingsRate >= 20 ? "text-success" : data.savingsRate >= 10 ? "text-foreground" : "text-destructive"
+          )}>
+            {data.savingsRate.toFixed(1)}%
+            <span className="ml-1 text-xs font-normal text-muted-foreground"> saved</span>
+          </span>
+        )}
+      </div>
+      <div className="space-y-2">
+        <PillRow
+          label="Actual (Salary − Spend)"
+          value={data.realSavings}
+          highlight={data.realSavings >= 0 ? "good" : "bad"}
+          prominent
+        />
+        <PillRow
+          label="Target (Salary − Budget)"
+          value={data.idealSavings}
+          highlight={data.idealSavings >= 0 ? "good" : "bad"}
+        />
+        <div className="mt-1 border-t border-border/40 pt-2">
+          <PillRow
+            label="Gap (Actual − Target)"
+            rawValue={`${data.savingsGap >= 0 ? "+" : ""}${formatCOP(data.savingsGap)}`}
+            highlight={data.savingsGap >= 0 ? "good" : "bad"}
+          />
+          {data.unplannedSpendTotal > 0 && (
+            <PillRow
+              label="Unplanned spend"
+              value={data.unplannedSpendTotal}
+              highlight="bad"
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BudgetGroupCard({
   title,
   pillLabel,
@@ -281,7 +319,7 @@ function BudgetGroupCard({
   const isUnder = control >= 0;
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card p-4 space-y-4">
+    <div className="h-full rounded-xl border border-border/60 bg-card p-4 space-y-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-heading text-sm font-semibold">{title}</h3>
         <div className="flex items-center gap-1.5">

@@ -38,7 +38,7 @@ export function CreditCardTile({ card, masked, onEdit, onDelete, selected, onCar
       aria-label={`Credit card: ${card.name}`}
       onClick={onCardClick}
       className={cn(
-        "min-w-72 w-72 shrink-0 rounded-xl border border-border bg-card overflow-hidden transition-opacity",
+        "min-w-72 w-72 h-full shrink-0 rounded-xl border border-border bg-card overflow-hidden transition-opacity",
         onCardClick && "cursor-pointer",
         selected === true && "ring-2 ring-primary/70",
         selected === false && "opacity-60",

@@ -61,6 +61,10 @@ function buildLogRows(account: AccountWithBalance): LogRow[] {
 
 // ─── Log row sub-components ───────────────────────────────────────────────────
 
+function amountColorClass(amount: number): string {
+  return amount < 0 ? "text-destructive" : "text-success";
+}
+
 function EntryLogRowItem({
   row,
   onDelete,
@@ -70,25 +74,53 @@ function EntryLogRowItem({
   onDelete: (id: string) => void;
   deletePending: boolean;
 }) {
+  const dateLabel = new Date(row.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" });
+
   return (
-    <div className="grid grid-cols-[5rem_6.5rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 group/row hover:bg-muted/20">
-      <span className="text-xs text-muted-foreground">
-        {new Date(row.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
-      </span>
-      <EntryTypeBadge type={row.type} />
-      <span className={cn("font-mono text-xs font-medium", row.amount < 0 ? "text-destructive" : "text-success")}>
-        {row.amount >= 0 ? "+" : ""}{formatCOP(row.amount)}
-      </span>
-      <span className="text-xs text-muted-foreground truncate">{row.notes ?? ""}</span>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-5 opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-destructive"
-        onClick={() => onDelete(row.id)}
-        disabled={deletePending}
-      >
-        <Trash className="size-3.5" />
-      </Button>
+    <div className="group/row hover:bg-muted/20">
+      {/* Mobile: stacked row — the 5-column fixed grid needs ~400px minimum
+          and forces horizontal scroll below that. */}
+      <div className="flex flex-col gap-1 px-6 py-2.5 sm:hidden">
+        <div className="flex items-center justify-between gap-2">
+          <EntryTypeBadge type={row.type} />
+          <span className={cn("font-mono text-xs font-medium shrink-0", amountColorClass(row.amount))}>
+            {row.amount >= 0 ? "+" : ""}{formatCOP(row.amount)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-xs text-muted-foreground">
+            {dateLabel}
+            {row.notes ? ` · ${row.notes}` : ""}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 shrink-0 text-muted-foreground hover:text-destructive"
+            onClick={() => onDelete(row.id)}
+            disabled={deletePending}
+          >
+            <Trash className="size-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="hidden sm:grid grid-cols-[5rem_6.5rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5">
+        <span className="text-xs text-muted-foreground">{dateLabel}</span>
+        <EntryTypeBadge type={row.type} />
+        <span className={cn("font-mono text-xs font-medium", amountColorClass(row.amount))}>
+          {row.amount >= 0 ? "+" : ""}{formatCOP(row.amount)}
+        </span>
+        <span className="text-xs text-muted-foreground truncate">{row.notes ?? ""}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-5 opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-destructive"
+          onClick={() => onDelete(row.id)}
+          disabled={deletePending}
+        >
+          <Trash className="size-3.5" />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -97,18 +129,31 @@ function VaultLogRowItem({ row }: { row: VaultLogRow }) {
   const displayAmount = -row.amount;
   const direction = row.amount > 0 ? "→" : "←";
   const label = row.notes ? `${row.notes} · ${direction} ${row.vaultName}` : `${direction} ${row.vaultName}`;
+  const dateLabel = new Date(row.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" });
 
   return (
-    <div className="grid grid-cols-[5rem_6.5rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 hover:bg-muted/20">
-      <span className="text-xs text-muted-foreground">
-        {new Date(row.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
-      </span>
-      <VaultBadge />
-      <span className={cn("font-mono text-xs font-medium", displayAmount < 0 ? "text-destructive" : "text-success")}>
-        {displayAmount >= 0 ? "+" : ""}{formatCOP(displayAmount)}
-      </span>
-      <span className="text-xs text-muted-foreground truncate">{label}</span>
-      <span />
+    <div className="hover:bg-muted/20">
+      <div className="flex flex-col gap-1 px-6 py-2.5 sm:hidden">
+        <div className="flex items-center justify-between gap-2">
+          <VaultBadge />
+          <span className={cn("font-mono text-xs font-medium shrink-0", amountColorClass(displayAmount))}>
+            {displayAmount >= 0 ? "+" : ""}{formatCOP(displayAmount)}
+          </span>
+        </div>
+        <span className="truncate text-xs text-muted-foreground">
+          {dateLabel} · {label}
+        </span>
+      </div>
+
+      <div className="hidden sm:grid grid-cols-[5rem_6.5rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5">
+        <span className="text-xs text-muted-foreground">{dateLabel}</span>
+        <VaultBadge />
+        <span className={cn("font-mono text-xs font-medium", amountColorClass(displayAmount))}>
+          {displayAmount >= 0 ? "+" : ""}{formatCOP(displayAmount)}
+        </span>
+        <span className="text-xs text-muted-foreground truncate">{label}</span>
+        <span />
+      </div>
     </div>
   );
 }
@@ -145,7 +190,7 @@ function AccountEntryLog({
         {logRows.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">No entries yet.</p>
         ) : (
-          <div className="max-h-[60vh] overflow-x-auto overflow-y-auto -mx-6 divide-y divide-border/40">
+          <div className="max-h-[60vh] overflow-y-auto -mx-6 divide-y divide-border/40">
             {logRows.map((row) =>
               row.kind === "entry" ? (
                 <EntryLogRowItem
@@ -219,7 +264,7 @@ export function AccountCard({ account, masked }: { account: AccountWithBalance; 
 
   return (
     <>
-      <div className={cn("rounded-xl border bg-card overflow-hidden", (isExcluded || isExcludedFromTotal) && "opacity-60")}>
+      <div className={cn("h-full rounded-xl border bg-card overflow-hidden", (isExcluded || isExcludedFromTotal) && "opacity-60")}>
         <div className="p-4 flex flex-col gap-3 h-full">
           {/* Header */}
           <div className="space-y-1.5">

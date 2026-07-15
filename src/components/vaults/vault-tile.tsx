@@ -97,7 +97,7 @@ export function VaultTile({
     <article
       role="article"
       aria-label={name}
-      className="rounded-xl ring-1 ring-foreground/10 bg-card overflow-hidden flex flex-col"
+      className="h-full rounded-xl ring-1 ring-foreground/10 bg-card overflow-hidden flex flex-col"
     >
       {/* Header zone — color accent strip */}
       <div

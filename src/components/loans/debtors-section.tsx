@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
+import { Fragment, useState, useMemo, useTransition } from "react";
 import { ScrollText, Trash, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCOP } from "@/lib/format";
@@ -14,6 +14,8 @@ import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/l
 import { MASK } from "./lib/constants";
 
 // ─── Loan row helpers ─────────────────────────────────────────────────────────
+
+const MUTED_FG = "text-muted-foreground";
 
 type LoanMeta = {
   pct: number;
@@ -41,6 +43,11 @@ function computeLoanMeta(loan: LoanWithRemaining): LoanMeta {
 
 function maskStr(value: string, masked: boolean | undefined): string {
   return masked ? MASK : value;
+}
+
+function remainingColorClass(loan: LoanWithRemaining, masked: boolean | undefined): string {
+  if (masked) return MUTED_FG;
+  return loan.isActive ? "text-foreground" : MUTED_FG;
 }
 
 function LoanStatusBadge({ isActive, isOverdue }: { isActive: boolean; isOverdue: boolean }) {
@@ -110,10 +117,10 @@ function LoanRow({
             </div>
           )}
         </TableCell>
-        <TableCell className={cn("px-4 font-mono text-sm font-medium text-right", masked ? "text-muted-foreground" : loan.isActive ? "text-foreground" : "text-muted-foreground")}>
+        <TableCell className={cn("px-4 font-mono text-sm font-medium text-right", remainingColorClass(loan, masked))}>
           {maskStr(loan.remaining > 0 ? formatCOP(loan.remaining) : "—", masked)}
         </TableCell>
-        <TableCell className={cn("px-4 text-xs text-right hidden md:table-cell", isStale ? "text-warning font-medium" : "text-muted-foreground")}>
+        <TableCell className={cn("px-4 text-xs text-right hidden md:table-cell", isStale ? "text-warning font-medium" : MUTED_FG)}>
           {ageLabel}
         </TableCell>
         <TableCell className="px-4">
@@ -125,6 +132,79 @@ function LoanRow({
           {loan.notes ?? "—"}
         </TableCell>
       </TableRow>
+      {!masked && (
+        <LoanForm
+          open={open}
+          onClose={() => setOpen(false)}
+          accounts={accounts}
+          debtors={debtors}
+          editing={loan}
+        />
+      )}
+    </>
+  );
+}
+
+function LoanMobileRow({
+  loan,
+  accounts,
+  debtors,
+  masked,
+}: {
+  loan: LoanWithRemaining;
+  accounts: AccountWithBalance[];
+  debtors: DebtorWithLoans[];
+  masked?: boolean;
+}) {
+  const { pct, ageLabel, isOverdue, isStale } = computeLoanMeta(loan);
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <div
+        onClick={masked ? undefined : () => setOpen(true)}
+        className={cn(
+          "flex flex-col gap-1.5 border-b border-border/50 px-4 py-3 last:border-0",
+          !masked && "cursor-pointer transition-colors hover:bg-muted/40"
+        )}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="inline-flex min-w-0 items-center gap-1.5">
+            <span
+              className="size-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: loan.accountColor ?? "#888" }}
+            />
+            <span className="truncate text-sm">{maskStr(loan.accountName, masked)}</span>
+          </span>
+          <LoanStatusBadge isActive={loan.isActive} isOverdue={isOverdue} />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-muted-foreground">
+            {new Date(loan.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
+            {" · "}
+            {maskStr(formatCOP(loan.amount), masked)}
+          </span>
+          <span className={cn("font-mono text-sm font-medium", remainingColorClass(loan, masked))}>
+            {maskStr(loan.remaining > 0 ? formatCOP(loan.remaining) : "—", masked)}
+          </span>
+        </div>
+        {!masked && (
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted/50">
+              <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="w-8 shrink-0 text-right font-mono text-xs text-muted-foreground">
+              {pct.toFixed(0)}%
+            </span>
+            <span className={cn("shrink-0 text-xs", isStale ? "font-medium text-warning" : MUTED_FG)}>
+              {ageLabel}
+            </span>
+          </div>
+        )}
+        {!masked && loan.notes && (
+          <p className="truncate text-xs text-muted-foreground">{loan.notes}</p>
+        )}
+      </div>
       {!masked && (
         <LoanForm
           open={open}
@@ -187,31 +267,67 @@ function DebtorPaymentsDialog({
         {allPayments.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">No payments recorded yet.</p>
         ) : (
-          <div className="max-h-[60vh] overflow-x-auto overflow-y-auto -mx-6 divide-y divide-border/40">
-            {allPayments.map((p) => (
-              <div key={p.id} className="grid grid-cols-[5rem_6rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 group/row hover:bg-muted/20">
-                <span className="text-xs text-muted-foreground">
-                  {new Date(p.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })}
-                </span>
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: p.accountColor ?? "#888" }} />
-                  <span className="text-xs text-muted-foreground truncate">{p.accountName}</span>
-                </div>
-                <span className="font-mono text-xs font-medium text-success">
-                  +{formatCOP(p.amount)}
-                </span>
-                <span className="text-xs text-muted-foreground truncate">{p.notes ?? ""}</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-5 opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-destructive"
-                  disabled={deletePaymentPending}
-                  onClick={() => startDeletePayment(async () => { await deleteLoanPayment(p.id); })}
-                >
-                  <Trash className="size-3.5" />
-                </Button>
-              </div>
-            ))}
+          <div className="max-h-[60vh] overflow-y-auto -mx-6 divide-y divide-border/40">
+            {allPayments.map((p) => {
+              const dateLabel = new Date(p.date).toLocaleDateString("es-CO", {
+                month: "short",
+                day: "numeric",
+                year: "2-digit",
+              });
+              return (
+                <Fragment key={p.id}>
+                  {/* Mobile: stacked row — the 5-column fixed grid needs ~372px
+                      minimum and forces horizontal scroll below that. */}
+                  <div className="flex flex-col gap-1 px-6 py-2.5 sm:hidden">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: p.accountColor ?? "#888" }} />
+                        <span className="truncate text-xs text-muted-foreground">{p.accountName}</span>
+                      </div>
+                      <span className="shrink-0 font-mono text-xs font-medium text-success">
+                        +{formatCOP(p.amount)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-xs text-muted-foreground">
+                        {dateLabel}
+                        {p.notes ? ` · ${p.notes}` : ""}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-6 shrink-0 text-muted-foreground hover:text-destructive"
+                        disabled={deletePaymentPending}
+                        onClick={() => startDeletePayment(async () => { await deleteLoanPayment(p.id); })}
+                      >
+                        <Trash className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="hidden sm:grid grid-cols-[5rem_6rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5 group/row hover:bg-muted/20">
+                    <span className="text-xs text-muted-foreground">{dateLabel}</span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: p.accountColor ?? "#888" }} />
+                      <span className="text-xs text-muted-foreground truncate">{p.accountName}</span>
+                    </div>
+                    <span className="font-mono text-xs font-medium text-success">
+                      +{formatCOP(p.amount)}
+                    </span>
+                    <span className="text-xs text-muted-foreground truncate">{p.notes ?? ""}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-5 opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-destructive"
+                      disabled={deletePaymentPending}
+                      onClick={() => startDeletePayment(async () => { await deleteLoanPayment(p.id); })}
+                    >
+                      <Trash className="size-3.5" />
+                    </Button>
+                  </div>
+                </Fragment>
+              );
+            })}
           </div>
         )}
       </DialogContent>
@@ -226,7 +342,7 @@ function PrivacyRevealButton({ isRevealed, onReveal }: { isRevealed: boolean; on
     <Button
       variant="ghost"
       size="sm"
-      className={cn("h-7 gap-1 text-xs", isRevealed ? "text-primary" : "text-muted-foreground")}
+      className={cn("h-7 gap-1 text-xs", isRevealed ? "text-primary" : MUTED_FG)}
       onClick={onReveal}
       title={isRevealed ? "Hide amounts" : "Show amounts"}
     >
@@ -411,6 +527,79 @@ function DebtorAccountFilter({
   );
 }
 
+// ─── Debtor card ────────────────────────────────────────────────────────────
+
+function DebtorCard({
+  debtor,
+  accounts,
+  debtors,
+  privacyMode,
+  revealedDebtorId,
+  clearSettledPending,
+  onReveal,
+  onShowPayments,
+  onClearSettled,
+}: {
+  debtor: DebtorWithLoans;
+  accounts: AccountWithBalance[];
+  debtors: DebtorWithLoans[];
+  privacyMode: boolean;
+  revealedDebtorId: string | null;
+  clearSettledPending: boolean;
+  onReveal: () => void;
+  onShowPayments: () => void;
+  onClearSettled: () => void;
+}) {
+  const masked = privacyMode && debtor.id !== revealedDebtorId;
+
+  return (
+    <div className="rounded-xl border border-border overflow-hidden">
+      <DebtorHeader
+        debtor={debtor}
+        accounts={accounts}
+        debtors={debtors}
+        privacyMode={privacyMode}
+        isRevealed={revealedDebtorId === debtor.id}
+        clearSettledPending={clearSettledPending}
+        onReveal={onReveal}
+        onShowPayments={onShowPayments}
+        onClearSettled={onClearSettled}
+      />
+      {debtor.loans.length > 0 && (
+        <div className="border-t border-border">
+          {/* Mobile: stacked rows — 6+ fixed-width columns force
+              horizontal scroll well before 375px. */}
+          <div className="sm:hidden">
+            {debtor.loans.map((loan) => (
+              <LoanMobileRow key={loan.id} loan={loan} accounts={accounts} debtors={debtors} masked={masked} />
+            ))}
+          </div>
+
+          <Table className="hidden table-fixed sm:table">
+            <TableHeader>
+              <TableRow className="bg-muted/20 hover:bg-muted/20 border-border/50">
+                <TableHead className="px-2 h-8 w-12 text-xs text-muted-foreground">Account</TableHead>
+                <TableHead className="px-4 h-8 w-30 text-xs text-muted-foreground">Date</TableHead>
+                <TableHead className="px-4 h-8 w-35 text-xs text-muted-foreground">Original</TableHead>
+                <TableHead className="px-4 h-8 w-33.75 text-xs text-muted-foreground">Repaid</TableHead>
+                <TableHead className="px-4 h-8 w-31.25 text-right text-xs text-muted-foreground">Remaining</TableHead>
+                <TableHead className="px-4 h-8 w-15 text-right text-xs text-muted-foreground hidden md:table-cell">Age</TableHead>
+                <TableHead className="px-4 h-8 w-21.25 text-right text-xs text-muted-foreground">Status</TableHead>
+                <TableHead className="px-4 h-8 w-40 text-xs text-muted-foreground hidden md:table-cell">Notes</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {debtor.loans.map((loan) => (
+                <LoanRow key={loan.id} loan={loan} accounts={accounts} debtors={debtors} masked={masked} />
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Debtors section ──────────────────────────────────────────────────────────
 
 export function DebtorsSection({
@@ -474,48 +663,18 @@ export function DebtorsSection({
             ) : (
               <div className="space-y-2">
                 {filteredDebtors.map((debtor) => (
-                  <div key={debtor.id} className="rounded-xl border border-border overflow-hidden">
-                    <DebtorHeader
-                      debtor={debtor}
-                      accounts={accounts}
-                      debtors={debtors}
-                      privacyMode={privacyMode}
-                      isRevealed={revealedDebtorId === debtor.id}
-                      clearSettledPending={clearSettledPending}
-                      onReveal={() => onReveal(debtor.id)}
-                      onShowPayments={() => setPaymentsDebtor(debtors.find((d) => d.id === debtor.id) ?? null)}
-                      onClearSettled={() => startClearSettled(async () => { await deleteSettledLoans(debtor.id); })}
-                    />
-                    {debtor.loans.length > 0 && (
-                      <div className="border-t border-border">
-                        <Table className="table-fixed">
-                          <TableHeader>
-                            <TableRow className="bg-muted/20 hover:bg-muted/20 border-border/50">
-                              <TableHead className="px-2 h-8 w-12 text-xs text-muted-foreground">Account</TableHead>
-                              <TableHead className="px-4 h-8 w-30 text-xs text-muted-foreground">Date</TableHead>
-                              <TableHead className="px-4 h-8 w-35 text-xs text-muted-foreground">Original</TableHead>
-                              <TableHead className="px-4 h-8 w-33.75 text-xs text-muted-foreground">Repaid</TableHead>
-                              <TableHead className="px-4 h-8 w-31.25 text-right text-xs text-muted-foreground">Remaining</TableHead>
-                              <TableHead className="px-4 h-8 w-15 text-right text-xs text-muted-foreground hidden md:table-cell">Age</TableHead>
-                              <TableHead className="px-4 h-8 w-21.25 text-right text-xs text-muted-foreground">Status</TableHead>
-                              <TableHead className="px-4 h-8 w-40 text-xs text-muted-foreground hidden md:table-cell">Notes</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {debtor.loans.map((loan) => (
-                              <LoanRow
-                                key={loan.id}
-                                loan={loan}
-                                accounts={accounts}
-                                debtors={debtors}
-                                masked={privacyMode && debtor.id !== revealedDebtorId}
-                              />
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-                  </div>
+                  <DebtorCard
+                    key={debtor.id}
+                    debtor={debtor}
+                    accounts={accounts}
+                    debtors={debtors}
+                    privacyMode={privacyMode}
+                    revealedDebtorId={revealedDebtorId}
+                    clearSettledPending={clearSettledPending}
+                    onReveal={() => onReveal(debtor.id)}
+                    onShowPayments={() => setPaymentsDebtor(debtors.find((d) => d.id === debtor.id) ?? null)}
+                    onClearSettled={() => startClearSettled(async () => { await deleteSettledLoans(debtor.id); })}
+                  />
                 ))}
               </div>
             )

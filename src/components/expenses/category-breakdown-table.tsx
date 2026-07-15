@@ -64,71 +64,80 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year, titleSu
             Spend by Category{titleSuffix ? ` — ${titleSuffix}` : ""}
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-border/60 hover:bg-transparent">
-                <TableHead className="pl-5 text-xs uppercase tracking-wide text-muted-foreground">Category</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground hidden sm:table-cell">Type</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Actual</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Budget</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Control</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground w-36 hidden sm:table-cell">Progress</TableHead>
-                <TableHead className="pr-5 text-xs uppercase tracking-wide text-muted-foreground">Severity</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {categoryBreakdown.map((row) => (
-                <TableRow
-                  key={row.id}
-                  className={cn(
-                    "border-border/40 transition-colors cursor-pointer",
-                    rowBg(row.severity)
-                  )}
-                  onClick={() => handleRowClick(row)}
-                >
-                  <TableCell className="pl-5 font-medium">{row.name}</TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    <TypePill type={row.budgetType} />
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {formatCOP(row.spent)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums text-muted-foreground">
-                    {formatCOP(row.budget)}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      "text-right font-mono text-sm tabular-nums",
-                      row.control < 0 ? "text-destructive" : "text-success"
-                    )}
-                  >
-                    {formatCOP(row.control)}
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    {row.percentUsed !== null ? (
-                      <div className="flex items-center gap-2">
-                        <ProgressBar percent={row.percentUsed} className="flex-1" />
-                        <span className="font-mono text-xs tabular-nums text-muted-foreground w-9 text-right shrink-0">
-                          {row.percentUsed.toFixed(0)}%
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="pr-5">
-                    <div className="flex items-center gap-2">
-                      <SeverityBadge severity={row.severity} />
-                      {row.note && (
-                        <span className="text-xs text-muted-foreground">{row.note}</span>
-                      )}
-                    </div>
-                  </TableCell>
+        <CardContent className="p-0">
+          {/* Mobile: stacked rows — avoids the horizontal scroll a 7-column table forces. */}
+          <div className="sm:hidden">
+            {categoryBreakdown.map((row) => (
+              <CategoryMobileRow key={row.id} row={row} onClick={() => handleRowClick(row)} />
+            ))}
+          </div>
+
+          <div className="hidden sm:block overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border/60 hover:bg-transparent">
+                  <TableHead className="pl-5 text-xs uppercase tracking-wide text-muted-foreground">Category</TableHead>
+                  <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">Type</TableHead>
+                  <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Actual</TableHead>
+                  <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Budget</TableHead>
+                  <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Control</TableHead>
+                  <TableHead className="text-xs uppercase tracking-wide text-muted-foreground w-36">Progress</TableHead>
+                  <TableHead className="pr-5 text-xs uppercase tracking-wide text-muted-foreground">Severity</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {categoryBreakdown.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    className={cn(
+                      "border-border/40 transition-colors cursor-pointer",
+                      rowBg(row.severity)
+                    )}
+                    onClick={() => handleRowClick(row)}
+                  >
+                    <TableCell className="pl-5 font-medium">{row.name}</TableCell>
+                    <TableCell>
+                      <TypePill type={row.budgetType} />
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm tabular-nums">
+                      {formatCOP(row.spent)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm tabular-nums text-muted-foreground">
+                      {formatCOP(row.budget)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-mono text-sm tabular-nums",
+                        row.control < 0 ? "text-destructive" : "text-success"
+                      )}
+                    >
+                      {formatCOP(row.control)}
+                    </TableCell>
+                    <TableCell>
+                      {row.percentUsed !== null ? (
+                        <div className="flex items-center gap-2">
+                          <ProgressBar percent={row.percentUsed} className="flex-1" />
+                          <span className="font-mono text-xs tabular-nums text-muted-foreground w-9 text-right shrink-0">
+                            {row.percentUsed.toFixed(0)}%
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="pr-5">
+                      <div className="flex items-center gap-2">
+                        <SeverityBadge severity={row.severity} />
+                        {row.note && (
+                          <span className="text-xs text-muted-foreground">{row.note}</span>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -196,6 +205,49 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year, titleSu
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function CategoryMobileRow({ row, onClick }: { row: CategoryRow; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex w-full flex-col gap-1.5 border-b border-border/40 px-4 py-3 text-left transition-colors last:border-0",
+        rowBg(row.severity)
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 truncate font-medium text-sm">{row.name}</span>
+        <SeverityBadge severity={row.severity} />
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-sm tabular-nums">{formatCOP(row.spent)}</span>
+        <span
+          className={cn(
+            "font-mono text-xs tabular-nums",
+            row.control < 0 ? "text-destructive" : "text-success"
+          )}
+        >
+          {row.control >= 0 ? "+" : ""}
+          {formatCOP(row.control)}
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <TypePill type={row.budgetType} />
+        <span className="truncate">of {formatCOP(row.budget)}</span>
+        {row.note && <span className="truncate">· {row.note}</span>}
+      </div>
+      {row.percentUsed !== null && (
+        <div className="flex items-center gap-2">
+          <ProgressBar percent={row.percentUsed} className="flex-1" />
+          <span className="w-8 shrink-0 text-right font-mono text-[10px] tabular-nums text-muted-foreground">
+            {row.percentUsed.toFixed(0)}%
+          </span>
+        </div>
+      )}
+    </button>
+  );
+}
 
 function TypePill({ type }: { type: string }) {
   const styles: Record<string, string> = {

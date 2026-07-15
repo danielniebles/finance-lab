@@ -4,6 +4,7 @@ import { Eye, EyeOff, AlertTriangle } from "lucide-react";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 import { LoansClient } from "./loans-client";
 import { AccountCard } from "./account-card";
 import { DebtorsSection } from "./debtors-section";
@@ -149,11 +150,25 @@ export function LoansDashboard({ data }: { data: LoansOverview }) {
         {data.accounts.length === 0 ? (
           <p className="text-sm text-muted-foreground">No accounts yet.</p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {data.accounts.map((a) => (
-              <AccountCard key={a.id} account={a} masked={privacyMode} />
-            ))}
-          </div>
+          <>
+            {/* Mobile: carousel — a vertically-stacked single column of full
+                cards is a lot of scrolling; swipe through them instead. */}
+            <Carousel opts={{ align: "start" }} className="sm:hidden">
+              <CarouselContent>
+                {data.accounts.map((a) => (
+                  <CarouselItem key={a.id} className="basis-[85%]">
+                    <AccountCard account={a} masked={privacyMode} />
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+            </Carousel>
+
+            <div className="hidden sm:grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {data.accounts.map((a) => (
+                <AccountCard key={a.id} account={a} masked={privacyMode} />
+              ))}
+            </div>
+          </>
         )}
       </section>
 

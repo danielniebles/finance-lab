@@ -58,6 +58,85 @@ function dueBadgeClasses(status: RecurringExpenseRow["status"]): string {
   }
 }
 
+function RecurringMobileRow({
+  item,
+  onPay,
+  onEdit,
+}: {
+  item: RecurringExpenseRow;
+  onPay: () => void;
+  onEdit: () => void;
+}) {
+  const dueBadge = dueBadgeClasses(item.status);
+
+  return (
+    <div className="flex flex-col gap-1.5 border-b border-border/50 px-4 py-3 transition-colors last:border-0 hover:bg-muted/20">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate font-semibold leading-tight text-foreground">{item.name}</p>
+          {item.category && (
+            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{item.category}</p>
+          )}
+        </div>
+        <span
+          className={cn(
+            "shrink-0 text-[10px] font-semibold uppercase tracking-wider rounded-full px-1.5 py-0.5",
+            statusPillClasses(item.status),
+          )}
+        >
+          {item.status === "DueSoon" ? "Due soon" : item.status}
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-xs text-muted-foreground">
+          {cadenceLabel(item.cadenceMonths)}
+          {item.fundingVaultName ? ` · ${item.fundingVaultName}` : ""}
+        </span>
+        <span className="shrink-0 font-mono text-sm font-medium tabular-nums text-foreground">
+          {formatCOP(item.setAsideThisMonth)}
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-xs">
+          <span className="text-muted-foreground">
+            {new Date(item.nextDueDate).toLocaleDateString("es-CO", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })}
+          </span>
+          {dueBadge && (
+            <span
+              className={cn(
+                "text-[10px] font-semibold uppercase tracking-wider rounded-full px-1.5 py-0.5",
+                dueBadge,
+              )}
+            >
+              {item.status === "DueSoon" ? "Due soon" : item.status}
+            </span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={onPay}>
+            Pay
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            aria-label={`Edit ${item.name}`}
+            onClick={onEdit}
+          >
+            <Pencil className="size-4" aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Pay dialog state ─────────────────────────────────────────────────────────
 
 type PayState = {
@@ -155,7 +234,20 @@ export function RecurringList({ recurringData, recurringVaults }: Props) {
         </div>
       ) : (
         <div className="rounded-xl ring-1 ring-foreground/10 bg-card overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile: stacked rows — the 7-column table forces horizontal
+              scroll well before 375px. */}
+          <div className="sm:hidden">
+            {items.map((item) => (
+              <RecurringMobileRow
+                key={item.id}
+                item={item}
+                onPay={() => openPay(item)}
+                onEdit={() => openEdit(item)}
+              />
+            ))}
+          </div>
+
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">

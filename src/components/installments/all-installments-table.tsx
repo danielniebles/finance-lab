@@ -44,7 +44,7 @@ function InstallmentTableRow({
             <div className="text-xs text-muted-foreground">{inst.notes}</div>
           )}
         </TableCell>
-        <TableCell className="px-4 hidden sm:table-cell">
+        <TableCell className="px-4">
           {inst.cardName ? (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               <span
@@ -60,7 +60,7 @@ function InstallmentTableRow({
         <TableCell className="px-4 text-right font-mono text-sm">
           {formatCOP(inst.totalAmount)}
         </TableCell>
-        <TableCell className="px-4 text-right font-mono text-sm text-muted-foreground hidden sm:table-cell">
+        <TableCell className="px-4 text-right font-mono text-sm text-muted-foreground">
           {formatCOP(inst.monthlyAmount)}
           {inst.monthlyInterestRate != null && (
             <span className="ml-1 text-muted-foreground/50 text-xs">+int</span>
@@ -71,7 +71,7 @@ function InstallmentTableRow({
             ? `${inst.monthlyInterestRate}% m.v.`
             : "—"}
         </TableCell>
-        <TableCell className="px-4 hidden sm:table-cell">
+        <TableCell className="px-4">
           <div className="flex justify-center">
             <ProgressBar paid={inst.installmentsPaid} total={inst.numInstallments} />
           </div>
@@ -91,6 +91,65 @@ function InstallmentTableRow({
           </div>
         </TableCell>
       </TableRow>
+      <InstallmentForm
+        open={open}
+        onClose={() => setOpen(false)}
+        editing={inst}
+        cards={formCards}
+        debtors={formDebtors}
+        accounts={formAccounts}
+      />
+    </>
+  );
+}
+
+function InstallmentMobileRow({
+  inst,
+  formCards,
+  formDebtors,
+  formAccounts,
+}: { inst: InstallmentRow } & FormData) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full flex-col gap-1.5 border-b border-border px-4 py-3 text-left transition-colors hover:bg-muted/40 last:border-0"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate font-medium">{inst.description}</span>
+          <StatusBadge status={inst.status} />
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-muted-foreground">
+            Total <span className="font-mono text-foreground">{formatCOP(inst.totalAmount)}</span>
+          </span>
+          <span className="font-mono text-sm font-semibold">
+            {inst.remaining > 0 ? formatCOP(inst.remaining) : "—"}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+          {inst.cardName && (
+            <span className="inline-flex items-center gap-1">
+              <span
+                className="size-2 rounded-full shrink-0"
+                style={{ backgroundColor: inst.cardColor ?? undefined }}
+              />
+              {inst.cardName}
+            </span>
+          )}
+          <span>
+            {formatCOP(inst.monthlyAmount)}/mo
+            {inst.monthlyInterestRate != null && ` +int (${inst.monthlyInterestRate}% m.v.)`}
+          </span>
+        </div>
+
+        <ProgressBar paid={inst.installmentsPaid} total={inst.numInstallments} />
+      </button>
       <InstallmentForm
         open={open}
         onClose={() => setOpen(false)}
@@ -185,15 +244,29 @@ export function AllInstallmentsTable({
         </p>
       ) : (
         <div className="rounded-xl border border-border overflow-hidden">
-          <Table>
+          {/* Mobile: stacked rows — a 9-column table (even with hidden
+              sm/md cells) still forces horizontal scroll below sm. */}
+          <div className="sm:hidden">
+            {visible.map((inst) => (
+              <InstallmentMobileRow
+                key={inst.id}
+                inst={inst}
+                formCards={formCards}
+                formDebtors={formDebtors}
+                formAccounts={formAccounts}
+              />
+            ))}
+          </div>
+
+          <Table className="hidden sm:table">
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30 border-border">
                 <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground">Item</TableHead>
-                <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Card</TableHead>
+                <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground">Card</TableHead>
                 <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Total</TableHead>
-                <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Monthly</TableHead>
+                <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Monthly</TableHead>
                 <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground hidden md:table-cell">Rate</TableHead>
-                <TableHead className="px-4 text-center text-xs uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Progress</TableHead>
+                <TableHead className="px-4 text-center text-xs uppercase tracking-wider text-muted-foreground">Progress</TableHead>
                 <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground hidden md:table-cell">Ends</TableHead>
                 <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Remaining</TableHead>
                 <TableHead className="px-4 text-center text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
