@@ -1,10 +1,18 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import { Plus, Check, X } from "lucide-react";
+import { useId, useRef, useState, useTransition } from "react";
+import { Plus, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -28,8 +36,8 @@ type FormValues = {
 };
 
 // Open-time / post-cancel defaults. `walletId` is the one field that carries
-// state across expand/collapse cycles within the session (see
-// AddTransactionRow's `lastWallet`) — every other field resets clean.
+// state across open/close cycles within the session (see AddTransactionRow's
+// `lastWallet`) — every other field resets clean.
 function defaultValues(lastWallet: string): FormValues {
   return {
     type: "expense",
@@ -67,30 +75,27 @@ type Props = {
   walletOptions: { id: string; name: string }[];
 };
 
-// Rendered as a SIBLING of LedgerControls (not a child) so it stays
-// interactive during LedgerControls's filter-requery dimming — see
-// .scratch/manual-transaction-entry.md's placement decision. Collapsed by
-// default; expands in place into an inline creation row mirroring
-// TransactionEditForm's shape (transaction-row.tsx).
+// Renders a trigger button that opens a modal creation form — kept out of
+// LedgerControls' filter-requery dimming since it's a Dialog now (always
+// interactive regardless of what's happening in the list behind it). Modal
+// instead of the old inline-expanding row: expanding in place pushed the
+// list down and stole scroll position, and its autoFocus fired every time
+// the row expanded even when it wasn't the user's intent to type immediately.
 export function AddTransactionRow({ categories, walletOptions }: Props) {
-  const [mode, setMode] = useState<"collapsed" | "expanded">("collapsed");
+  const [open, setOpen] = useState(false);
   const [lastWallet, setLastWallet] = useState("");
   const [values, setValues] = useState<FormValues>(() => defaultValues(""));
   const [pending, startTransition] = useTransition();
   const amountInputRef = useRef<HTMLInputElement>(null);
 
-  function expand() {
+  function openDialog() {
     setValues(defaultValues(lastWallet));
-    setMode("expanded");
+    setOpen(true);
   }
 
-  function collapseToDefaults() {
+  function closeDialog() {
     setValues(defaultValues(lastWallet));
-    setMode("collapsed");
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Escape") collapseToDefaults();
+    setOpen(false);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -111,7 +116,7 @@ export function AddTransactionRow({ categories, walletOptions }: Props) {
         toast.success("Transaction added");
         setLastWallet(submittedWalletId);
         // Speed optimization for batch entry: only clear amount/note, keep
-        // type/date/appCategoryId/walletId as-is and stay expanded.
+        // type/date/appCategoryId/walletId as-is and stay open.
         setValues((v) => ({ ...v, amount: "", note: "" }));
         amountInputRef.current?.focus();
       } catch {
@@ -120,41 +125,40 @@ export function AddTransactionRow({ categories, walletOptions }: Props) {
     });
   }
 
-  if (mode === "collapsed") {
-    return <CollapsedTrigger onExpand={expand} />;
-  }
-
   return (
-    <ExpandedCreateForm
-      values={values}
-      categories={categories}
-      walletOptions={walletOptions}
-      pending={pending}
-      amountInputRef={amountInputRef}
-      onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
-      onSubmit={handleSubmit}
-      onCancel={collapseToDefaults}
-      onKeyDown={handleKeyDown}
-    />
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={openDialog}
+        className="h-auto w-full justify-start gap-1.5 rounded-xl border border-dashed border-border/60 px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <Plus className="size-4" />
+        Add transaction
+      </Button>
+
+      <Dialog open={open} onOpenChange={(o) => !o && closeDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add transaction</DialogTitle>
+          </DialogHeader>
+          <CreateForm
+            values={values}
+            categories={categories}
+            walletOptions={walletOptions}
+            pending={pending}
+            amountInputRef={amountInputRef}
+            onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
+            onSubmit={handleSubmit}
+            onCancel={closeDialog}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
-function CollapsedTrigger({ onExpand }: { onExpand: () => void }) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      aria-expanded={false}
-      onClick={onExpand}
-      className="h-auto w-full justify-start gap-1.5 rounded-xl border border-dashed border-border/60 px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
-    >
-      <Plus className="size-4" />
-      Add transaction
-    </Button>
-  );
-}
-
-function ExpandedCreateForm({
+function CreateForm({
   values,
   categories,
   walletOptions,
@@ -163,7 +167,6 @@ function ExpandedCreateForm({
   onChange,
   onSubmit,
   onCancel,
-  onKeyDown,
 }: {
   values: FormValues;
   categories: CategoryOption[];
@@ -173,74 +176,81 @@ function ExpandedCreateForm({
   onChange: (patch: Partial<FormValues>) => void;
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
-  onKeyDown: (e: React.KeyboardEvent) => void;
 }) {
+  const idPrefix = useId();
   const submitDisabled = pending || !canSubmit(values);
 
   return (
-    <form
-      onSubmit={onSubmit}
-      onKeyDown={onKeyDown}
-      className="flex items-start justify-between gap-3 rounded-xl border border-border/60 px-4 py-2"
-    >
-      <div className="flex flex-1 min-w-0 flex-wrap items-center gap-2">
-        <TypeToggle value={values.type} onChange={(type) => onChange({ type })} />
+    <form onSubmit={onSubmit} className="space-y-4">
+      <TypeToggle value={values.type} onChange={(type) => onChange({ type })} />
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor={`${idPrefix}-amount`}>Amount</Label>
+          <Input
+            ref={amountInputRef}
+            id={`${idPrefix}-amount`}
+            type="number"
+            min="0"
+            value={values.amount}
+            onChange={(e) => onChange({ amount: e.target.value })}
+            className="font-mono"
+            autoFocus
+            required
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${idPrefix}-date`}>Date</Label>
+          <Input
+            id={`${idPrefix}-date`}
+            type="date"
+            value={values.date}
+            onChange={(e) => onChange({ date: e.target.value })}
+            required
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label>Category</Label>
+          <CreateCategorySelect
+            value={values.appCategoryId}
+            categories={categories}
+            onChange={(v) => onChange({ appCategoryId: v })}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Wallet</Label>
+          <CreateWalletSelect
+            value={values.walletId}
+            options={walletOptions}
+            onChange={(v) => onChange({ walletId: v })}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-note`}>
+          Note <span className="text-muted-foreground font-normal">(optional)</span>
+        </Label>
         <Input
-          ref={amountInputRef}
-          type="number"
-          min="0"
-          value={values.amount}
-          onChange={(e) => onChange({ amount: e.target.value })}
-          className="h-8 w-28 font-mono text-sm"
-          aria-label="Amount"
-          autoFocus
-        />
-        <Input
-          type="date"
-          value={values.date}
-          onChange={(e) => onChange({ date: e.target.value })}
-          className="h-8 w-36 text-sm"
-          aria-label="Date"
-        />
-        <CreateCategorySelect
-          value={values.appCategoryId}
-          categories={categories}
-          onChange={(v) => onChange({ appCategoryId: v })}
-        />
-        <CreateWalletSelect
-          value={values.walletId}
-          options={walletOptions}
-          onChange={(v) => onChange({ walletId: v })}
-        />
-        <Input
+          id={`${idPrefix}-note`}
           value={values.note}
           onChange={(e) => onChange({ note: e.target.value })}
-          className="h-8 min-w-32 flex-1 text-sm"
           placeholder="Note"
-          aria-label="Note"
         />
       </div>
-      <div className="flex shrink-0 gap-1">
-        <Button
-          type="submit"
-          size="icon"
-          className="size-7"
-          disabled={submitDisabled}
-          aria-label="Add transaction"
-        >
+
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={submitDisabled}>
           <Check className="size-4" />
+          Add transaction
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-7"
-          aria-label="Cancel"
-          onClick={onCancel}
-        >
-          <X className="size-4" />
-        </Button>
-      </div>
+      </DialogFooter>
     </form>
   );
 }
@@ -288,7 +298,7 @@ function CreateCategorySelect({
   const selectedName = categories.find((c) => c.id === value)?.name ?? "Category";
   return (
     <Select value={value || undefined} onValueChange={(v) => v && onChange(v)}>
-      <SelectTrigger className="h-8 w-36" aria-label="Category">
+      <SelectTrigger className="w-full" aria-label="Category">
         <span className="text-sm truncate">{selectedName}</span>
       </SelectTrigger>
       <SelectContent>
@@ -317,7 +327,7 @@ function CreateWalletSelect({
   const selectedName = options.find((w) => w.id === value)?.name ?? "Wallet";
   return (
     <Select value={value || undefined} onValueChange={(v) => v && onChange(v)}>
-      <SelectTrigger className="h-8 w-32" aria-label="Wallet">
+      <SelectTrigger className="w-full" aria-label="Wallet">
         <span className="text-sm truncate">{selectedName}</span>
       </SelectTrigger>
       <SelectContent>

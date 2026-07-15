@@ -94,17 +94,18 @@ export function PeriodSelector({
   const isInProgress = selectedEntry?.status === "IN_PROGRESS";
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex w-full items-center gap-2">
       <Button
         variant="outline"
         size="icon"
+        className="shrink-0"
         disabled={!hasPrev}
         onClick={() => availableMonths && prevEntry ? navigate(prevEntry) : navigateDelta(-1)}
       >
         <ChevronLeft className="size-5" />
       </Button>
 
-      <div className="text-center min-w-36">
+      <div className="min-w-0 flex-1 text-center">
         <div className="flex items-center justify-center gap-2">
           <span className="font-heading text-sm font-semibold">
             {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
@@ -125,6 +126,7 @@ export function PeriodSelector({
       <Button
         variant="outline"
         size="icon"
+        className="shrink-0"
         disabled={!hasNext}
         onClick={() => availableMonths && nextEntry ? navigate(nextEntry) : navigateDelta(1)}
       >
@@ -135,7 +137,7 @@ export function PeriodSelector({
         <Button
           variant="ghost"
           size="sm"
-          className="text-muted-foreground"
+          className="shrink-0 text-muted-foreground"
           onClick={() =>
             router.push(
               buildExpensesUrl(currentParams, { month: String(current.month), year: String(current.year) }),

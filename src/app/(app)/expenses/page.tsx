@@ -1,7 +1,6 @@
 export const dynamic = "force-dynamic";
 
 import { Suspense } from "react";
-import { ImportForm } from "@/components/expenses/import-form";
 import { AnalysisDashboard } from "@/components/expenses/analysis-dashboard";
 import { PeriodSelector } from "@/components/expenses/period-selector";
 import { ViewTabs } from "@/components/expenses/view-tabs";
@@ -61,18 +60,15 @@ export default async function ExpensesPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="space-y-3">
         <h1 className="font-heading text-2xl font-semibold">Expenses</h1>
-        <div className="flex items-center gap-3">
-          <PeriodSelector
-            selectedMonth={selectedMonth}
-            selectedYear={selectedYear}
-            startDay={startDay}
-            availableMonths={importedMonths}
-            currentParams={params}
-          />
-          <ImportForm />
-        </div>
+        <PeriodSelector
+          selectedMonth={selectedMonth}
+          selectedYear={selectedYear}
+          startDay={startDay}
+          availableMonths={importedMonths}
+          currentParams={params}
+        />
       </div>
 
       <ViewTabs view={view} month={selectedMonth} year={selectedYear} currentParams={params} />
