@@ -1,6 +1,9 @@
 # Backlog
 
+> Last updated: 2026-07-13
+
 ## Known issues
+- **Import dedup misses same-transaction rows that land on different calendar dates (bot vs. MoneyLover).** The MoneyLover-import dedup (ADR-030) matches an existing MANUAL row only on exact calendar day + exact amount. A bot-captured transaction and the same transaction's later MoneyLover-sourced row can legitimately carry different dates — the bot records a bank notification the day it arrives (a posting-date), while MoneyLover sometimes attributes the same purchase to the actual transaction date one day earlier — so a 1-day drift slips through the dedup entirely and both rows get counted. Confirmed in production (2026-07-13): 3 transactions were double-counted in the `debit/daily` wallet for one financial month this way, found only because the user cross-checked Finance Lab's total against MoneyLover's own reported figure. Fixed manually for that occurrence (the 3 duplicate MANUAL rows were deleted, keeping the richer MoneyLover-sourced versions); the underlying dedup gap in `src/lib/actions/import.ts` is **not** fixed — it will recur on the next date-drifted transaction. A real fix needs a fuzzier match (e.g. a ±1 day window) rather than the current exact-day key.
 - `next-themes` is listed as a dependency (`package.json`) but is not used — theme is managed via a plain cookie mechanism instead. The package can be removed.
 - `@anthropic-ai/sdk` and the `@googleapis/drive` packages are production dependencies, which means they are bundled for the server but not tree-shaken. This is acceptable for a server-rendered app but worth noting if bundle size ever matters.
 - ✅ RESOLVED (ADR-029) — The chat history window loads the most-recent 20 messages (`desc + take: 20`, reversed), not the 20 oldest. Two follow-on ideas from the same investigation are still open, not yet built:
@@ -214,10 +217,16 @@ double-count epoch guard.
 - **C3** — first-class envelope→envelope `Transfer` (net-zero, distinct from a counterparty "transferencia
   a cuenta X" payment), `AccountEntry.walletId` for per-wallet adjustments, reconciliation UI, and an
   agent read-only wallet-balance tool + `propose_move_between_wallets`.
-- **Open, needs Daniel's numbers:** Bancolombia's real debit/daily and investments balances — until
-  supplied, the whole current balance is parked in the `savings` wallet as a placeholder (grand total and
-  the savings figure reconcile either way; only the sub-split is provisional). See ADR-037's "one intended
-  discontinuity" note — `available` will legitimately drop once the real split is entered, by design.
+- ✅ RESOLVED (2026-07-13) — **Bancolombia's real debit/daily and investments balances.** Daniel supplied
+  real numbers for both: `debit/daily` and `investments` each had their `openingBalance`/`openingDate`
+  reset to the real current balance (a fresh epoch, per ADR-037's formula) via a direct DB write — no
+  per-wallet settings UI exists yet (still a C2 item), so this was done manually rather than through the
+  app. `investments` was also flipped to `isSavings: false` (previously `true` with only
+  `includeInAvailable: false`) — Daniel wants it entirely off the Loans/savings surface, not just excluded
+  from the liquidity KPI. Separately, `investments`' full MoneyLover-exported transaction history
+  (2024-01 through 2026-06, 96 rows) was imported directly against the wallet via a one-off script
+  (`scripts/migrate-investments-wallet.mjs`) rather than through the normal monthly `importBuffer()` flow,
+  since that flow's per-month `ImportBatch` replace logic doesn't fit a multi-year, single-wallet backfill.
 - **Data-quality note surfaced during migration:** the DB has two Bancolombia-shaped accounts — one named
   exactly `"Bancolombia"` (got the 3-way split) and one named `"Bancolombia Main"` (has real loan/
   installment-funding history but got only a single default wallet, since the split only matches the exact

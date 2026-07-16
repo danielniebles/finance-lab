@@ -1,6 +1,6 @@
 # Concepts
 
-> Last updated: 2026-06-29
+> Last updated: 2026-07-13
 
 ## What this project is
 Finance Lab is a personal finance tracking application built for a single user living in Colombia. It imports expense data from the MoneyLover mobile app, maps raw categories to a custom budget structure, and provides dashboards for monthly expense analysis, installment obligations, loan/savings tracking, goal-based vaults, and recurring-expense planning. An AI advisor (Claude Sonnet 4.6) answers questions about the user's real financial data and can propose vault contributions, recurring expense payments, and other actions for the user to approve. All amounts are in Colombian Pesos (COP).
@@ -14,7 +14,7 @@ The app does not record transactions directly. It reads XLSX exports from the Mo
 Raw category names as they appear in MoneyLover exports (e.g. "Food & Dining", "Salary"). These are discovered dynamically on import — never pre-seeded. They have no budget meaning until mapped to an AppCategory.
 
 **AppCategory**
-User-defined simplified categories with semantic meaning (e.g. "Groceries", "Transport"). Each AppCategory has one or more `BudgetItem` lines of type FIXED or VARIABLE. Multiple MoneyLover categories can map to a single AppCategory.
+User-defined simplified categories with semantic meaning (e.g. "Groceries", "Transport"). Each AppCategory has one or more `BudgetItem` lines of type FIXED or VARIABLE. Multiple MoneyLover categories can map to a single AppCategory. Since ADR-038, a category also has an optional icon and color override (independently nullable — null on either auto-derives that value from the category's name); the transaction ledger renders the resolved icon + colored pill per row.
 
 **BudgetType**
 A category is FIXED when all its budget items are fixed-cost (rent, subscriptions), VARIABLE when all items are discretionary, or MIXED when it has both. This drives how severity is calculated: fixed categories flag deviation from exact budget; variable categories flag proportional overrun.

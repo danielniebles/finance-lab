@@ -1,5 +1,7 @@
 # Data Model
 
+> Last updated: 2026-07-13
+
 ## Entities
 
 ### ImportBatch
@@ -41,6 +43,8 @@ User-defined budget category. Groups one or more MoneyLover categories and carri
 |---|---|---|
 | id | String (cuid) | Primary key |
 | name | String (unique) | e.g. "Groceries" |
+| icon | String? | Closed-registry key (`CATEGORY_ICON_KEYS`, `src/lib/category-keys.ts`) — null = auto-derive from name via `getCategoryStyle()`; non-null = explicit override (ADR-038) |
+| color | String? | Closed-registry key (`CATEGORY_COLOR_KEYS`) — same null/override rule as `icon` (ADR-038) |
 
 **Relations:** has many `CategoryMapping`; has many `BudgetItem`; has many `Transaction` (direct link — MANUAL rows only; see ADR-030); has many `CounterpartyRule` (via `counterpartyRules`, ADR-032)
 
@@ -91,10 +95,12 @@ A single expense/income record — either a row from a MoneyLover XLSX export (`
 
 **Enum `TransactionSource`:** `MONEYLOVER` | `MANUAL`
 
-**Wallet resolution rule (ADR-036/037, applied on every write):** given the row's `wallet` string label,
-match a `Wallet` by name (case-insensitive) first; if that misses — including when the label just names an
-institution with multiple partitions (e.g. "Bancolombia") — fall back to that `SavingsAccount`'s
-`defaultWalletId`; if neither matches, `walletId` stays null. See `src/lib/resolve-wallet.ts`.
+**Wallet resolution rule (ADR-036/037, amended ADR-040 — applied on every write):** given the row's `wallet`
+string label, match a `Wallet` by name (case-insensitive) first; if that misses — including when the label
+just names an institution with multiple partitions (e.g. "Bancolombia") — fall back to that
+`SavingsAccount`'s `defaultWalletId`. If the label matches **neither** a wallet nor any account at all (a
+bot guess like "Debit" that isn't a real name), fall back further to Bancolombia's `defaultWalletId`
+specifically (ADR-040) — `walletId` is left null only if even that doesn't exist. See `src/lib/resolve-wallet.ts`.
 
 ---
 
@@ -211,7 +217,7 @@ itself.
 | name | String | Partition name, e.g. "savings", "debit/daily", or the account name for a single-wallet account. Unique per account (`@@unique([accountId, name])`). |
 | color | String? | Optional hex color for UI |
 | sortOrder | Int | Display order within the account (default 0) |
-| isSavings | Boolean | Flag 1 — is this wallet part of the savings/Loans surface at all? (`debit/daily` = false; every other wallet = true) |
+| isSavings | Boolean | Flag 1 — is this wallet part of the savings/Loans surface at all? Set at C1 migration time as `debit/daily` = false, every other wallet = true; since amended in data for `investments` (also flipped to false — Daniel wants it entirely off the Loans/savings surface, not just excluded from the liquidity KPI). No per-wallet settings UI exists yet to change this outside a direct DB write (deferred to C2, see `docs/backlog.md`). |
 | includeInAvailable | Boolean | Flag 2 — moved down from `SavingsAccount` (ADR-036). Within savings, does it count toward the liquid `available` KPI? (Protección, investments = false) |
 | openingBalance | Float | Reconciliation anchor — the wallet's real balance as of `openingDate` (ADR-037) |
 | openingDate | DateTime | The balance "epoch" — only flows dated on/after this date move the balance forward |

@@ -1,5 +1,7 @@
 # Decisions
 
+> Last updated: 2026-07-13
+
 ## ADR-001 — Next.js 15 App Router with async Server Components
 
 **Decision:** All pages are async React Server Components in the `(app)` route group. DB queries are called directly inside Server Components (no internal API routes for data fetching). Every page that queries the database exports `export const dynamic = "force-dynamic"` to opt out of static rendering. Client mutations use Next.js Server Actions.
@@ -328,3 +330,54 @@
 **One intended discontinuity — the liquidity KPI.** Per-wallet balances and the grand total are continuous at t=0, but `available` is **not** automatically continuous once Bancolombia is split. Today `available` sums the whole Bancolombia account (`includeInAvailable = true`), so it currently includes money that becomes the `debit/daily` and `investments` wallets; after the split those are excluded from `available` (via `isSavings = false` and `includeInAvailable = false` respectively), so `available` legitimately **drops** and the Health Score (ADR-011) / liquidity ratio move with it. This is the correct behavior — the user wants savings shown, not spending — and is documented here so it is not later mistaken for a regression. Concretely: while balances sit in the migration placeholder (whole Bancolombia balance parked in the *savings* wallet, nothing yet in `debit/daily` or `investments`), `available` is unchanged; the KPI shifts only when the real debit/investments splits are entered, which is exactly when it should. Tests assert grand-total and per-wallet continuity unconditionally, assert `available` continuity under the placeholder, and separately assert that applying the splits lowers `available` by exactly those two wallets' balances.
 
 **Why:** Naively summing all historical transactions against a wallet would never reconcile to the bank — MoneyLover history is monthly, partial, and pre-dates the accounts — so a level (balance) can't be reconstructed purely from a flow log without an anchor. The `openingBalance`/`openingDate` epoch is that anchor, and pinning it to the migration day makes the reversal of ADR-030 safe: nothing that happened before the cutoff can move a current balance, the Health Score is continuous at t=0 (save for the intended KPI correction above), and only genuinely new activity moves the numbers. This keeps the ADR-030 dedup/backfill machinery intact for history while letting live capture finally drive real balances.
+
+---
+
+## ADR-038 — Category icon/color override (independent, nullable AppCategory fields)
+
+**Decision:** `AppCategory` gains two independent, nullable fields — `icon` and `color` — added via migration `20260711144042_add_category_icon_color`. Null on either = auto-derive that value from the category name via `getCategoryStyle()` (`src/lib/category-style.ts`); a non-null value is an explicit override, set through the Settings → Categories icon/color picker UI and written via a dedicated `updateAppCategoryStyle(id, { icon?, color? })` server action (`src/lib/actions/categories.ts`), kept separate from the existing name-editing `updateAppCategory`. Both values are validated server-side against closed key registries — `CATEGORY_ICON_KEYS` / `CATEGORY_COLOR_KEYS` in `src/lib/category-keys.ts` — since a Server Action is a public write path callable directly regardless of what the picker UI renders. `category-keys.ts` is a standalone, zero-dependency file (not inside `actions/` or a component) specifically so it can be imported by both the server action (validation) and `category-style.ts` (the presentational resolver, which pulls in Lucide icon components and Tailwind class strings) without the action layer needing any UI-layer dependency just to check a key is valid.
+
+**Why:** Categories previously only ever displayed via a fixed name → style heuristic, with no way to correct a wrong guess or add visual distinction between similarly-named categories. Two independent nullable fields (rather than one combined "style" object) let icon and color each be reset back to auto independently, and the closed key-registry approach means an invalid/typo'd key can never reach the database regardless of entry point.
+
+**Where used:** the transaction ledger row (`src/components/expenses/transaction-row.tsx`) renders the resolved icon and a colored pill per category.
+
+---
+
+## ADR-039 — Expenses page: Ledger default view, full-query preservation on nav, Analysis wallet filter, drop stale in-progress banner
+
+**Decision:** Four related fixes to `src/app/(app)/expenses/page.tsx` and its client controls, all surfaced by the same underlying pattern (a nav control only knowing about its own field(s) and reconstructing the URL from scratch):
+
+1. **Default view flipped.** `/expenses` with no `?view` param now shows the Ledger tab, not Analysis — `view = params.view === "analysis" ? "analysis" : "ledger"` (previously `=== "ledger" ? "ledger" : "analysis"`).
+2. **Full query-string preservation.** `PeriodSelector` (month navigation) and `ViewTabs` (Analysis/Ledger switch) both now build their next URL through a shared `buildExpensesUrl(currentParams, overrides)` helper (`src/lib/build-expenses-url.ts`) — merge the full current query string with only the field(s) that control actually changes. Previously each control hardcoded just `month`/`year` (`PeriodSelector`) or `view` (`ViewTabs`), silently dropping every other param — `walletId`, `groupBy`, `category`, `type`, `search` — on every month change or tab switch.
+3. **Analysis respects `walletId`.** `getMonthlyAnalysis(month, year, walletId?)` gained an optional `walletId` filter (applied to the `Transaction` `where` clause), and the Analysis tab now passes `params.walletId` through — matching the Ledger tab's existing wallet-filter behavior, and (combined with fix 2) surviving a tab switch instead of being dropped.
+4. **Removed the stale "month in progress" banner.** The Analysis tab's amber "this month's data is partial — the import is still in progress" notice (driven by `getMonthlyAnalysis`'s `isInProgress` field) was deleted — no longer applicable now that the app is bot-primary/day-to-day capture (ADR-030) rather than a discrete end-of-month import cycle. The `isInProgress` field itself and the small "in progress" pill in `PeriodSelector` were left untouched (out of scope for this pass).
+
+**Why:** A user testing the app found that changing months while viewing the Ledger silently kicked them back to Analysis, and that a wallet filter carried into the page (e.g. from an Overview deep link) wasn't respected once the Analysis tab was reached. Both trace to the same root cause — fixed once via a shared URL-building helper rather than patched per-control.
+
+---
+
+## ADR-040 — Wallet resolver: unresolved labels fall back to Bancolombia's default wallet (amends ADR-036/037)
+
+**Decision:** `resolveWalletId()` / `buildWalletResolver()` (`src/lib/resolve-wallet.ts`) previously returned `null` when a label matched neither a `Wallet` name nor a `SavingsAccount` name at all. It now falls back one step further — to the primary account's (`"bancolombia"`, hardcoded by exact name, mirroring the C1 migration's own precedent of special-casing this account) `defaultWalletId` — before finally returning `null` (only if that account/wallet doesn't exist either). Exact wallet-name and exact account-name matches are completely unaffected and still take precedence over this fallback.
+
+**Why:** A bot-captured transaction whose free-text wallet label was `"Debit"` (not an exact match for the real wallet name `debit/daily`) previously resolved to `walletId: null` — silently invisible to every wallet-scoped balance and filtered view, indistinguishable from the transaction simply not existing at all. Confirmed directly in production: a user report of "the transaction didn't get added" turned out to be a transaction that WAS created successfully, just unattributed to any wallet. Since the overwhelming majority of unresolved bot-guessed labels are day-to-day Bancolombia spending, falling back to its default wallet (rather than `null`) turns a silent, invisible mis-attribution into a visible, correctable one.
+
+---
+
+## ADR-041 — iOS home-screen app support (standalone mode)
+
+**Decision:** `src/app/layout.tsx`'s `metadata` export gains `appleWebApp: { capable: true, title: "Finance Lab", statusBarStyle: "black-translucent" }`; a new sibling `viewport` export (`Viewport` type) carries `themeColor: "#1a2030"` (`themeColor` moved out of `metadata` into a dedicated `viewport`/`generateViewport` export as of Next 14 — leaving it on `metadata` is deprecated and silently ignored). A new `src/app/manifest.ts` (Next's `MetadataRoute.Manifest` file convention) serves `/manifest.webmanifest` with `display: "standalone"`. A new `src/app/apple-icon.tsx` generates a 180×180 PNG home-screen icon via `next/og`'s `ImageResponse`, re-rendering the existing `icon.svg` brand mark as an embedded base64 data-URI `<img>` (Satori — the renderer behind `ImageResponse` — doesn't reliably render arbitrary inline SVG shapes like `<polyline>`/`<circle>`, but does render an `<img src="data:image/svg+xml;base64,...">`).
+
+**Why:** Saving the app to an iOS home screen via Safari's "Add to Home Screen" opened it inside Safari's own browser chrome (address bar, share/back buttons) rather than as a standalone app — none of the Apple-specific meta tags, a web manifest, or a dedicated home-screen icon existed before this.
+
+**Caveat:** iOS decides standalone-vs-bookmark mode at the moment a home-screen icon is saved, not at load time — an icon saved before this change keeps opening inside Safari's chrome regardless of any later deploy. Existing home-screen icons must be deleted and re-added from Safari to pick up standalone mode.
+
+---
+
+## ADR-042 — Agent: guard against phantom "drafted for approval" replies with no real proposal
+
+**Decision:** The tool-use loop (`run-agent-turn.ts`) can end a turn on plain text (`stop_reason: "end_turn"`, no `tool_use` block at all) while the model's own reply text still uses action-claiming language — "Drafted for your approval... [Proposed: ... awaiting your approval]" — picked up from its own prior turns in `ChatMessage` history. Nothing previously distinguished that from a real, `PendingProposal`-backed proposal. Two fixes, layered:
+1. `prompt.ts` now explicitly forbids saying "drafted for your approval," or any drafted/proposed/recorded language, unless a `propose_*` tool was actually called in that same turn.
+2. A deterministic backstop that doesn't rely on the model complying with (1): `isUnbackedProposalClaim(text, actionsTakenCount)` (`run-agent-turn.ts`) checks the final reply text against a regex matching exactly this failure's phrasing (`/drafted for your approval|awaiting your approval|proposed:/i`). If it matches AND zero proposals/auto-records were actually produced that turn, the reply is replaced with an honest failure message ("Something went wrong drafting that — nothing was recorded. Please try again.") before it is returned or persisted to `ChatMessage`.
+
+**Why:** Confirmed via two real production incidents in a single session — a user sent a transaction-logging message and (separately) a forwarded bank SMS; both produced a confident "Drafted for your approval ✅" reply, and both had **zero** `PendingProposal` rows in the database. The user believed both were recorded; only one was, after a resend. A DB-write failure would have thrown and produced the loop's existing generic "Something went wrong" fallback instead of a confident success message — the only explanation consistent with the evidence is the model narrating an action it never actually took. `isUnbackedProposalClaim` is a plain text-pattern check on the turn's actual output, not a trust-the-model mechanism, so it catches the failure mode even if the prompt fix in (1) isn't 100% effective.
