@@ -58,7 +58,6 @@ function requiredThisMonthColor(status: VaultStatus, stillNeeded: number): strin
 type Props = {
   vault: VaultWithMetrics;
   onContribute: () => void;
-  onWithdraw: () => void;
   onEdit: () => void;
   onHistory: () => void;
 };
@@ -68,7 +67,6 @@ type Props = {
 export function VaultTile({
   vault,
   onContribute,
-  onWithdraw,
   onEdit,
   onHistory,
 }: Props) {
@@ -262,7 +260,7 @@ export function VaultTile({
       </div>
 
       {/* Footer zone */}
-      <div className="px-4 pb-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+      <div className="px-4 pb-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t border-border/60 pt-3">
         {/* Left: status indicator */}
         <p className="font-mono text-xs text-muted-foreground tabular-nums">
           {isRecurring ? (
@@ -280,7 +278,8 @@ export function VaultTile({
           )}
         </p>
 
-        {/* Right: action buttons */}
+        {/* Right: action buttons — Add/Withdraw merged since they open the
+            same modal, which already has its own direction toggle inside. */}
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
@@ -295,19 +294,10 @@ export function VaultTile({
             variant="ghost"
             size="sm"
             className="h-7 text-xs px-2"
-            aria-label={`Contribute to ${name}`}
+            aria-label={`Add or withdraw funds for ${name}`}
             onClick={onContribute}
           >
-            + Add
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs px-2"
-            aria-label={`Withdraw from ${name}`}
-            onClick={onWithdraw}
-          >
-            − Withdraw
+            Add / Withdraw
           </Button>
           <Button
             variant="ghost"

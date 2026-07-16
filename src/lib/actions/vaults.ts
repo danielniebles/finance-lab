@@ -127,6 +127,64 @@ export async function archiveVault(id: string) {
 // ─── Vault entries ────────────────────────────────────────────────────────────
 
 /**
+ * Creates a real, categorized Transaction (negative amount) alongside the
+ * VaultEntry, linked via transactionId — the wallet's balance drops through
+ * the normal transaction sum, same as any other spend.
+ */
+async function fundContributionFromWallet(
+  vaultId: string,
+  amount: number,
+  entryDate: Date,
+  funding: { walletId: string; appCategoryId: string; notes?: string },
+) {
+  const { walletId, appCategoryId, notes } = funding;
+  const [wallet, vault] = await Promise.all([
+    db.wallet.findUniqueOrThrow({
+      where: { id: walletId },
+      select: { accountId: true, name: true },
+    }),
+    db.vault.findUniqueOrThrow({
+      where: { id: vaultId },
+      select: { name: true },
+    }),
+  ]);
+  // Default the ledger-visible note when the user didn't type one — a
+  // categorized transaction with a blank note reads ambiguously in the
+  // Expenses ledger otherwise. VaultEntry.notes (below) stays whatever the
+  // user actually typed, unaffected — the vault's own history view already
+  // has the vault name as its heading.
+  const transactionNote = notes?.trim() ? notes : `Moved to vault: ${vault.name}`;
+
+  await db.$transaction(async (tx) => {
+    const transaction = await tx.transaction.create({
+      data: {
+        amount: -amount,
+        date: entryDate,
+        appCategoryId,
+        wallet: wallet.name,
+        walletId,
+        note: transactionNote,
+        source: TransactionSource.MANUAL,
+      },
+    });
+    await tx.vaultEntry.create({
+      data: {
+        vaultId,
+        amount,
+        date: entryDate,
+        notes: notes ?? null,
+        sourceAccountId: wallet.accountId,
+        sourceWalletId: walletId,
+        transactionId: transaction.id,
+      },
+    });
+  });
+
+  revalidateVaultPaths();
+  revalidateExpensesPaths();
+}
+
+/**
  * Two ways to fund a contribution:
  *
  * - walletId + appCategoryId: creates a real, categorized Transaction
@@ -167,38 +225,7 @@ export async function addVaultEntry(
   const entryDate = date ?? new Date();
 
   if (walletId && appCategoryId && amount > 0) {
-    const wallet = await db.wallet.findUniqueOrThrow({
-      where: { id: walletId },
-      select: { accountId: true, name: true },
-    });
-
-    await db.$transaction(async (tx) => {
-      const transaction = await tx.transaction.create({
-        data: {
-          amount: -amount,
-          date: entryDate,
-          appCategoryId,
-          wallet: wallet.name,
-          walletId,
-          note: notes ?? null,
-          source: TransactionSource.MANUAL,
-        },
-      });
-      await tx.vaultEntry.create({
-        data: {
-          vaultId,
-          amount,
-          date: entryDate,
-          notes: notes ?? null,
-          sourceAccountId: wallet.accountId,
-          sourceWalletId: walletId,
-          transactionId: transaction.id,
-        },
-      });
-    });
-
-    revalidateVaultPaths();
-    revalidateExpensesPaths();
+    await fundContributionFromWallet(vaultId, amount, entryDate, { walletId, appCategoryId, notes });
     return;
   }
 

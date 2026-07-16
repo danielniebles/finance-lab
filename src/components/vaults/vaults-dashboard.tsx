@@ -213,11 +213,14 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
           <Carousel opts={{ align: "start" }} className="sm:hidden">
             <CarouselContent>
               {vaults.map((v) => (
-                <CarouselItem key={v.id} className="basis-[85%]">
+                // py-1: the tile's ring-1 border needs room to render —
+                // horizontal carousels get pl-4 from CarouselItem by default
+                // but no vertical padding, so the viewport's overflow-hidden
+                // otherwise clips the ring flush at the top/bottom edge.
+                <CarouselItem key={v.id} className="basis-[85%] py-1">
                   <VaultTile
                     vault={v}
                     onContribute={() => openEntryDialog(v.id, "contribute")}
-                    onWithdraw={() => openEntryDialog(v.id, "withdraw")}
                     onEdit={() => openEditDialog(v.id)}
                     onHistory={() => openLedger(v.id)}
                   />
@@ -232,7 +235,6 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
                 key={v.id}
                 vault={v}
                 onContribute={() => openEntryDialog(v.id, "contribute")}
-                onWithdraw={() => openEntryDialog(v.id, "withdraw")}
                 onEdit={() => openEditDialog(v.id)}
                 onHistory={() => openLedger(v.id)}
               />
