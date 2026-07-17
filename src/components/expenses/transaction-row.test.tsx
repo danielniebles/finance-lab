@@ -36,14 +36,19 @@ const CATEGORIES: CategoryOption[] = [
   { id: "cat-transport", name: "Transport", budgetType: "VARIABLE" },
 ];
 
+const WALLET_OPTIONS = [
+  { id: "wallet-nequi", name: "Nequi" },
+  { id: "wallet-cash", name: "Cash" },
+];
+
 function makeItem(overrides: Partial<LedgerItem> = {}): LedgerItem {
   return {
     id: "txn-1",
     date: new Date(2026, 6, 8),
     amount: -50_000,
     wallet: "Nequi",
-    walletId: null,
-    walletName: null,
+    walletId: "wallet-nequi",
+    walletName: "Nequi",
     note: "Groceries run",
     categoryName: "Groceries",
     categoryIcon: null,
@@ -59,7 +64,7 @@ beforeEach(() => {
 
 describe("TransactionRow — default mode", () => {
   it("renders note, category chip, and signed amount", () => {
-    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />);
+    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     // Note renders twice in the DOM (desktop inline copy + mobile own-line
     // copy), toggled via responsive `hidden` classes rather than a
@@ -70,18 +75,18 @@ describe("TransactionRow — default mode", () => {
   });
 
   it("hides the date column in day groupBy mode", () => {
-    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />);
+    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
     expect(screen.queryByText("08 jul")).not.toBeInTheDocument();
   });
 
   it("shows a 'manual' tag only for a MANUAL-sourced row", () => {
     const { rerender } = render(
-      <TransactionRow item={makeItem({ source: "MANUAL" })} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />
+      <TransactionRow item={makeItem({ source: "MANUAL" })} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />
     );
     expect(screen.getByText("manual")).toBeInTheDocument();
 
     rerender(
-      <TransactionRow item={makeItem({ source: "MONEYLOVER" })} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />
+      <TransactionRow item={makeItem({ source: "MONEYLOVER" })} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />
     );
     expect(screen.queryByText("manual")).not.toBeInTheDocument();
   });
@@ -90,7 +95,7 @@ describe("TransactionRow — default mode", () => {
 describe("TransactionRow — edit mode", () => {
   it("opens the edit dialog, edits the amount, and saves with the correct payload", async () => {
     const user = userEvent.setup();
-    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />);
+    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await user.click(screen.getByRole("button", { name: EDIT_BUTTON_NAME }));
 
@@ -108,7 +113,7 @@ describe("TransactionRow — edit mode", () => {
       expect.objectContaining({
         amount: -60000,
         appCategoryId: "cat-groceries",
-        wallet: "Nequi",
+        walletId: "wallet-nequi",
         note: "Groceries run",
       })
     );
@@ -116,7 +121,7 @@ describe("TransactionRow — edit mode", () => {
 
   it("sends appCategoryId: null (not undefined) when 'Sin categoría' is selected — regression for the dead-clear-affordance bug", async () => {
     const user = userEvent.setup();
-    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />);
+    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await user.click(screen.getByRole("button", { name: EDIT_BUTTON_NAME }));
 
@@ -137,7 +142,7 @@ describe("TransactionRow — edit mode", () => {
 
   it("Escape cancels edit mode back to the default row", async () => {
     const user = userEvent.setup();
-    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />);
+    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await user.click(screen.getByRole("button", { name: EDIT_BUTTON_NAME }));
     expect(screen.getByLabelText("Amount")).toBeInTheDocument();
@@ -151,7 +156,7 @@ describe("TransactionRow — edit mode", () => {
 
   it("sends note: null (not undefined) when the note field is cleared — regression for the dead-clear-affordance bug", async () => {
     const user = userEvent.setup();
-    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />);
+    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await user.click(screen.getByRole("button", { name: EDIT_BUTTON_NAME }));
 
@@ -168,7 +173,7 @@ describe("TransactionRow — edit mode", () => {
   it("resyncs the edit draft to the latest item when opening Edit after item changed in default mode", async () => {
     const user = userEvent.setup();
     const { rerender } = render(
-      <TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />
+      <TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />
     );
 
     rerender(
@@ -176,6 +181,7 @@ describe("TransactionRow — edit mode", () => {
         item={makeItem({ note: "Updated note", amount: -99_000 })}
         groupBy={GROUP_BY_DAY}
         categories={CATEGORIES}
+        walletOptions={WALLET_OPTIONS}
       />
     );
 
@@ -197,7 +203,7 @@ describe("TransactionRow — delete-confirm mode", () => {
 
   it("opens delete-confirm, focuses Cancel by default, and confirming deletes", async () => {
     const user = userEvent.setup();
-    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />);
+    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await openDeleteConfirm(user);
 
@@ -213,7 +219,7 @@ describe("TransactionRow — delete-confirm mode", () => {
 
   it("Escape cancels delete-confirm back to the default row", async () => {
     const user = userEvent.setup();
-    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} />);
+    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await openDeleteConfirm(user);
     expect(screen.getByText("Delete this transaction?")).toBeInTheDocument();

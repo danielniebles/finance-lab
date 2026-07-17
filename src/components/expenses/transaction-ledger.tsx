@@ -181,7 +181,12 @@ export async function TransactionLedgerPage({ month, year, groupBy, filters }: P
         {result.groups.length === 0 ? (
           <LedgerEmptyState hasActiveFilters={activeFilters} month={month} year={year} />
         ) : (
-          <TransactionGroupList groups={result.groups} groupBy={groupBy} categories={categories} />
+          <TransactionGroupList
+            groups={result.groups}
+            groupBy={groupBy}
+            categories={categories}
+            walletOptions={walletOptions}
+          />
         )}
       </LedgerControls>
     </div>

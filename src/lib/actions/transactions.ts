@@ -114,6 +114,39 @@ function resolveDetachAppCategoryId(
  * resolvable mapping (an uncategorized MoneyLover row) is left with
  * appCategoryId null — the schema permits this, so no error is raised.
  */
+/**
+ * Resolves the wallet-related update fields for `updateTransaction`
+ * (ADR-036/037). A caller-supplied `walletId` bypasses name-based resolution
+ * entirely — but its Wallet's `name` must still be looked up and written to
+ * the legacy `wallet` text column so the two stay symmetric, exactly like
+ * `createTransaction` already keeps them in sync (it just receives `wallet`
+ * as a caller-supplied label instead of having to resolve it). Without this,
+ * every reader of the raw `wallet` column (the agent's `read-tools.ts`,
+ * `queries/transactions.ts`'s `LedgerItem.wallet`) would go stale the moment
+ * a transaction is re-walleted via a walletId-only caller (the Ledger edit
+ * form's Select). `walletId` wins when both `wallet` and `walletId` are
+ * supplied in the same call. Falls back to name-based `resolveWalletId()`
+ * when only the free-text `wallet` label changes (bot/Telegram capture,
+ * counterparty auto-record); returns `{}` when neither is supplied, leaving
+ * both columns untouched per Prisma's undefined-key-is-a-no-op semantics.
+ */
+async function resolveWalletFields(data: {
+  wallet?: string;
+  walletId?: string;
+}): Promise<{ walletId?: string | null; wallet?: string }> {
+  if (data.walletId !== undefined) {
+    const wallet = await db.wallet.findUniqueOrThrow({
+      where: { id: data.walletId },
+      select: { name: true },
+    });
+    return { walletId: data.walletId, wallet: wallet.name };
+  }
+  if (data.wallet !== undefined) {
+    return { walletId: await resolveWalletId(data.wallet) };
+  }
+  return {};
+}
+
 export async function updateTransaction(
   id: string,
   data: {
@@ -121,6 +154,18 @@ export async function updateTransaction(
     date?: Date;
     appCategoryId?: string | null;
     wallet?: string;
+    /**
+     * When the caller already knows the exact Wallet.id (e.g. a curated
+     * dropdown sourced from getWalletBalances()), pass it here to skip the
+     * ambiguous name-based resolution entirely — Wallet names are only
+     * unique per SavingsAccount (`@@unique([accountId, name])`), so
+     * resolveWalletId()'s global case-insensitive name lookup can collide
+     * across accounts. Callers that still only have a free-text label
+     * (bot/Telegram capture, counterparty auto-record) keep passing `wallet`
+     * and go through resolveWalletId() as before. See `resolveWalletFields`
+     * for how the legacy `wallet` text column is kept in sync either way.
+     */
+    walletId?: string;
     note?: string | null;
   },
 ) {
@@ -145,7 +190,7 @@ export async function updateTransaction(
 
   // Re-resolve walletId (ADR-036/037) when the wallet label itself changes —
   // otherwise an edited row would keep pointing at its old wallet's balance.
-  const walletFields = data.wallet !== undefined ? { walletId: await resolveWalletId(data.wallet) } : {};
+  const walletFields = await resolveWalletFields(data);
 
   await db.transaction.update({ where: { id }, data: { ...data, ...detachFields, ...walletFields } });
   revalidateAll();

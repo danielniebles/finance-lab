@@ -32,7 +32,7 @@ type RowFormValues = {
   amount: string;
   date: string;
   appCategoryId: string;
-  wallet: string;
+  walletId: string;
   note: string;
 };
 
@@ -62,7 +62,7 @@ function formValuesFromItem(item: LedgerItem, categories: CategoryOption[]): Row
     amount: String(item.amount),
     date: dateInputValue(item.date),
     appCategoryId: categories.find((c) => c.name === item.categoryName)?.id ?? NONE_CATEGORY,
-    wallet: item.wallet,
+    walletId: item.walletId ?? "",
     note: item.note ?? "",
   };
 }
@@ -71,9 +71,10 @@ type Props = {
   item: LedgerItem;
   groupBy: LedgerGroupBy;
   categories: CategoryOption[];
+  walletOptions: { id: string; name: string }[];
 };
 
-export function TransactionRow({ item, groupBy, categories }: Props) {
+export function TransactionRow({ item, groupBy, categories, walletOptions }: Props) {
   const [mode, setMode] = useState<Mode>("default");
   const [values, setValues] = useState<RowFormValues>(() => formValuesFromItem(item, categories));
   const [pending, startTransition] = useTransition();
@@ -102,7 +103,7 @@ export function TransactionRow({ item, groupBy, categories }: Props) {
         amount: parseFloat(values.amount),
         date: new Date(values.date + "T12:00:00"),
         appCategoryId: values.appCategoryId === NONE_CATEGORY ? null : values.appCategoryId,
-        wallet: values.wallet,
+        walletId: values.walletId,
         note: values.note.trim() === "" ? null : values.note,
       });
       setMode("default");
@@ -134,6 +135,7 @@ export function TransactionRow({ item, groupBy, categories }: Props) {
             <TransactionEditForm
               values={values}
               categories={categories}
+              walletOptions={walletOptions}
               pending={pending}
               onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
               onSubmit={handleSave}
@@ -230,6 +232,7 @@ function TransactionDefaultRow({
 function TransactionEditForm({
   values,
   categories,
+  walletOptions,
   pending,
   onChange,
   onSubmit,
@@ -238,6 +241,7 @@ function TransactionEditForm({
 }: {
   values: RowFormValues;
   categories: CategoryOption[];
+  walletOptions: { id: string; name: string }[];
   pending: boolean;
   onChange: (patch: Partial<RowFormValues>) => void;
   onSubmit: (e: React.FormEvent) => void;
@@ -247,6 +251,10 @@ function TransactionEditForm({
   const idPrefix = useId();
   const selectedCategoryName =
     categories.find((c) => c.id === values.appCategoryId)?.name ?? "Sin categoría";
+  // A legacy row whose walletId hasn't been backfilled yet has "" here — mirror
+  // AddTransactionRow's canSubmit() guard rather than letting an empty walletId
+  // reach updateTransaction (it would clear the column instead of a no-op).
+  const saveDisabled = pending || values.walletId === "";
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
@@ -296,13 +304,11 @@ function TransactionEditForm({
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-wallet`}>Wallet</Label>
-          <Input
-            id={`${idPrefix}-wallet`}
-            value={values.wallet}
-            onChange={(e) => onChange({ wallet: e.target.value })}
-            placeholder="Wallet"
-            required
+          <Label>Wallet</Label>
+          <EditWalletSelect
+            value={values.walletId}
+            options={walletOptions}
+            onChange={(v) => onChange({ walletId: v })}
           />
         </div>
       </div>
@@ -332,11 +338,40 @@ function TransactionEditForm({
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={saveDisabled}>
           Save changes
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+// Same pattern as add-transaction-row.tsx's CreateWalletSelect: binds
+// value={w.id}, passes the id straight through so updateTransaction's
+// walletId param bypasses resolveWalletId's collision-prone name lookup.
+function EditWalletSelect({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: { id: string; name: string }[];
+  onChange: (v: string) => void;
+}) {
+  const selectedName = options.find((w) => w.id === value)?.name ?? "Wallet";
+  return (
+    <Select value={value || undefined} onValueChange={(v) => v && onChange(v)}>
+      <SelectTrigger className="w-full" aria-label="Wallet">
+        <span className="text-sm truncate">{selectedName}</span>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((w) => (
+          <SelectItem key={w.id} value={w.id}>
+            {w.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

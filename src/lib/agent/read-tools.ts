@@ -88,6 +88,7 @@ async function fetchTransactions(input: Record<string, unknown>): Promise<unknow
       moneyLoverCategory: {
         include: { mapping: { include: { appCategory: true } } },
       },
+      walletRef: true,
     },
     orderBy: { date: "asc" },
     take: 200,
@@ -102,7 +103,7 @@ async function fetchTransactions(input: Record<string, unknown>): Promise<unknow
       appCategory:
         t.moneyLoverCategory?.mapping?.appCategory?.name ?? null,
       note: t.note,
-      wallet: t.wallet,
+      wallet: t.walletRef?.name ?? t.wallet,
     })),
   };
 }

@@ -32,16 +32,19 @@ export async function getCategoryTransactions(
     },
     include: {
       moneyLoverCategory: true,
+      walletRef: true,
     },
     orderBy: { date: "asc" },
   });
 
+  // Prefer the live walletRef relation over the legacy wallet text column,
+  // which is frozen at write time and can go stale (ADR-036/037).
   return transactions.map((t) => ({
     id: t.id,
     date: t.date,
     amount: t.amount,
     note: t.note,
-    wallet: t.wallet,
+    wallet: t.walletRef?.name ?? t.wallet,
     mlCategoryName: t.moneyLoverCategory?.name ?? "Manual",
   }));
 }

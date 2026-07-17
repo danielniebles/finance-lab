@@ -52,7 +52,7 @@ function dateColumnPresent(container: HTMLElement): boolean {
 describe("TransactionGroupList — redundant-column suppression", () => {
   it("day mode: hides the date column, shows the category chip", () => {
     const { container } = render(
-      <TransactionGroupList groups={GROUPS} groupBy="day" categories={CATEGORIES} />
+      <TransactionGroupList groups={GROUPS} groupBy="day" categories={CATEGORIES} walletOptions={[]} />
     );
 
     expect(dateColumnPresent(container)).toBe(false);
@@ -61,7 +61,7 @@ describe("TransactionGroupList — redundant-column suppression", () => {
 
   it("category mode: shows the date column, hides the category chip", () => {
     const { container } = render(
-      <TransactionGroupList groups={GROUPS} groupBy="category" categories={CATEGORIES} />
+      <TransactionGroupList groups={GROUPS} groupBy="category" categories={CATEGORIES} walletOptions={[]} />
     );
 
     expect(dateColumnPresent(container)).toBe(true);
@@ -70,7 +70,7 @@ describe("TransactionGroupList — redundant-column suppression", () => {
 
   it("wallet mode: shows the date column, shows the category chip", () => {
     const { container } = render(
-      <TransactionGroupList groups={GROUPS} groupBy="wallet" categories={CATEGORIES} />
+      <TransactionGroupList groups={GROUPS} groupBy="wallet" categories={CATEGORIES} walletOptions={[]} />
     );
 
     expect(dateColumnPresent(container)).toBe(true);
@@ -79,7 +79,7 @@ describe("TransactionGroupList — redundant-column suppression", () => {
 
   it("renders the group header label and a signed subtotal in neutral text", () => {
     const { container } = render(
-      <TransactionGroupList groups={GROUPS} groupBy="day" categories={CATEGORIES} />
+      <TransactionGroupList groups={GROUPS} groupBy="day" categories={CATEGORIES} walletOptions={[]} />
     );
 
     expect(screen.getByText("Mié 8 jul")).toBeInTheDocument();

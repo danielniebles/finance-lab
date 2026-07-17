@@ -58,102 +58,155 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year, titleSu
 
   return (
     <>
-      <Card className="overflow-hidden border-border/60">
-        <CardHeader className="px-5 py-4 border-b border-border/60">
-          <CardTitle className="text-sm font-semibold">
-            Spend by Category{titleSuffix ? ` — ${titleSuffix}` : ""}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {/* Mobile: stacked rows — avoids the horizontal scroll a 7-column table forces. */}
-          <div className="sm:hidden">
-            {categoryBreakdown.map((row) => (
-              <CategoryMobileRow key={row.id} row={row} onClick={() => handleRowClick(row)} />
-            ))}
-          </div>
+      <CategoryBreakdownCard
+        categoryBreakdown={categoryBreakdown}
+        titleSuffix={titleSuffix}
+        onRowClick={handleRowClick}
+      />
+      <CategoryTransactionsDialog
+        open={open}
+        onOpenChange={setOpen}
+        selectedName={selectedName}
+        transactions={transactions}
+        isPending={isPending}
+      />
+    </>
+  );
+}
 
-          <div className="hidden sm:block overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-border/60 hover:bg-transparent">
-                  <TableHead className="pl-5 text-xs uppercase tracking-wide text-muted-foreground">Category</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">Type</TableHead>
-                  <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Actual</TableHead>
-                  <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Budget</TableHead>
-                  <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Control</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wide text-muted-foreground w-36">Progress</TableHead>
-                  <TableHead className="pr-5 text-xs uppercase tracking-wide text-muted-foreground">Severity</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {categoryBreakdown.map((row) => (
-                  <TableRow
-                    key={row.id}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function CategoryBreakdownCard({
+  categoryBreakdown,
+  titleSuffix,
+  onRowClick,
+}: {
+  categoryBreakdown: CategoryRow[];
+  titleSuffix?: string;
+  onRowClick: (row: CategoryRow) => void;
+}) {
+  return (
+    <Card className="overflow-hidden border-border/60">
+      <CardHeader className="px-5 py-4 border-b border-border/60">
+        <CardTitle className="text-sm font-semibold">
+          Spend by Category{titleSuffix ? ` — ${titleSuffix}` : ""}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {/* Mobile: stacked rows — avoids the horizontal scroll a 7-column table forces. */}
+        <div className="sm:hidden">
+          {categoryBreakdown.map((row) => (
+            <CategoryMobileRow key={row.id} row={row} onClick={() => onRowClick(row)} />
+          ))}
+        </div>
+
+        <div className="hidden sm:block overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border/60 hover:bg-transparent">
+                <TableHead className="pl-5 text-xs uppercase tracking-wide text-muted-foreground">Category</TableHead>
+                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">Type</TableHead>
+                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Actual</TableHead>
+                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Budget</TableHead>
+                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Control</TableHead>
+                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground w-36">Progress</TableHead>
+                <TableHead className="pr-5 text-xs uppercase tracking-wide text-muted-foreground">Severity</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {categoryBreakdown.map((row) => (
+                <TableRow
+                  key={row.id}
+                  className={cn(
+                    "border-border/40 transition-colors cursor-pointer",
+                    rowBg(row.severity)
+                  )}
+                  onClick={() => onRowClick(row)}
+                >
+                  <TableCell className="pl-5 font-medium">{row.name}</TableCell>
+                  <TableCell>
+                    <TypePill type={row.budgetType} />
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm tabular-nums">
+                    {formatCOP(row.spent)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm tabular-nums text-muted-foreground">
+                    {formatCOP(row.budget)}
+                  </TableCell>
+                  <TableCell
                     className={cn(
-                      "border-border/40 transition-colors cursor-pointer",
-                      rowBg(row.severity)
+                      "text-right font-mono text-sm tabular-nums",
+                      row.control < 0 ? "text-destructive" : "text-success"
                     )}
-                    onClick={() => handleRowClick(row)}
                   >
-                    <TableCell className="pl-5 font-medium">{row.name}</TableCell>
-                    <TableCell>
-                      <TypePill type={row.budgetType} />
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm tabular-nums">
-                      {formatCOP(row.spent)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm tabular-nums text-muted-foreground">
-                      {formatCOP(row.budget)}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right font-mono text-sm tabular-nums",
-                        row.control < 0 ? "text-destructive" : "text-success"
-                      )}
-                    >
-                      {formatCOP(row.control)}
-                    </TableCell>
-                    <TableCell>
-                      {row.percentUsed !== null ? (
-                        <div className="flex items-center gap-2">
-                          <ProgressBar percent={row.percentUsed} className="flex-1" />
-                          <span className="font-mono text-xs tabular-nums text-muted-foreground w-9 text-right shrink-0">
-                            {row.percentUsed.toFixed(0)}%
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="pr-5">
+                    {formatCOP(row.control)}
+                  </TableCell>
+                  <TableCell>
+                    {row.percentUsed !== null ? (
                       <div className="flex items-center gap-2">
-                        <SeverityBadge severity={row.severity} />
-                        {row.note && (
-                          <span className="text-xs text-muted-foreground">{row.note}</span>
-                        )}
+                        <ProgressBar percent={row.percentUsed} className="flex-1" />
+                        <span className="font-mono text-xs tabular-nums text-muted-foreground w-9 text-right shrink-0">
+                          {row.percentUsed.toFixed(0)}%
+                        </span>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="pr-5">
+                    <div className="flex items-center gap-2">
+                      <SeverityBadge severity={row.severity} />
+                      {row.note && (
+                        <span className="text-xs text-muted-foreground">{row.note}</span>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{selectedName}</DialogTitle>
-          </DialogHeader>
-          {isPending ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
-          ) : transactions.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No transactions this month.
-            </p>
-          ) : (
-            <div className="overflow-auto max-h-[60vh] -mx-4">
+function CategoryTransactionsDialog({
+  open,
+  onOpenChange,
+  selectedName,
+  transactions,
+  isPending,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  selectedName: string;
+  transactions: CategoryTransaction[];
+  isPending: boolean;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{selectedName}</DialogTitle>
+        </DialogHeader>
+        {isPending ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+        ) : transactions.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No transactions this month.
+          </p>
+        ) : (
+          <div className="overflow-auto max-h-[60vh] -mx-4">
+            {/* Mobile: stacked rows — same rationale as the outer breakdown
+                table above (avoids horizontal scroll a 5-column table forces). */}
+            <div className="sm:hidden">
+              {transactions.map((t) => (
+                <CategoryTransactionMobileRow key={t.id} transaction={t} />
+              ))}
+            </div>
+
+            <div className="hidden sm:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="border-border/60 hover:bg-transparent">
@@ -197,14 +250,12 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year, titleSu
                 </TableBody>
               </Table>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function CategoryMobileRow({ row, onClick }: { row: CategoryRow; onClick: () => void }) {
   return (
@@ -246,6 +297,35 @@ function CategoryMobileRow({ row, onClick }: { row: CategoryRow; onClick: () => 
         </div>
       )}
     </button>
+  );
+}
+
+// Mirrors transaction-row.tsx's TransactionDefaultRow priority: amount +
+// category prominent on the top line, date/wallet secondary, note demoted to
+// its own line below (truncated, same as the note column's desktop truncate).
+function CategoryTransactionMobileRow({ transaction }: { transaction: CategoryTransaction }) {
+  return (
+    <div className="flex w-full flex-col gap-1 border-b border-border/40 px-4 py-2.5 last:border-0">
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 truncate text-sm font-medium">{transaction.mlCategoryName}</span>
+        <span className="font-mono text-sm tabular-nums shrink-0">
+          {formatCOP(Math.abs(transaction.amount))}
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span className="tabular-nums">
+          {new Date(transaction.date).toLocaleDateString("es-CO", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })}
+        </span>
+        <span className="truncate">{transaction.wallet}</span>
+      </div>
+      {transaction.note && (
+        <p className="truncate text-xs text-muted-foreground">{transaction.note}</p>
+      )}
+    </div>
   );
 }
 

@@ -9,12 +9,13 @@ type Props = {
   groups: LedgerGroup[];
   groupBy: LedgerGroupBy;
   categories: CategoryOption[];
+  walletOptions: { id: string; name: string }[];
 };
 
 // Client (not just its TransactionRow children) because every row can carry
 // its own edit/delete-confirm local state — see the design spec's pseudo-
 // structure, which places this at the client boundary rather than the page.
-export function TransactionGroupList({ groups, groupBy, categories }: Props) {
+export function TransactionGroupList({ groups, groupBy, categories, walletOptions }: Props) {
   return (
     <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
       {groups.map((group) => (
@@ -23,6 +24,7 @@ export function TransactionGroupList({ groups, groupBy, categories }: Props) {
           group={group}
           groupBy={groupBy}
           categories={categories}
+          walletOptions={walletOptions}
         />
       ))}
     </div>
@@ -33,16 +35,24 @@ function TransactionGroupSection({
   group,
   groupBy,
   categories,
+  walletOptions,
 }: {
   group: LedgerGroup;
   groupBy: LedgerGroupBy;
   categories: CategoryOption[];
+  walletOptions: { id: string; name: string }[];
 }) {
   return (
     <div>
       <GroupHeader label={group.label} subtotal={group.subtotal} />
       {group.items.map((item) => (
-        <TransactionRow key={item.id} item={item} groupBy={groupBy} categories={categories} />
+        <TransactionRow
+          key={item.id}
+          item={item}
+          groupBy={groupBy}
+          categories={categories}
+          walletOptions={walletOptions}
+        />
       ))}
     </div>
   );
