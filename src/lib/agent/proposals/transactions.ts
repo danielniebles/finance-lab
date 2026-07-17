@@ -65,6 +65,25 @@ export function buildCategoryShortlist(
 }
 
 /**
+ * Falls back to a note derived from whichever counterparty field the model
+ * extracted (merchant > sender > account) when the model left `note` empty —
+ * bank-notification proposals otherwise land with a blank note even though
+ * the merchant/sender was already pulled out for rule-matching. Preference
+ * order matches the field's own likely specificity: a merchant name reads
+ * better as a note than a raw account number.
+ */
+function deriveFallbackNote(input: Record<string, unknown>, note: string | undefined): string | undefined {
+  if (note?.trim()) return note;
+  const merchant = input.counterpartyMerchant as string | undefined;
+  const sender = input.counterpartySender as string | undefined;
+  const account = input.counterpartyAccount as string | undefined;
+  if (merchant?.trim()) return merchant.trim();
+  if (sender?.trim()) return sender.trim();
+  if (account?.trim()) return `Cuenta ${account.trim()}`;
+  return undefined;
+}
+
+/**
  * Looks up a CounterpartyRule from whichever extraction fields the model
  * populated on this turn (counterpartyAccount/Merchant/Sender + direction).
  * Returns null immediately if no candidate field is present at all — the
@@ -175,7 +194,7 @@ export async function resolveAddTransaction(
   const amount = Number(input.amount);
   const date = (input.date as string | undefined) ?? new Date().toISOString().slice(0, 10);
   const wallet = (input.wallet as string | undefined) ?? "—";
-  const note = input.note as string | undefined;
+  const note = deriveFallbackNote(input, input.note as string | undefined);
 
   const rule = await lookupRuleFromInput(input, amount);
 

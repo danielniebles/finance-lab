@@ -1,9 +1,10 @@
+// UTC-based (not local getters) so this round-trips correctly regardless of
+// the browser's timezone — mirrors use-loan-form.helpers.ts's toDateInput.
+// Local getters would misread a UTC-midnight-anchored date (e.g. a
+// MoneyLover-imported row) as the day before in any negative-UTC-offset
+// timezone (like Bogotá), which then gets silently re-saved as the wrong day.
 export function dateInputValue(date: Date): string {
-  const d = new Date(date);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return new Date(date).toISOString().slice(0, 10);
 }
 
 export function formatCOP(value: number): string {
