@@ -79,15 +79,15 @@ export type AutoRecordNotice = {
  */
 export function toTelegramAutoRecordMessage(notice: AutoRecordNotice): TelegramRenderedMessage {
   const lines = [
-    `✅ <b>Registrado</b>: ${escapeHtml(notice.amountText)} → ${escapeHtml(notice.appCategoryName)}`,
+    `✅ <b>Recorded</b>: ${escapeHtml(notice.amountText)} → ${escapeHtml(notice.appCategoryName)}`,
     `Wallet: ${escapeHtml(notice.wallet)}`,
-    `<i>Regla: ${escapeHtml(notice.ruleMatchType)} "${escapeHtml(notice.ruleMatchValue)}"</i>`,
+    `<i>Rule: ${escapeHtml(notice.ruleMatchType)} "${escapeHtml(notice.ruleMatchValue)}"</i>`,
   ];
 
   const inline_keyboard: InlineButton[][] = [
     [
-      { text: "✏️ Editar", callback_data: `${notice.proposalId}:eopen:0` },
-      { text: "↩︎ Deshacer", callback_data: `undo:${notice.proposalId}` },
+      { text: "✏️ Edit", callback_data: `${notice.proposalId}:eopen:0` },
+      { text: "↩︎ Undo", callback_data: `undo:${notice.proposalId}` },
     ],
   ];
 
@@ -114,7 +114,7 @@ export function toTelegramEditOptionsMessage(
 
   // One option per row keeps labels readable; back button on its own row.
   const inline_keyboard: InlineButton[][] = optionButtons.map((b) => [b]);
-  inline_keyboard.push([{ text: "⬅︎ Volver", callback_data: `${p.id}:eback` }]);
+  inline_keyboard.push([{ text: "⬅︎ Back", callback_data: `${p.id}:eback` }]);
 
   return { text, reply_markup: { inline_keyboard } };
 }
@@ -141,7 +141,7 @@ export function toTelegramEditOptionsMessage(
 const MAX_BATCH_ITEM_BUTTON_ROWS = 30;
 
 function batchItemLine(item: BatchDescriptor["items"][number], idx: number, categoryLabel: string): string {
-  const marker = item.included ? "✓" : "✕ (tachado)";
+  const marker = item.included ? "✓" : "✕ (crossed out)";
   const scratchNote = item.scratchDetected ? " ⚠︎" : "";
   return `${idx + 1}. ${marker} ${escapeHtml(item.vendor)} ${escapeHtml(formatCOP(-Math.abs(item.amount)))} → ${escapeHtml(categoryLabel)}${scratchNote}`;
 }
@@ -166,9 +166,9 @@ export function toTelegramBatchMessage(p: ProposalDescriptor): TelegramRenderedM
 
   const text = [
     `<b>${escapeHtml(p.title)}</b>`,
-    `Tarjeta: ${escapeHtml(batch.cardLabel)}`,
+    `Card: ${escapeHtml(batch.cardLabel)}`,
     lines.join("\n"),
-    `Incluidas: ${includedCount} · Total: ${escapeHtml(formatCOP(total))}`,
+    `Included: ${includedCount} · Total: ${escapeHtml(formatCOP(total))}`,
   ].join("\n\n");
 
   const inline_keyboard: InlineButton[][] = [];
@@ -179,10 +179,10 @@ export function toTelegramBatchMessage(p: ProposalDescriptor): TelegramRenderedM
     ]);
   });
 
-  inline_keyboard.push([{ text: "💳 Tarjeta", callback_data: `${p.id}:bo` }]);
+  inline_keyboard.push([{ text: "💳 Card", callback_data: `${p.id}:bo` }]);
   inline_keyboard.push(
     p.choices.map((choice) => ({
-      text: choice.id === "approve" ? `✅ Aprobar ${includedCount}` : "❌ Descartar",
+      text: choice.id === "approve" ? `✅ Approve ${includedCount}` : "❌ Discard",
       callback_data: `${p.id}:${choice.id}`,
     })),
   );
@@ -201,7 +201,7 @@ export function toTelegramBatchCategoryMessage(
 ): TelegramRenderedMessage {
   const batch = p.batch;
   const item = batch?.items[itemIdx];
-  const text = `<b>${escapeHtml(p.title)}</b>\n\nCategoría para ${escapeHtml(item?.vendor ?? "?")}:`;
+  const text = `<b>${escapeHtml(p.title)}</b>\n\nCategory for ${escapeHtml(item?.vendor ?? "?")}:`;
 
   const optionButtons: InlineButton[] = (batch?.categoryOptions ?? []).map((opt, optIdx) => ({
     text: opt.id === item?.appCategoryId ? `✓ ${opt.label}` : opt.label,
@@ -209,7 +209,7 @@ export function toTelegramBatchCategoryMessage(
   }));
 
   const inline_keyboard: InlineButton[][] = optionButtons.map((b) => [b]);
-  inline_keyboard.push([{ text: "⬅︎ Volver", callback_data: `${p.id}:bback` }]);
+  inline_keyboard.push([{ text: "⬅︎ Back", callback_data: `${p.id}:bback` }]);
 
   return { text, reply_markup: { inline_keyboard } };
 }
@@ -220,7 +220,7 @@ export function toTelegramBatchCategoryMessage(
  */
 export function toTelegramBatchCardLabelMessage(p: ProposalDescriptor): TelegramRenderedMessage {
   const batch = p.batch;
-  const text = `<b>${escapeHtml(p.title)}</b>\n\nTarjeta:`;
+  const text = `<b>${escapeHtml(p.title)}</b>\n\nCard:`;
 
   const optionButtons: InlineButton[] = (batch?.cardLabelOptions ?? []).map((opt, optIdx) => ({
     text: opt.id === batch?.cardLabel || opt.label === batch?.cardLabel ? `✓ ${opt.label}` : opt.label,
@@ -228,7 +228,7 @@ export function toTelegramBatchCardLabelMessage(p: ProposalDescriptor): Telegram
   }));
 
   const inline_keyboard: InlineButton[][] = optionButtons.map((b) => [b]);
-  inline_keyboard.push([{ text: "⬅︎ Volver", callback_data: `${p.id}:bback` }]);
+  inline_keyboard.push([{ text: "⬅︎ Back", callback_data: `${p.id}:bback` }]);
 
   return { text, reply_markup: { inline_keyboard } };
 }

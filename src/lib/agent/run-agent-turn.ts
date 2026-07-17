@@ -207,8 +207,39 @@ export function deduplicateHistory<T extends { role: "user" | "assistant" }>(
 // since the whole point is not to trust the model's own claim.
 const FALSE_PROPOSAL_CLAIM_RE = /drafted for your approval|awaiting your approval|proposed:/i;
 
+// Same failure class, different surface: a CounterpartyRule auto-record
+// (ADR-033) confirmation. Confirmed in production (2026-07-17): 5 identical-
+// looking bank notifications for the same merchant matched an autoRecord
+// rule, but only 2 actually produced a PendingProposal + Transaction — the
+// other 3 got a confident "✅ Registered automatically per your rule..."
+// reply with ZERO propose_add_transaction tool call that turn. The model
+// pattern-matched its own prior auto-record confirmations from history
+// instead of re-calling the tool for a genuinely distinct transaction.
+// FALSE_PROPOSAL_CLAIM_RE never matched this phrasing at all (it's free
+// text from prompt.ts's instructions, not the drafted-card template), so
+// the claim sailed through undetected.
+//
+// A first fix widened this to a broad "recorded automatically"/"registered
+// automatically" catch-all, but a follow-up code-review pass caught that
+// this also matches a model TRUTHFULLY describing a PAST auto-record on a
+// pure read/Q&A turn ("Yes, it was recorded automatically per your rule
+// earlier" — zero tool calls, actionsTakenCount 0, a legitimate answer) —
+// that true statement was silently replaced with a false failure message.
+// prompt.ts now canonicalizes ONE fixed phrase — "recorded automatically
+// per your rule just now" — for the live-confirmation moment only, and
+// steers the model toward different, clearly retrospective wording for
+// past auto-records. This regex was narrowed to match only that canonical
+// phrase, so the surface area is fixed and small instead of open-ended
+// natural language. "registrado automáticamente" stays broad as defense-
+// in-depth against any already-in-flight Spanish history predating the
+// language switch — it is not reachable by live English replies anymore.
+const FALSE_AUTO_RECORD_CLAIM_RE = /recorded automatically per your rule just now|registrado autom[aá]ticamente/i;
+
 export function isUnbackedProposalClaim(text: string, actionsTakenCount: number): boolean {
-  return actionsTakenCount === 0 && FALSE_PROPOSAL_CLAIM_RE.test(text);
+  return (
+    actionsTakenCount === 0 &&
+    (FALSE_PROPOSAL_CLAIM_RE.test(text) || FALSE_AUTO_RECORD_CLAIM_RE.test(text))
+  );
 }
 
 export function collectTextBlocks(

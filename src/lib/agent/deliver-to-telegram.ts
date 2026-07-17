@@ -79,7 +79,7 @@ async function loadHistoryWithIncoming(
 // — it doesn't know about Telegram rendering. This loads the already-approved
 // PendingProposal row (created by auto-record-transaction.ts, complete with
 // its `editable` category field) and the rule that matched, to build the
-// "✅ Registrado…" notification with the reused eopen:/undo: callback formats.
+// "✅ Recorded…" notification with the reused eopen:/undo: callback formats.
 
 async function sendAutoRecordNotification(chatId: string, notice: AutoRecordedNotice): Promise<void> {
   const proposal = await db.pendingProposal.findUnique({ where: { id: notice.proposalId } });
@@ -160,7 +160,7 @@ export async function runTurnAndDeliverToTelegram(
   // what's being processed and match it to the reply that follows. Normal
   // Telegram messages are already visible in the chat; don't double-echo.
   if (channel === "shortcut") {
-    await sendMessage(chatId, `📥 Procesando: ${text}`);
+    await sendMessage(chatId, `📥 Processing: ${text}`);
   }
 
   const history = await loadHistoryWithIncoming(text);
@@ -193,13 +193,13 @@ export async function runImageTurnAndDeliverToTelegram(
 ): Promise<void> {
   const chatId = process.env.TELEGRAM_ALLOWED_CHAT_ID as string;
   const channel = opts?.channel ?? "telegram";
-  const instruction = opts?.instruction ?? "Extrae la información de esta imagen.";
+  const instruction = opts?.instruction ?? "Extract the information from this image.";
 
-  await sendMessage(chatId, "📸 Leyendo el pantallazo…");
+  await sendMessage(chatId, "📸 Reading the screenshot…");
 
   const history = await loadHistory();
   // Placeholder text for shared history — never persist raw image bytes.
-  await saveMessage("user", "📸 [foto de tarjeta recibida]", channel);
+  await saveMessage("user", "📸 [card photo received]", channel);
 
   const incomingMessage: { role: "user"; content: MessageParam["content"] } = {
     role: "user",

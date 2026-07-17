@@ -22,7 +22,7 @@ import { blockingProposal, buildResolvedProposal, type ResolvedProposal } from "
 import { resolveCategoryGuess } from "./transactions";
 import type { BatchDescriptor, BatchItem } from "../types";
 
-const OTHER_CARD_OPTION = { id: "__other__", label: "Otra…" };
+const OTHER_CARD_OPTION = { id: "__other__", label: "Other…" };
 
 type RawBatchItem = {
   vendor?: string;
@@ -69,7 +69,7 @@ async function resolveBatchItem(
  * Card-label shortlist: reuses the existing Installments-module CreditCard
  * names if any exist (a cheap, already-there fit — no new entity), otherwise
  * degrades to just the model's guessed/default label plus a synthetic
- * "Otra…", mirroring the category shortlist's degrade pattern. There is no
+ * "Other…", mirroring the category shortlist's degrade pattern. There is no
  * first-class Wallet model — `wallet` stays a free-text label everywhere in
  * this codebase (Transaction.wallet, CounterpartyRule.wallet).
  */
@@ -93,7 +93,7 @@ async function buildCardLabelOptions(
 }
 
 function formatItemLine(item: BatchItem, categoryLabel: string): string {
-  const marker = item.included ? "✓" : "✕ (tachado)";
+  const marker = item.included ? "✓" : "✕ (crossed out)";
   return `${marker} ${item.vendor} ${formatCOP(-Math.abs(item.amount))} → ${categoryLabel}`;
 }
 
@@ -120,9 +120,9 @@ export function buildBatchDisplay(
     formatItemLine(item, categoryById.get(item.appCategoryId) ?? "?"),
   );
   const fields: { label: string; value: string }[] = [
-    { label: "Tarjeta", value: batch.cardLabel },
-    { label: "Transacciones", value: lines.join("\n") },
-    { label: "Incluidas", value: `${includedCount}` },
+    { label: "Card", value: batch.cardLabel },
+    { label: "Transactions", value: lines.join("\n") },
+    { label: "Included", value: `${includedCount}` },
     { label: "Total", value: formatCOP(total) },
   ];
 
@@ -133,7 +133,7 @@ export async function resolveAddTransactionsBatch(
   input: Record<string, unknown>,
 ): Promise<ResolvedProposal> {
   const rawItems = (input.items as RawBatchItem[] | undefined) ?? [];
-  const cardLabel = (input.cardLabel as string | undefined) ?? "Tarjeta";
+  const cardLabel = (input.cardLabel as string | undefined) ?? "Card";
 
   if (rawItems.length === 0) {
     return blockingProposal(

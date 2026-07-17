@@ -6,7 +6,7 @@
 // immediately instead of waiting for approval. Reuses the EXISTING
 // PendingProposal + undo infrastructure by creating the row already
 // `status: "approved"` with a `createdId` — this is the key insight that
-// makes the Telegram `↩︎ Deshacer` button work with zero new undo code (see
+// makes the Telegram `↩︎ Undo` button work with zero new undo code (see
 // execute-proposal.ts's executeUndo, which operates on any approved,
 // reversible PendingProposal row regardless of how it got approved).
 
@@ -40,7 +40,7 @@ export function isConfidentTransaction(amount: number, date: string): boolean {
 /**
  * Builds the same shape of category `editable` field the normal Phase 1 card
  * uses (guess first, then a handful more, then "__other__"), so the
- * auto-record notification's `✏️ Editar` button can reuse the existing
+ * auto-record notification's `✏️ Edit` button can reuse the existing
  * `eopen:0`/`e:0:{optIdx}` callback handlers verbatim — they only need
  * `PendingProposal.editable[0].options` to resolve an index to an id, they
  * don't care whether the proposal was pending or already approved.
@@ -52,9 +52,9 @@ async function buildCategoryEditableField(selectedId: string): Promise<EditableF
   const options = [
     ...(selected ? [{ id: selected.id, label: selected.name }] : []),
     ...rest.map((c) => ({ id: c.id, label: c.name })),
-    { id: "__other__", label: "Otra…" },
+    { id: "__other__", label: "Other…" },
   ];
-  return { field: "appCategoryId", label: "Categoría", selectedId, options };
+  return { field: "appCategoryId", label: "Category", selectedId, options };
 }
 
 /**

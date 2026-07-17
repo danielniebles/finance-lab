@@ -16,7 +16,7 @@ import { blockingProposal, buildResolvedProposal, type ResolvedProposal } from "
 import type { EditableOption } from "../types";
 import { autoRecordFromRule, isConfidentTransaction } from "../auto-record-transaction";
 
-const OTHER_OPTION: EditableOption = { id: "__other__", label: "Otra…" };
+const OTHER_OPTION: EditableOption = { id: "__other__", label: "Other…" };
 const SHORTLIST_SIZE = 5; // resolved guess + up to 4 more, then __other__
 
 /**
@@ -50,7 +50,7 @@ export function resolveCategoryGuess(
  * Build the editable shortlist: the resolved guess first, then a few more
  * categories (alphabetically, since getCategories() is already name-sorted —
  * simplest heuristic that doesn't need extra usage-tracking for v1), then the
- * synthetic "Otra…" option always last.
+ * synthetic "Other…" option always last.
  *
  * Exported for reuse by proposals/transactions-batch.ts (ADR-034) — the
  * batch's per-item `categoryOptions` shortlist reuses this exact heuristic.
@@ -79,7 +79,7 @@ function deriveFallbackNote(input: Record<string, unknown>, note: string | undef
   const account = input.counterpartyAccount as string | undefined;
   if (merchant?.trim()) return merchant.trim();
   if (sender?.trim()) return sender.trim();
-  if (account?.trim()) return `Cuenta ${account.trim()}`;
+  if (account?.trim()) return `Account ${account.trim()}`;
   return undefined;
 }
 
@@ -168,7 +168,7 @@ async function buildNormalTransactionCard(args: NormalCardArgs): Promise<Resolve
   return buildResolvedProposal(params, title, fields, [
     {
       field: "appCategoryId",
-      label: "Categoría",
+      label: "Category",
       selectedId: guess.id,
       options: editable,
     },

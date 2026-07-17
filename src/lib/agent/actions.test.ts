@@ -4,8 +4,8 @@
 // registered in PROPOSAL_ACTIONS. Verifies: only INCLUDED items are created,
 // each created row uses the batch-level cardLabel as its wallet (never a
 // per-item rule wallet), amount is always negated (card purchases are always
-// expenses), the returned message matches the required "Agregadas N · Total
-// X · mueve X a tu pocket" copy, undo deletes every createdId, and — per the
+// expenses), the returned message matches the required "Added N · Total
+// X · moves X to your pocket" copy, undo deletes every createdId, and — per the
 // code review's Critical finding — a failure partway through the batch rolls
 // back the WHOLE db.$transaction (zero rows persisted), never N-1.
 
@@ -135,8 +135,8 @@ describe("propose_add_transactions_batch — execute", () => {
       count: 2,
       total: 75000,
     });
-    expect((result as { message: string }).message).toContain("Agregadas 2");
-    expect((result as { message: string }).message).toContain("pocket de Bancolombia");
+    expect((result as { message: string }).message).toContain("Added 2");
+    expect((result as { message: string }).message).toContain("Bancolombia pocket");
   });
 
   it("uses the vendor as the note", async () => {

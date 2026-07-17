@@ -40,7 +40,7 @@ function buildLearnRuleNudge(action: string, params: Record<string, unknown>): s
     (params.counterpartySender as string | undefined);
   if (!counterparty) return undefined;
 
-  return `💡 ¿Quieres que recuerde esto? La próxima transacción a/de "${counterparty}" se registraría automáticamente con la misma categoría y wallet. Dime "sí, recuérdalo" si quieres crear la regla.`;
+  return `💡 Want me to remember this? The next transaction to/from "${counterparty}" would be recorded automatically with the same category and wallet. Tell me "yes, remember it" if you want to create the rule.`;
 }
 
 /**

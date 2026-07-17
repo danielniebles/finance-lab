@@ -129,18 +129,18 @@ describe("resolveAddTransactionsBatch", () => {
     const batch = result.params.batch as BatchDescriptor;
     const labels = batch.cardLabelOptions.map((o) => o.label);
     expect(labels).toContain(VISA_PLATINO);
-    expect(labels).toContain("Otra…");
+    expect(labels).toContain("Other…");
   });
 
-  it("degrades to just the default label + Otra… when no CreditCards exist", async () => {
+  it("degrades to just the default label + Other… when no CreditCards exist", async () => {
     const result = await resolveAddTransactionsBatch({
       items: [rappiItem()],
-      cardLabel: "Tarjeta genérica",
+      cardLabel: "Generic Card",
     });
     const batch = result.params.batch as BatchDescriptor;
     expect(batch.cardLabelOptions).toEqual([
-      { id: "Tarjeta genérica", label: "Tarjeta genérica" },
-      { id: "__other__", label: "Otra…" },
+      { id: "Generic Card", label: "Generic Card" },
+      { id: "__other__", label: "Other…" },
     ]);
   });
 
@@ -152,7 +152,7 @@ describe("resolveAddTransactionsBatch", () => {
       ],
     });
     expect(result.title).toContain("1 items");
-    expect(result.fields.find((f) => f.label === "Incluidas")?.value).toBe("1");
+    expect(result.fields.find((f) => f.label === "Included")?.value).toBe("1");
   });
 });
 
@@ -182,6 +182,6 @@ describe("buildBatchDisplay", () => {
     };
     const { title, fields } = buildBatchDisplay(batch);
     expect(title).toContain("Visa");
-    expect(fields.find((f) => f.label === "Tarjeta")?.value).toBe("Visa");
+    expect(fields.find((f) => f.label === "Card")?.value).toBe("Visa");
   });
 });

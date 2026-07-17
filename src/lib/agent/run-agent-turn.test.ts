@@ -1228,10 +1228,10 @@ describe("resolveAddTransaction", () => {
     expect(result.editable).toHaveLength(1);
     const field = result.editable![0];
     expect(field.field).toBe("appCategoryId");
-    expect(field.label).toBe("Categoría");
+    expect(field.label).toBe("Category");
     expect(field.selectedId).toBe(GOING_OUT.id);
     expect(field.options[0]).toEqual({ id: GOING_OUT.id, label: GOING_OUT.name });
-    expect(field.options[field.options.length - 1]).toEqual({ id: "__other__", label: "Otra…" });
+    expect(field.options[field.options.length - 1]).toEqual({ id: "__other__", label: "Other…" });
     // Exactly the shortlist size (guess + up to 4 more) + the synthetic option.
     expect(field.options).toHaveLength(5 + 1);
   });
@@ -1241,7 +1241,7 @@ describe("resolveAddTransaction", () => {
 
     const result = await resolveAddTransaction({ amount: -5_000 });
     const options = result.editable![0].options;
-    expect(options.at(-1)).toEqual({ id: "__other__", label: "Otra…" });
+    expect(options.at(-1)).toEqual({ id: "__other__", label: "Other…" });
   });
 
   it("builds params/title/fields with amount, date, wallet, note — category not in fields", async () => {
@@ -1667,6 +1667,56 @@ describe("isUnbackedProposalClaim", () => {
 
   it("is case-insensitive", () => {
     expect(isUnbackedProposalClaim("DRAFTED FOR YOUR APPROVAL", 0)).toBe(true);
+  });
+
+  // Regression guard for the 2026-07-17 production incident: 5 identical bank
+  // notifications for the same merchant matched an autoRecord rule, but only
+  // 2 actually produced a PendingProposal + Transaction — the other 3 got a
+  // confident auto-record confirmation reply with zero real auto-records.
+  // FALSE_PROPOSAL_CLAIM_RE never covered this phrasing (it's free text from
+  // prompt.ts, not the drafted-card template). The regex now matches only the
+  // canonical phrase prompt.ts assigns to the live-confirmation moment —
+  // "recorded automatically per your rule just now" — not any phrasing
+  // containing "recorded"/"registered automatically".
+  it("flags the canonical auto-record confirmation phrase with zero actions taken", () => {
+    expect(
+      isUnbackedProposalClaim(
+        "✅ Recorded automatically per your rule just now (MERCHANT \"UBER RIDES*DL\" → Transport).",
+        0,
+      ),
+    ).toBe(true);
+  });
+
+  it("flags the Spanish auto-record phrasing too (defense-in-depth for in-flight history)", () => {
+    expect(
+      isUnbackedProposalClaim(
+        "✅ Registrado automáticamente según tu regla: UBER RIDES*DL → Transporte.",
+        0,
+      ),
+    ).toBe(true);
+  });
+
+  it("does not flag a real auto-record confirmation when it actually happened this turn", () => {
+    expect(
+      isUnbackedProposalClaim(
+        "✅ Recorded automatically per your rule just now (MERCHANT \"UBER RIDES*DL\" → Transport).",
+        1,
+      ),
+    ).toBe(false);
+  });
+
+  // Regression guard for the code-review finding on the fix above: the model
+  // TRUTHFULLY describing a PAST auto-record on a pure read/Q&A turn (zero
+  // tool calls, actionsTakenCount 0) must never be flagged, even though it
+  // uses similar vocabulary — only the exact canonical live-confirmation
+  // phrase (with "just now") is unsafe to say without a backing tool call.
+  it("does not flag a truthful retrospective description of a past auto-record", () => {
+    expect(
+      isUnbackedProposalClaim(
+        "Yes, it was recorded automatically per your rule earlier — no action needed.",
+        0,
+      ),
+    ).toBe(false);
   });
 });
 

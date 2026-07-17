@@ -253,7 +253,7 @@ async function editMessageWithProposal(
 
 /**
  * Re-renders an edited, already-approved auto-record proposal (ADR-033) via
- * the dedicated "✅ Registrado… [✏️ Editar] [↩︎ Deshacer]" notice view instead
+ * the dedicated "✅ Recorded… [✏️ Edit] [↩︎ Undo]" notice view instead
  * of the generic card — matching what the original notification looked like
  * before the edit. Field-mapping mirrors deliver-to-telegram.ts's
  * sendAutoRecordNotification (the template for the FIRST notice): amount/
@@ -338,14 +338,14 @@ async function resolveEditSelection(
 }
 
 /**
- * "Otra…" (__other__) is a synthetic option, not a real id to persist —
+ * "Other…" (__other__) is a synthetic option, not a real id to persist —
  * prompt for free text instead. The next normal text message is picked up by
  * the agent's ordinary prompt behavior (Part D), which re-resolves the typed
  * name and re-issues the proposal; no special state machine needed.
  */
 async function promptForOtherCategory(cbq: TelegramCallbackQuery, chatId: number): Promise<void> {
   await answerCallbackQuery(cbq.id, "");
-  await sendMessage(chatId, "Escribe la categoría");
+  await sendMessage(chatId, "Type the category");
 }
 
 async function handleEditApplyCallback(
@@ -388,8 +388,8 @@ async function handleEditApplyCallback(
 // replaces with a friendlier "✅ Approved" — unchanged behavior for every
 // action. Some actions (currently only the batch's `propose_add_transactions_batch`,
 // via its generic `message` escape hatch) opt into returning their own
-// meaningful reply — e.g. "✅ Agregadas N · Total X · mueve X a tu pocket de
-// Bancolombia." — which the user needs as a persistent, readable chat message,
+// meaningful reply — e.g. "✅ Added N · Total X · moves X to your Bancolombia
+// pocket." — which the user needs as a persistent, readable chat message,
 // not just the ephemeral answerCallbackQuery toast. Surface that real message
 // instead of clobbering it with the generic text.
 function approvedMessageText(resultMessage: string): string {

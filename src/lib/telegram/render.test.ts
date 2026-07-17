@@ -28,12 +28,12 @@ function makeProposal(overrides?: Partial<ProposalDescriptor>): ProposalDescript
     editable: [
       {
         field: "appCategoryId",
-        label: "Categoría",
+        label: "Category",
         selectedId: "cat-1",
         options: [
           { id: "cat-1", label: "Groceries" },
           { id: "cat-2", label: "Going Out" },
-          { id: "__other__", label: "Otra…" },
+          { id: "__other__", label: "Other…" },
         ],
       },
     ],
@@ -46,7 +46,7 @@ describe("toTelegramMessage", () => {
     const { reply_markup } = toTelegramMessage(makeProposal());
     const buttonTexts = reply_markup.inline_keyboard.flat().map((b) => b.text);
 
-    expect(buttonTexts).toContain("✏️ Categoría");
+    expect(buttonTexts).toContain("✏️ Category");
     expect(buttonTexts).toContain("✅ Approve");
     expect(buttonTexts).toContain("❌ Dismiss");
   });
@@ -60,12 +60,12 @@ describe("toTelegramMessage", () => {
 
   it("shows the currently selected option's label in the card text", () => {
     const { text } = toTelegramMessage(makeProposal());
-    expect(text).toContain("Categoría: Groceries");
+    expect(text).toContain("Category: Groceries");
   });
 
   it("uses eopen:{fieldIdx} callback_data for the editable button", () => {
     const { reply_markup } = toTelegramMessage(makeProposal());
-    const editButton = reply_markup.inline_keyboard.flat().find((b) => b.text === "✏️ Categoría");
+    const editButton = reply_markup.inline_keyboard.flat().find((b) => b.text === "✏️ Category");
     expect(editButton?.callback_data).toBe(`${REALISTIC_PROPOSAL_ID}:eopen:0`);
   });
 });
@@ -77,13 +77,13 @@ describe("toTelegramEditOptionsMessage", () => {
 
     expect(rows[0][0].text).toBe("✓ Groceries");
     expect(rows[1][0].text).toBe("Going Out");
-    expect(rows[2][0].text).toBe("Otra…");
+    expect(rows[2][0].text).toBe("Other…");
   });
 
   it("appends a back button that restores the default card view", () => {
     const { reply_markup } = toTelegramEditOptionsMessage(makeProposal(), 0);
     const lastRow = reply_markup.inline_keyboard.at(-1);
-    expect(lastRow).toEqual([{ text: "⬅︎ Volver", callback_data: `${REALISTIC_PROPOSAL_ID}:eback` }]);
+    expect(lastRow).toEqual([{ text: "⬅︎ Back", callback_data: `${REALISTIC_PROPOSAL_ID}:eback` }]);
   });
 
   it("uses e:{fieldIdx}:{optIdx} callback_data for each option", () => {
@@ -113,19 +113,19 @@ describe("toTelegramAutoRecordMessage", () => {
     expect(text).toContain("61793614704");
   });
 
-  it("reuses the eopen:0 callback format for the Editar button (no new callback format)", () => {
+  it("reuses the eopen:0 callback format for the Edit button (no new callback format)", () => {
     const { reply_markup } = toTelegramAutoRecordMessage(NOTICE);
     const buttons = reply_markup.inline_keyboard.flat();
 
-    const editButton = buttons.find((b) => b.text.includes("Editar"));
+    const editButton = buttons.find((b) => b.text.includes("Edit"));
     expect(editButton?.callback_data).toBe(`${REALISTIC_PROPOSAL_ID}:eopen:0`);
   });
 
-  it("reuses the undo:{proposalId} callback format for the Deshacer button", () => {
+  it("reuses the undo:{proposalId} callback format for the Undo button", () => {
     const { reply_markup } = toTelegramAutoRecordMessage(NOTICE);
     const buttons = reply_markup.inline_keyboard.flat();
 
-    const undoButton = buttons.find((b) => b.text.includes("Deshacer"));
+    const undoButton = buttons.find((b) => b.text.includes("Undo"));
     expect(undoButton?.callback_data).toBe(`undo:${REALISTIC_PROPOSAL_ID}`);
   });
 });

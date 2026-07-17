@@ -86,12 +86,12 @@ import { POST } from "./route";
 const CATEGORY_EDITABLE = [
   {
     field: "appCategoryId",
-    label: "Categoría",
+    label: "Category",
     selectedId: "cat-pets",
     options: [
       { id: "cat-pets", label: "Pets" },
       { id: "cat-family", label: "Family" },
-      { id: "__other__", label: "Otra…" },
+      { id: "__other__", label: "Other…" },
     ],
   },
 ];

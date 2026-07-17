@@ -122,7 +122,7 @@ describe("runTurnAndDeliverToTelegram — ingest echo", () => {
 
     expect(sendMessageMock).toHaveBeenCalledWith(
       "12345",
-      "📥 Procesando: Compra aprobada $11.956 en Uber",
+      "📥 Processing: Compra aprobada $11.956 en Uber",
     );
   });
 
@@ -130,14 +130,14 @@ describe("runTurnAndDeliverToTelegram — ingest echo", () => {
     await runTurnAndDeliverToTelegram("hola", { channel: "telegram" });
 
     const echoCalls = sendMessageMock.mock.calls.filter(([, text]) =>
-      String(text).startsWith("📥 Procesando:"),
+      String(text).startsWith("📥 Processing:"),
     );
     expect(echoCalls).toHaveLength(0);
   });
 });
 
 // ─── runImageTurnAndDeliverToTelegram (card-screenshot Part 1) ───────────────
-// Verifies the image entry point round-trips: sends the "📸 Leyendo…" echo,
+// Verifies the image entry point round-trips: sends the "📸 Reading…" echo,
 // persists a text placeholder (never raw image bytes) to ChatMessage, attaches
 // the image content block only to the LIVE incoming message (history rows stay
 // plain strings), and delivers the result exactly like the text path.
@@ -151,10 +151,10 @@ describe("runImageTurnAndDeliverToTelegram", () => {
 
   const IMAGE = { base64: "ZmFrZS1pbWFnZS1ieXRlcw==", mediaType: "image/jpeg" };
 
-  it("sends the 'Leyendo el pantallazo' echo before running the turn", async () => {
+  it("sends the 'Reading the screenshot' echo before running the turn", async () => {
     await runImageTurnAndDeliverToTelegram(IMAGE);
 
-    expect(sendMessageMock).toHaveBeenCalledWith("12345", "📸 Leyendo el pantallazo…");
+    expect(sendMessageMock).toHaveBeenCalledWith("12345", "📸 Reading the screenshot…");
   });
 
   it("persists a text placeholder to ChatMessage instead of raw image bytes", async () => {
@@ -162,7 +162,7 @@ describe("runImageTurnAndDeliverToTelegram", () => {
 
     expect(saveMessage).toHaveBeenCalledWith(
       "user",
-      "📸 [foto de tarjeta recibida]",
+      "📸 [card photo received]",
       "telegram",
     );
     // Never persist base64 image bytes anywhere in the call.

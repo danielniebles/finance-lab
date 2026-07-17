@@ -25,12 +25,12 @@ import { applyProposalEdit } from "./apply-proposal-edit";
 const CATEGORY_EDITABLE = [
   {
     field: "appCategoryId",
-    label: "Categoría",
+    label: "Category",
     selectedId: "cat-1",
     options: [
       { id: "cat-1", label: "Groceries" },
       { id: "cat-2", label: "Going Out" },
-      { id: "__other__", label: "Otra…" },
+      { id: "__other__", label: "Other…" },
     ],
   },
 ];

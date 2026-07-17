@@ -485,7 +485,7 @@ async function executeAddTransactionsBatch(
   }
 
   const total = included.reduce((sum, item) => sum + Math.abs(item.amount), 0);
-  const message = `✅ Agregadas ${included.length} · Total ${formatCOP(total)} · mueve ${formatCOP(total)} a tu pocket de Bancolombia.`;
+  const message = `✅ Added ${included.length} · Total ${formatCOP(total)} · moves ${formatCOP(total)} to your Bancolombia pocket.`;
 
   return { createdIds, count: included.length, total, message };
 }

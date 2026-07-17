@@ -19,7 +19,7 @@ export type EditableOption = { id: string; label: string };
 
 export type EditableField = {
   field: string; // e.g. "appCategoryId" — key into params to update on edit
-  label: string; // e.g. "Categoría"
+  label: string; // e.g. "Category"
   selectedId: string; // current value (the agent's guess)
   options: EditableOption[]; // shortlist, incl. synthetic "__other__" last
 };
@@ -69,7 +69,7 @@ export type ProposalDescriptor = {
  * A transaction the counterparty-rule auto-record path (ADR-033) already
  * created and approved during this turn — the tool-use loop skipped the
  * normal proposal-card flow entirely. Delivery layers (deliver-to-telegram.ts)
- * use this to send the "✅ Registrado… [✏️ Editar] [↩︎ Deshacer]" notification
+ * use this to send the "✅ Recorded… [✏️ Edit] [↩︎ Undo]" notification
  * instead of (or alongside) a normal action card.
  */
 export type AutoRecordedNotice = {
