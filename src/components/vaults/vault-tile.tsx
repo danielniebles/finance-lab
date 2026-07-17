@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil } from "lucide-react";
+import { ArrowLeftRight, History, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -278,26 +278,29 @@ export function VaultTile({
           )}
         </p>
 
-        {/* Right: action buttons — Add/Withdraw merged since they open the
-            same modal, which already has its own direction toggle inside. */}
+        {/* Right: action buttons — all icon-only so this row can never wrap
+            regardless of card width or the status text's length (fixed
+            28px per button vs. text metrics that vary with font/content).
+            Add/Withdraw merged into one button since they open the same
+            modal, which has its own direction toggle inside. */}
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 text-xs px-2"
+            size="icon"
+            className="size-7"
             aria-label={`View history for ${name}`}
             onClick={onHistory}
           >
-            History
+            <History className="size-4" aria-hidden="true" />
           </Button>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 text-xs px-2"
+            size="icon"
+            className="size-7"
             aria-label={`Add or withdraw funds for ${name}`}
             onClick={onContribute}
           >
-            Add / Withdraw
+            <ArrowLeftRight className="size-4" aria-hidden="true" />
           </Button>
           <Button
             variant="ghost"

@@ -41,6 +41,7 @@ const RULE: CounterpartyRuleRow = {
   appCategoryId: "cat-pets",
   appCategoryName: "Pets",
   wallet: "Investments",
+  walletId: null,
   autoRecord: true,
   recurring: false,
   expectedAmount: null,
@@ -96,8 +97,23 @@ describe("autoRecordFromRule", () => {
       date: new Date(TEST_DATE),
       appCategoryId: "cat-pets",
       wallet: "Investments",
+      walletId: undefined,
       note: "Transferencia",
     });
+  });
+
+  it("passes the rule's resolved walletId through when set, bypassing name-based resolution", async () => {
+    await autoRecordFromRule({
+      amount: -45_000,
+      date: TEST_DATE,
+      note: "Transferencia",
+      rule: { ...RULE, walletId: "wallet-1" },
+      channel: TEST_CHANNEL,
+    });
+
+    expect(createTransactionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ walletId: "wallet-1" }),
+    );
   });
 
   it("bumps the rule's matchCount/lastMatchedAt", async () => {

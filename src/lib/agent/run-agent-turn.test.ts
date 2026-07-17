@@ -1298,6 +1298,7 @@ function makeRule(overrides?: Partial<CounterpartyRuleRow>): CounterpartyRuleRow
     appCategoryId: "cat-pets",
     appCategoryName: "Pets",
     wallet: "Investments",
+    walletId: null,
     autoRecord: true,
     recurring: false,
     expectedAmount: null,

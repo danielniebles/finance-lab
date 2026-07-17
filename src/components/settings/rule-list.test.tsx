@@ -23,6 +23,11 @@ const CATEGORIES = [
   { id: "cat-family", name: "Family" },
 ];
 
+const WALLET_OPTIONS = [
+  { id: "wallet-investments", name: "Investments" },
+  { id: "wallet-cash", name: "Cash" },
+];
+
 function makeRule(overrides: Partial<CounterpartyRuleRowData> = {}): CounterpartyRuleRowData {
   return {
     id: "rule-1",
@@ -32,6 +37,7 @@ function makeRule(overrides: Partial<CounterpartyRuleRowData> = {}): Counterpart
     appCategoryId: "cat-pets",
     appCategoryName: "Pets",
     wallet: "Investments",
+    walletId: "wallet-investments",
     autoRecord: true,
     recurring: false,
     expectedAmount: null,
@@ -56,7 +62,7 @@ afterAll(() => {
 
 describe("RuleList — rendering", () => {
   it("renders a rule row with its category, wallet, and match info", () => {
-    render(<RuleList rules={[makeRule()]} categories={CATEGORIES} />);
+    render(<RuleList rules={[makeRule()]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     expect(screen.getByText("61793614704")).toBeInTheDocument();
     expect(screen.getByText("Pets")).toBeInTheDocument();
@@ -66,49 +72,82 @@ describe("RuleList — rendering", () => {
   });
 
   it("shows 'Never' when lastMatchedAt is null", () => {
-    render(<RuleList rules={[makeRule({ lastMatchedAt: null, matchCount: 0 })]} categories={CATEGORIES} />);
+    render(
+      <RuleList
+        rules={[makeRule({ lastMatchedAt: null, matchCount: 0 })]}
+        categories={CATEGORIES}
+        walletOptions={WALLET_OPTIONS}
+      />
+    );
 
     expect(screen.getByText("Never")).toBeInTheDocument();
     expect(screen.getByText("0 matches")).toBeInTheDocument();
   });
 
   it("shows an empty state when there are no rules", () => {
-    render(<RuleList rules={[]} categories={CATEGORIES} />);
+    render(<RuleList rules={[]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     expect(screen.getByText("No rules yet. Add one below.")).toBeInTheDocument();
   });
 });
 
 describe("RuleList — create", () => {
-  it("creating a rule calls createCounterpartyRule with the form shape", async () => {
+  // Explicit timeout: this test now drives two Select popovers (category +
+  // wallet) plus typing and submit — under full-suite parallel contention
+  // that exceeds Vitest's 5000ms default, even though each interaction is
+  // fast in isolation (see the standalone run, ~2.4s for the whole file).
+  it(
+    "creating a rule calls createCounterpartyRule with the form shape",
+    async () => {
+      const user = userEvent.setup();
+      render(<RuleList rules={[]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
+
+      await user.click(screen.getByRole("button", { name: /add rule/i }));
+
+      await user.type(screen.getByPlaceholderText("Account number"), "123456");
+
+      await user.click(screen.getByText("Select…"));
+      await user.click(await screen.findByRole("option", { name: "Pets" }));
+
+      await user.click(screen.getByRole("combobox", { name: "Wallet" }));
+      await user.click(await screen.findByRole("option", { name: "Investments" }));
+
+      await user.click(screen.getByRole("button", { name: "Create rule" }));
+
+      expect(createCounterpartyRuleMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          matchType: "ACCOUNT",
+          matchValue: "123456",
+          appCategoryId: "cat-pets",
+          wallet: "Investments",
+          walletId: "wallet-investments",
+          autoRecord: true,
+          recurring: false,
+        })
+      );
+    },
+    10000
+  );
+
+  it("shows a visible hint (not just a disabled button) while no wallet is selected", async () => {
     const user = userEvent.setup();
-    render(<RuleList rules={[]} categories={CATEGORIES} />);
+    render(<RuleList rules={[]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await user.click(screen.getByRole("button", { name: /add rule/i }));
 
-    await user.type(screen.getByPlaceholderText("Account number"), "123456");
-    await user.type(screen.getByPlaceholderText("Wallet"), "Investments");
+    expect(screen.getByText("Select a wallet to save")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create rule" })).toBeDisabled();
 
-    await user.click(screen.getByText("Select…"));
-    await user.click(await screen.findByRole("option", { name: "Pets" }));
+    await user.click(screen.getByRole("combobox", { name: "Wallet" }));
+    await user.click(await screen.findByRole("option", { name: "Investments" }));
 
-    await user.click(screen.getByRole("button", { name: "Create rule" }));
-
-    expect(createCounterpartyRuleMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        matchType: "ACCOUNT",
-        matchValue: "123456",
-        appCategoryId: "cat-pets",
-        wallet: "Investments",
-        autoRecord: true,
-        recurring: false,
-      })
-    );
+    expect(screen.queryByText("Select a wallet to save")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create rule" })).not.toBeDisabled();
   });
 
   it("recurring gates the expectedAmount field's visibility", async () => {
     const user = userEvent.setup();
-    render(<RuleList rules={[]} categories={CATEGORIES} />);
+    render(<RuleList rules={[]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await user.click(screen.getByRole("button", { name: /add rule/i }));
 
@@ -123,7 +162,7 @@ describe("RuleList — create", () => {
 describe("RuleList — edit", () => {
   it("editing a rule calls updateCounterpartyRule with the updated shape", async () => {
     const user = userEvent.setup();
-    render(<RuleList rules={[makeRule()]} categories={CATEGORIES} />);
+    render(<RuleList rules={[makeRule()]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await user.click(screen.getByRole("button", { name: "Edit rule" }));
 
@@ -145,6 +184,7 @@ describe("RuleList — edit", () => {
       <RuleList
         rules={[makeRule({ recurring: true, expectedAmount: 50000 })]}
         categories={CATEGORIES}
+        walletOptions={WALLET_OPTIONS}
       />
     );
 
@@ -170,7 +210,7 @@ describe("RuleList — edit", () => {
 describe("RuleList — delete", () => {
   it("delete confirms then calls deleteCounterpartyRule", async () => {
     const user = userEvent.setup();
-    render(<RuleList rules={[makeRule()]} categories={CATEGORIES} />);
+    render(<RuleList rules={[makeRule()]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await user.click(screen.getByRole("button", { name: "Delete rule" }));
 

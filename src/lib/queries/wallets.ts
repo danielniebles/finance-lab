@@ -88,3 +88,19 @@ export async function getWalletBalances(): Promise<WalletBalancesResult> {
 
   return { accounts: accountsWithWallets, grandTotal };
 }
+
+
+/**
+ * Cheap `{id, name}` pairs for every wallet, for a plain dropdown (e.g. the
+ * counterparty-rule wallet picker) that has no use for balances. Avoids
+ * `getWalletBalances()`'s full dashboard-grade computation (accounts +
+ * entries + transfers + loans + vault entries + an unbounded transaction
+ * scan) when only the id/name is needed — mirrors `buildWalletResolver()`'s
+ * (`resolve-wallet.ts`) own cheap `findMany` for the same reason.
+ */
+export async function listWalletOptions(): Promise<{ id: string; name: string }[]> {
+  return db.wallet.findMany({
+    select: { id: true, name: true },
+    orderBy: { sortOrder: "asc" },
+  });
+}

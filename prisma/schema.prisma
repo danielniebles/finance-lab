@@ -124,6 +124,11 @@ model CounterpartyRule {
   appCategoryId  String
   appCategory    AppCategory   @relation(fields: [appCategoryId], references: [id])
   wallet         String // wallet LABEL to route to — overrides the message's stated account
+  // Wallet partition this rule routes to (ADR-036/037-style upgrade, mirrors
+  // Transaction.walletId/walletRef exactly). Nullable during migration; `wallet`
+  // (the legacy string label) is kept as a fallback + audit trail.
+  walletId       String?
+  walletRef      Wallet?       @relation(fields: [walletId], references: [id])
   autoRecord     Boolean       @default(true)
   recurring      Boolean       @default(false)
   expectedAmount Float?
@@ -219,6 +224,7 @@ model Wallet {
   openingDate        DateTime // the balance "epoch" — only flows on/after this date move the balance
 
   transactions       Transaction[]
+  counterpartyRules  CounterpartyRule[]
   loans              Loan[]
   vaultEntriesFunded VaultEntry[]     @relation("VaultFundingWallet")
   savingsWalletFor   SavingsAccount[] @relation("AccountSavingsWallet")

@@ -10,6 +10,9 @@ export type CounterpartyRuleRow = {
   appCategoryId: string;
   appCategoryName: string;
   wallet: string;
+  // Wallet partition this rule routes to (ADR-036/037-style upgrade). Null
+  // until backfilled/resolved via a curated Wallet picker or resolveWalletId().
+  walletId: string | null;
   autoRecord: boolean;
   recurring: boolean;
   expectedAmount: number | null;
@@ -42,6 +45,7 @@ export async function getCounterpartyRules(): Promise<CounterpartyRuleRow[]> {
     appCategoryId: rule.appCategoryId,
     appCategoryName: rule.appCategory.name,
     wallet: rule.wallet,
+    walletId: rule.walletId,
     autoRecord: rule.autoRecord,
     recurring: rule.recurring,
     expectedAmount: rule.expectedAmount,
@@ -106,6 +110,7 @@ export async function matchCounterpartyRule(
         appCategoryId: rule.appCategoryId,
         appCategoryName: rule.appCategory.name,
         wallet: rule.wallet,
+        walletId: rule.walletId,
         autoRecord: rule.autoRecord,
         recurring: rule.recurring,
         expectedAmount: rule.expectedAmount,

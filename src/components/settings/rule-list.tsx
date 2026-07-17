@@ -17,6 +17,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Pencil, Trash2, Plus, Check, X } from "lucide-react";
+import { WalletSelect } from "@/components/shared/wallet-select";
 
 export type CounterpartyRuleRowData = {
   id: string;
@@ -26,6 +27,9 @@ export type CounterpartyRuleRowData = {
   appCategoryId: string;
   appCategoryName: string;
   wallet: string;
+  // Curated Wallet.id this rule routes to (ADR-036/037-style upgrade). Null
+  // until backfilled/resolved — see WalletSelect's placeholder fallback.
+  walletId: string | null;
   autoRecord: boolean;
   recurring: boolean;
   expectedAmount: number | null;
@@ -36,6 +40,7 @@ export type CounterpartyRuleRowData = {
 };
 
 type CategoryOption = { id: string; name: string };
+type WalletOption = { id: string; name: string };
 
 const MATCH_TYPE_LABELS: Record<RuleMatchType, string> = {
   ACCOUNT: "Account",
@@ -172,7 +177,7 @@ export type RuleFormValues = {
   matchValue: string;
   direction: RuleDirection;
   appCategoryId: string;
-  wallet: string;
+  walletId: string;
   autoRecord: boolean;
   recurring: boolean;
   expectedAmount: string;
@@ -185,7 +190,7 @@ function emptyFormValues(): RuleFormValues {
     matchValue: "",
     direction: "ANY",
     appCategoryId: "",
-    wallet: "",
+    walletId: "",
     autoRecord: true,
     recurring: false,
     expectedAmount: "",
@@ -199,7 +204,7 @@ function formValuesFromRule(rule: CounterpartyRuleRowData): RuleFormValues {
     matchValue: rule.matchValue,
     direction: rule.direction,
     appCategoryId: rule.appCategoryId,
-    wallet: rule.wallet,
+    walletId: rule.walletId ?? "",
     autoRecord: rule.autoRecord,
     recurring: rule.recurring,
     expectedAmount: rule.expectedAmount != null ? String(rule.expectedAmount) : "",
@@ -214,10 +219,12 @@ function defaultFormValues(rule?: CounterpartyRuleRowData): RuleFormValues {
 function RuleFormFields({
   values,
   categories,
+  walletOptions,
   onChange,
 }: {
   values: RuleFormValues;
   categories: CategoryOption[];
+  walletOptions: WalletOption[];
   onChange: (patch: Partial<RuleFormValues>) => void;
 }) {
   return (
@@ -245,13 +252,18 @@ function RuleFormFields({
           categories={categories}
           onChange={(appCategoryId) => onChange({ appCategoryId })}
         />
-        <Input
-          value={values.wallet}
-          onChange={(e) => onChange({ wallet: e.target.value })}
-          placeholder="Wallet"
-          className="h-8 w-32 text-sm"
-          required
-        />
+        <div className="flex flex-col gap-0.5">
+          <WalletSelect
+            value={values.walletId}
+            options={walletOptions}
+            onChange={(walletId) => onChange({ walletId })}
+            className="h-8 w-32"
+            invalid={values.walletId === ""}
+          />
+          {values.walletId === "" && (
+            <span className="text-xs text-destructive pl-1">Select a wallet to save</span>
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-4 flex-wrap">
         <ToggleField
@@ -286,13 +298,19 @@ function RuleFormFields({
   );
 }
 
-function buildPayload(values: RuleFormValues) {
+// createCounterpartyRule/updateCounterpartyRule still require a `wallet`
+// name (resolveWalletFields writes it back for every other reader of that
+// legacy column), so the curated walletId's name is resolved here and sent
+// alongside it — walletId wins server-side and overwrites `wallet` anyway
+// (see resolve-wallet.ts), this just satisfies the required field.
+function buildPayload(values: RuleFormValues, walletOptions: WalletOption[]) {
   return {
     matchType: values.matchType,
     matchValue: values.matchValue,
     direction: values.direction,
     appCategoryId: values.appCategoryId,
-    wallet: values.wallet,
+    wallet: walletOptions.find((w) => w.id === values.walletId)?.name ?? "",
+    walletId: values.walletId || undefined,
     autoRecord: values.autoRecord,
     recurring: values.recurring,
     // Only submit expectedAmount when recurring is on — the input is hidden
@@ -304,7 +322,15 @@ function buildPayload(values: RuleFormValues) {
   };
 }
 
-function RuleRow({ rule, categories }: { rule: CounterpartyRuleRowData; categories: CategoryOption[] }) {
+function RuleRow({
+  rule,
+  categories,
+  walletOptions,
+}: {
+  rule: CounterpartyRuleRowData;
+  categories: CategoryOption[];
+  walletOptions: WalletOption[];
+}) {
   const [editing, setEditing] = useState(false);
   const [values, setValues] = useState<RuleFormValues>(() => defaultFormValues(rule));
   const [pending, startTransition] = useTransition();
@@ -316,7 +342,7 @@ function RuleRow({ rule, categories }: { rule: CounterpartyRuleRowData; categori
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      await updateCounterpartyRule(rule.id, buildPayload(values));
+      await updateCounterpartyRule(rule.id, buildPayload(values, walletOptions));
       setEditing(false);
     });
   }
@@ -326,12 +352,18 @@ function RuleRow({ rule, categories }: { rule: CounterpartyRuleRowData; categori
     startTransition(() => deleteCounterpartyRule(rule.id));
   }
 
+  // A rule whose walletId hasn't been backfilled yet has "" here — mirror
+  // transaction-row.tsx's EditWalletSelect saveDisabled guard rather than
+  // letting an empty walletId reach updateCounterpartyRule (buildPayload
+  // would resolve an empty `wallet` name for it).
+  const saveDisabled = pending || values.walletId === "";
+
   if (editing) {
     return (
       <form onSubmit={handleSave} className="flex items-start justify-between gap-3 px-4 py-3 border-b border-border last:border-0">
-        <RuleFormFields values={values} categories={categories} onChange={handlePatch} />
+        <RuleFormFields values={values} categories={categories} walletOptions={walletOptions} onChange={handlePatch} />
         <div className="flex gap-1 shrink-0 pt-1">
-          <Button type="submit" size="icon" className="size-7" disabled={pending} aria-label="Save rule">
+          <Button type="submit" size="icon" className="size-7" disabled={saveDisabled} aria-label="Save rule">
             <Check className="size-3.5" />
           </Button>
           <Button
@@ -405,9 +437,11 @@ function RuleRow({ rule, categories }: { rule: CounterpartyRuleRowData; categori
 
 function AddRuleRow({
   categories,
+  walletOptions,
   onDone,
 }: {
   categories: CategoryOption[];
+  walletOptions: WalletOption[];
   onDone: () => void;
 }) {
   const [values, setValues] = useState<RuleFormValues>(() => defaultFormValues());
@@ -420,16 +454,18 @@ function AddRuleRow({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      await createCounterpartyRule(buildPayload(values));
+      await createCounterpartyRule(buildPayload(values, walletOptions));
       onDone();
     });
   }
 
+  const submitDisabled = pending || values.walletId === "";
+
   return (
     <form onSubmit={handleSubmit} className="flex items-start justify-between gap-3 p-4 border-t border-border">
-      <RuleFormFields values={values} categories={categories} onChange={handlePatch} />
+      <RuleFormFields values={values} categories={categories} walletOptions={walletOptions} onChange={handlePatch} />
       <div className="flex gap-1 shrink-0 pt-1">
-        <Button type="submit" size="icon" className="size-8" disabled={pending} aria-label="Create rule">
+        <Button type="submit" size="icon" className="size-8" disabled={submitDisabled} aria-label="Create rule">
           <Check className="size-4" />
         </Button>
         <Button
@@ -450,16 +486,18 @@ function AddRuleRow({
 export function RuleList({
   rules,
   categories,
+  walletOptions,
 }: {
   rules: CounterpartyRuleRowData[];
   categories: CategoryOption[];
+  walletOptions: WalletOption[];
 }) {
   const [adding, setAdding] = useState(false);
 
   return (
     <div className="rounded-xl border border-border overflow-hidden">
       {rules.map((rule) => (
-        <RuleRow key={rule.id} rule={rule} categories={categories} />
+        <RuleRow key={rule.id} rule={rule} categories={categories} walletOptions={walletOptions} />
       ))}
 
       {rules.length === 0 && !adding && (
@@ -469,7 +507,7 @@ export function RuleList({
       )}
 
       {adding ? (
-        <AddRuleRow categories={categories} onDone={() => setAdding(false)} />
+        <AddRuleRow categories={categories} walletOptions={walletOptions} onDone={() => setAdding(false)} />
       ) : (
         <div className="p-4 border-t border-border">
           <Button variant="outline" size="sm" onClick={() => setAdding(true)}>

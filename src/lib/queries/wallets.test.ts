@@ -10,15 +10,17 @@ vi.mock("@/lib/db", () => ({
   db: {
     savingsAccount: { findMany: vi.fn() },
     transaction: { findMany: vi.fn() },
+    wallet: { findMany: vi.fn() },
   },
 }));
 
 import { db } from "@/lib/db";
-import { getWalletBalances } from "./wallets";
+import { getWalletBalances, listWalletOptions } from "./wallets";
 
 const dbMock = db as unknown as {
   savingsAccount: { findMany: ReturnType<typeof vi.fn> };
   transaction: { findMany: ReturnType<typeof vi.fn> };
+  wallet: { findMany: ReturnType<typeof vi.fn> };
 };
 
 const OPENING_DATE = new Date("2026-07-09T00:00:00Z");
@@ -130,5 +132,27 @@ describe("getWalletBalances — per-account rollup", () => {
 
     expect(result.accounts[0].balance).toBe(1_206_614);
     expect(result.accounts[0].wallets).toHaveLength(3);
+  });
+});
+
+describe("listWalletOptions", () => {
+  it("returns plain {id, name} pairs via a cheap findMany, not the full balance computation", async () => {
+    dbMock.wallet.findMany.mockResolvedValue([
+      { id: "wlt-a", name: "debit/daily" },
+      { id: "wlt-b", name: "savings" },
+    ]);
+
+    const result = await listWalletOptions();
+
+    expect(result).toEqual([
+      { id: "wlt-a", name: "debit/daily" },
+      { id: "wlt-b", name: "savings" },
+    ]);
+    expect(dbMock.wallet.findMany).toHaveBeenCalledWith({
+      select: { id: true, name: true },
+      orderBy: { sortOrder: "asc" },
+    });
+    expect(dbMock.savingsAccount.findMany).not.toHaveBeenCalled();
+    expect(dbMock.transaction.findMany).not.toHaveBeenCalled();
   });
 });

@@ -6,9 +6,16 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// resolveWalletFields (ADR-036/037-style upgrade) queries wallet/savingsAccount
+// on every create/update call when only a free-text `wallet` label is given —
+// mocked here to resolve to "no match" (null) by default so these tests don't
+// need to know about wallets. The actual walletId-bypass/name-resolution logic
+// is covered separately below and in src/lib/resolve-wallet.test.ts.
 vi.mock("@/lib/db", () => ({
   db: {
     counterpartyRule: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    wallet: { findMany: vi.fn().mockResolvedValue([]), findUniqueOrThrow: vi.fn() },
+    savingsAccount: { findMany: vi.fn().mockResolvedValue([]) },
   },
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -26,6 +33,10 @@ const dbMock = db as unknown as {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
+  };
+  wallet: {
+    findMany: ReturnType<typeof vi.fn>;
+    findUniqueOrThrow: ReturnType<typeof vi.fn>;
   };
 };
 
@@ -98,6 +109,45 @@ describe("createCounterpartyRule", () => {
 
     expect(result).toBe(created);
   });
+
+  it("resolves an explicitly supplied walletId's name and writes both columns, bypassing name-based resolution", async () => {
+    dbMock.counterpartyRule.create.mockResolvedValue({ id: "rule-1" });
+    dbMock.wallet.findUniqueOrThrow.mockResolvedValue({ name: "Nequi" });
+
+    await createCounterpartyRule({
+      matchType: "MERCHANT",
+      matchValue: "Rappi",
+      appCategoryId: "cat-1",
+      wallet: "stale label",
+      walletId: "wallet-1",
+    });
+
+    expect(dbMock.wallet.findUniqueOrThrow).toHaveBeenCalledWith({
+      where: { id: "wallet-1" },
+      select: { name: true },
+    });
+    expect(db.wallet.findMany).not.toHaveBeenCalled();
+    expect(dbMock.counterpartyRule.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ walletId: "wallet-1", wallet: "Nequi" }),
+    });
+  });
+
+  it("falls back to name-based resolveWalletId() when only the free-text wallet label is supplied", async () => {
+    dbMock.counterpartyRule.create.mockResolvedValue({ id: "rule-1" });
+
+    await createCounterpartyRule({
+      matchType: "MERCHANT",
+      matchValue: "Rappi",
+      appCategoryId: "cat-1",
+      wallet: "Bancolombia",
+    });
+
+    expect(db.wallet.findMany).toHaveBeenCalled();
+    expect(dbMock.wallet.findUniqueOrThrow).not.toHaveBeenCalled();
+    expect(dbMock.counterpartyRule.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ wallet: "Bancolombia", walletId: null }),
+    });
+  });
 });
 
 describe("updateCounterpartyRule", () => {
@@ -131,6 +181,25 @@ describe("updateCounterpartyRule", () => {
     });
 
     expect(revalidatePath).toHaveBeenCalledWith("/settings/rules");
+  });
+
+  it("prefers walletId over wallet when both are supplied in the same call", async () => {
+    dbMock.counterpartyRule.update.mockResolvedValue({ id: "rule-1" });
+    dbMock.wallet.findUniqueOrThrow.mockResolvedValue({ name: "Savings" });
+
+    await updateCounterpartyRule("rule-1", {
+      matchType: "ACCOUNT",
+      matchValue: "6179361-4704",
+      appCategoryId: "cat-2",
+      wallet: "stale label",
+      walletId: "wallet-2",
+    });
+
+    expect(db.wallet.findMany).not.toHaveBeenCalled();
+    expect(dbMock.counterpartyRule.update).toHaveBeenCalledWith({
+      where: { id: "rule-1" },
+      data: expect.objectContaining({ walletId: "wallet-2", wallet: "Savings" }),
+    });
   });
 });
 

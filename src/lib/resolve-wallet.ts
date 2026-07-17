@@ -54,3 +54,39 @@ export async function resolveWalletId(label: string): Promise<string | null> {
   const resolver = await buildWalletResolver();
   return resolver(label);
 }
+
+/**
+ * Resolves the wallet-related create/update fields for any write path that
+ * accepts EITHER a curated `walletId` (a real Wallet.id, e.g. from a
+ * dropdown) OR a free-text `wallet` label (bot/Telegram capture, agent
+ * proposals) — shared by `createTransaction`/`updateTransaction`
+ * (`actions/transactions.ts`) and `createCounterpartyRule`/
+ * `updateCounterpartyRule` (`actions/counterparty-rules.ts`), both of which
+ * mirror the same ADR-036/037 walletId/wallet pair on their model.
+ *
+ * A caller-supplied `walletId` bypasses name-based resolution entirely — but
+ * its Wallet's `name` must still be looked up and written to the legacy
+ * `wallet` text column so the two stay symmetric (every reader of the raw
+ * `wallet` column must not go stale the moment a row is re-walleted via a
+ * walletId-only caller). `walletId` wins when both `wallet` and `walletId`
+ * are supplied in the same call. Falls back to name-based `resolveWalletId()`
+ * when only the free-text `wallet` label is supplied. Returns `{}` when
+ * neither is supplied, leaving both columns untouched per Prisma's
+ * undefined-key-is-a-no-op semantics.
+ */
+export async function resolveWalletFields(data: {
+  wallet?: string;
+  walletId?: string;
+}): Promise<{ walletId?: string | null; wallet?: string }> {
+  if (data.walletId !== undefined) {
+    const wallet = await db.wallet.findUniqueOrThrow({
+      where: { id: data.walletId },
+      select: { name: true },
+    });
+    return { walletId: data.walletId, wallet: wallet.name };
+  }
+  if (data.wallet !== undefined) {
+    return { walletId: await resolveWalletId(data.wallet) };
+  }
+  return {};
+}

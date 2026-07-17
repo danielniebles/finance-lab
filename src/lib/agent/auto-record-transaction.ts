@@ -80,6 +80,11 @@ export async function autoRecordFromRule(args: {
     date: new Date(date),
     appCategoryId: rule.appCategoryId,
     wallet: rule.wallet,
+    // Bypasses the collision-prone name-based resolveWalletId() whenever the
+    // rule already has a resolved wallet (ADR-036/037-style upgrade) — see
+    // resolve-wallet.ts's mem:agent_learnings note on Wallet names only being
+    // unique per-account.
+    walletId: rule.walletId ?? undefined,
     note,
   });
 

@@ -21,6 +21,7 @@ import { formatCOP, dateInputValue } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { resolveEffectiveCategoryStyle } from "@/lib/category-style";
 import { updateTransaction, deleteTransaction } from "@/lib/actions/transactions";
+import { WalletSelect } from "@/components/shared/wallet-select";
 import type { LedgerItem, LedgerGroupBy } from "@/lib/queries/transactions";
 import type { CategoryOption } from "@/lib/queries/expenses";
 
@@ -305,7 +306,7 @@ function TransactionEditForm({
         </div>
         <div className="space-y-1.5">
           <Label>Wallet</Label>
-          <EditWalletSelect
+          <WalletSelect
             value={values.walletId}
             options={walletOptions}
             onChange={(v) => onChange({ walletId: v })}
@@ -343,35 +344,6 @@ function TransactionEditForm({
         </Button>
       </DialogFooter>
     </form>
-  );
-}
-
-// Same pattern as add-transaction-row.tsx's CreateWalletSelect: binds
-// value={w.id}, passes the id straight through so updateTransaction's
-// walletId param bypasses resolveWalletId's collision-prone name lookup.
-function EditWalletSelect({
-  value,
-  options,
-  onChange,
-}: {
-  value: string;
-  options: { id: string; name: string }[];
-  onChange: (v: string) => void;
-}) {
-  const selectedName = options.find((w) => w.id === value)?.name ?? "Wallet";
-  return (
-    <Select value={value || undefined} onValueChange={(v) => v && onChange(v)}>
-      <SelectTrigger className="w-full" aria-label="Wallet">
-        <span className="text-sm truncate">{selectedName}</span>
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((w) => (
-          <SelectItem key={w.id} value={w.id}>
-            {w.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 

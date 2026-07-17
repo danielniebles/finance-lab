@@ -2,12 +2,14 @@ export const dynamic = "force-dynamic";
 
 import { getCounterpartyRules } from "@/lib/queries/counterparty-rules";
 import { getCategories } from "@/lib/queries/expenses";
+import { listWalletOptions } from "@/lib/queries/wallets";
 import { RuleList } from "@/components/settings/rule-list";
 
 export default async function RulesPage() {
-  const [rules, categories] = await Promise.all([
+  const [rules, categories, walletOptions] = await Promise.all([
     getCounterpartyRules(),
     getCategories(),
+    listWalletOptions(),
   ]);
 
   return (
@@ -17,7 +19,7 @@ export default async function RulesPage() {
         Map known accounts, merchants, and senders to a category and wallet so matching bank
         messages are auto-recorded instead of requiring manual review.
       </p>
-      <RuleList rules={rules} categories={categories} />
+      <RuleList rules={rules} categories={categories} walletOptions={walletOptions} />
     </div>
   );
 }

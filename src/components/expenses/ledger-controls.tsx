@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { WalletSelect } from "@/components/shared/wallet-select";
 import type { LedgerGroupBy, LedgerFilters } from "@/lib/queries/transactions";
 import type { CategoryOption } from "@/lib/queries/expenses";
 
@@ -161,9 +162,11 @@ function FilterBar({
         onChange={(v) => onChange({ category: v ?? "" })}
       />
       <WalletSelect
-        value={filters.walletId}
-        options={walletOptions}
-        onChange={(v) => onChange({ walletId: v ?? "" })}
+        value={filters.walletId || ALL_SENTINEL}
+        options={[{ id: ALL_SENTINEL, name: "All wallets" }, ...walletOptions]}
+        onChange={(v) => onChange({ walletId: v === ALL_SENTINEL ? "" : v })}
+        className="h-8 w-32"
+        ariaLabel="Filter by wallet"
       />
       <TypeSelect
         value={filters.type}
@@ -199,36 +202,6 @@ function CategorySelect({
         {categories.map((c) => (
           <SelectItem key={c.id} value={c.name}>
             {c.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-function WalletSelect({
-  value,
-  options,
-  onChange,
-}: {
-  value?: string;
-  options: { id: string; name: string }[];
-  onChange: (v?: string) => void;
-}) {
-  const current = options.find((w) => w.id === value);
-  return (
-    <Select
-      value={value ?? ALL_SENTINEL}
-      onValueChange={(v) => v && onChange(v === ALL_SENTINEL ? undefined : v)}
-    >
-      <SelectTrigger className="h-8 w-32" aria-label="Filter by wallet">
-        <span className="text-sm truncate">{current?.name ?? "All wallets"}</span>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={ALL_SENTINEL}>All wallets</SelectItem>
-        {options.map((w) => (
-          <SelectItem key={w.id} value={w.id}>
-            {w.name}
           </SelectItem>
         ))}
       </SelectContent>

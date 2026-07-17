@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { dateInputValue } from "@/lib/format";
 import { createTransaction } from "@/lib/actions/transactions";
+import { WalletSelect } from "@/components/shared/wallet-select";
 import type { CategoryOption } from "@/lib/queries/expenses";
 
 type TxnType = "expense" | "income";
@@ -222,7 +223,7 @@ function CreateForm({
         </div>
         <div className="space-y-1.5">
           <Label>Wallet</Label>
-          <CreateWalletSelect
+          <WalletSelect
             value={values.walletId}
             options={walletOptions}
             onChange={(v) => onChange({ walletId: v })}
@@ -312,31 +313,3 @@ function CreateCategorySelect({
   );
 }
 
-// Binds value={w.id}, matching ledger-controls.tsx's filter WalletSelect —
-// the id is passed straight through as createTransaction's walletId, which
-// bypasses resolveWalletId's ambiguous name-based lookup entirely.
-function CreateWalletSelect({
-  value,
-  options,
-  onChange,
-}: {
-  value: string;
-  options: { id: string; name: string }[];
-  onChange: (v: string) => void;
-}) {
-  const selectedName = options.find((w) => w.id === value)?.name ?? "Wallet";
-  return (
-    <Select value={value || undefined} onValueChange={(v) => v && onChange(v)}>
-      <SelectTrigger className="w-full" aria-label="Wallet">
-        <span className="text-sm truncate">{selectedName}</span>
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((w) => (
-          <SelectItem key={w.id} value={w.id}>
-            {w.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
