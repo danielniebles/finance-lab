@@ -141,10 +141,15 @@ export function InstallmentsDashboard({
             </Button>
           </div>
           {cards.length > 0 && (
-            <Carousel opts={{ align: "start", dragFree: true }} className="px-1 py-1 -my-1">
+            <Carousel opts={{ align: "start" }}>
               <CarouselContent>
                 {cards.map((c) => (
-                  <CarouselItem key={c.id} className="basis-auto">
+                  // py-1: the selected tile's ring-2 needs room to render —
+                  // horizontal carousels get pl-4 from CarouselItem by default
+                  // but no vertical padding, so the viewport's overflow-hidden
+                  // otherwise clips the ring flush at the top/bottom edge
+                  // (same fix as vaults-dashboard.tsx's VaultTile carousel).
+                  <CarouselItem key={c.id} className="basis-auto py-1">
                     <CreditCardTile
                       card={c}
                       masked={privacyMode}
