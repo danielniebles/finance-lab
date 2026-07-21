@@ -60,7 +60,7 @@ function toFormState(row: InstallmentRow): FormState {
     totalAmount: String(row.totalAmount),
     numInstallments: String(row.numInstallments),
     // stored value is always monthly — display as m.v.
-    interestRate: row.monthlyInterestRate != null ? String(row.monthlyInterestRate) : "",
+    interestRate: row.monthlyInterestRate != null ? row.monthlyInterestRate.toFixed(4) : "",
     rateType: "monthly",
     startDate: `${yyyy}-${mm}-${dd}`,
     notes: row.notes ?? "",
@@ -129,7 +129,7 @@ export function InstallmentForm({
     const v = parseFloat(form.interestRate);
     if (!form.interestRate.trim() || isNaN(v) || v <= 0) return null;
     if (form.rateType === "monthly") return v;
-    return eaToMonthly(v) * 100;
+    return parseFloat((eaToMonthly(v) * 100).toFixed(4));
   }
 
   function handleSubmit(e: React.FormEvent) {

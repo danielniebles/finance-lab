@@ -1,35 +1,18 @@
 "use client";
 
-import { useTransition } from "react";
-import { Pencil, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { deleteCard } from "@/lib/actions/installments";
 import { MASK } from "@/components/loans/lib/constants";
 import type { CreditCardSummary } from "@/lib/queries/installments";
 
 type Props = {
   card: CreditCardSummary;
   masked?: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
   selected?: boolean;
   onCardClick?: () => void;
 };
 
-export function CreditCardTile({ card, masked, onEdit, onDelete, selected, onCardClick }: Props) {
-  const [deletePending, startDelete] = useTransition();
-
-  function handleDelete(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (!confirm(`Delete "${card.name}"? Linked installments will become uncarded.`)) return;
-    startDelete(async () => {
-      await deleteCard(card.id);
-      onDelete();
-    });
-  }
-
+export function CreditCardTile({ card, masked, selected, onCardClick }: Props) {
   const hasInstallments = card.installmentCount > 0;
 
   return (
@@ -89,29 +72,6 @@ export function CreditCardTile({ card, masked, onEdit, onDelete, selected, onCar
             </p>
           </div>
         )}
-
-        {/* Action row */}
-        <div className="flex items-center gap-1 pt-1 border-t border-border/40">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 gap-1 text-xs flex-1"
-            onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          >
-            <Pencil className="size-3.5" />
-            Edit
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6 text-destructive hover:text-destructive"
-            onClick={handleDelete}
-            disabled={deletePending}
-            aria-label={`Delete ${card.name}`}
-          >
-            <Trash2 className="size-3.5" />
-          </Button>
-        </div>
       </div>
     </div>
   );

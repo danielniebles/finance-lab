@@ -68,7 +68,7 @@ function InstallmentTableRow({
         </TableCell>
         <TableCell className="px-4 text-right font-mono text-sm text-muted-foreground hidden md:table-cell">
           {inst.monthlyInterestRate != null
-            ? `${inst.monthlyInterestRate}% m.v.`
+            ? `${inst.monthlyInterestRate.toFixed(2)}% m.v.`
             : "—"}
         </TableCell>
         <TableCell className="px-4">
@@ -144,7 +144,7 @@ function InstallmentMobileRow({
           )}
           <span>
             {formatCOP(inst.monthlyAmount)}/mo
-            {inst.monthlyInterestRate != null && ` +int (${inst.monthlyInterestRate}% m.v.)`}
+            {inst.monthlyInterestRate != null && ` +int (${inst.monthlyInterestRate.toFixed(2)}% m.v.)`}
           </span>
         </div>
 

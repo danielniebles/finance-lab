@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { CheckCircle2, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { markPayment, unmarkPayment } from "@/lib/actions/installments";
 
@@ -33,31 +34,21 @@ export function PayButton({
     });
   }
 
-  if (isPaid && paidAt) {
-    return (
-      <button
-        onClick={handleClick}
-        disabled={pending}
-        className="flex items-center gap-1.5 text-sm text-success hover:text-muted-foreground transition-colors disabled:opacity-50"
-      >
-        <CheckCircle2 className="size-5" />
-        <span className="font-mono text-xs">
-          {paidAt.toLocaleDateString("es-CO", { month: "short", day: "numeric", timeZone: "UTC" })}
-        </span>
-      </button>
-    );
-  }
-
   return (
     <Button
       variant="outline"
       size="sm"
       onClick={handleClick}
       disabled={pending}
-      className="h-7 gap-1.5 text-xs"
+      className={cn(
+        "h-7 gap-1.5 text-xs",
+        isPaid && "border-success/40 bg-success/10 text-success hover:bg-success/15 hover:text-success"
+      )}
     >
-      <Circle className="size-3.5" />
-      Mark paid
+      {isPaid ? <CheckCircle2 className="size-3.5" /> : <Circle className="size-3.5" />}
+      {isPaid && paidAt
+        ? paidAt.toLocaleDateString("es-CO", { month: "short", day: "numeric", timeZone: "UTC" })
+        : "Mark paid"}
     </Button>
   );
 }

@@ -1,15 +1,16 @@
 "use client";
 
 import { Fragment, useState, useMemo, useTransition } from "react";
-import { ScrollText, Trash, Eye, EyeOff } from "lucide-react";
+import { ScrollText, Trash, Eye, EyeOff, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCOP } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LoansClient } from "./loans-client";
 import { LoanForm } from "./loan-form";
-import { deleteLoanPayment, deleteSettledLoans } from "@/lib/actions/loans";
+import { deleteLoanPayment } from "@/lib/actions/loans";
 import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/lib/queries/loans";
 import { MASK } from "./lib/constants";
 
@@ -359,11 +360,8 @@ function DebtorActionButtons({
   privacyMode,
   isRevealed,
   visible,
-  settledCount,
-  clearSettledPending,
   onReveal,
   onShowPayments,
-  onClearSettled,
 }: {
   debtor: DebtorWithLoans;
   accounts: AccountWithBalance[];
@@ -371,11 +369,8 @@ function DebtorActionButtons({
   privacyMode: boolean;
   isRevealed: boolean;
   visible: boolean;
-  settledCount: number;
-  clearSettledPending: boolean;
   onReveal: () => void;
   onShowPayments: () => void;
-  onClearSettled: () => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -389,18 +384,6 @@ function DebtorActionButtons({
         >
           <ScrollText className="size-3.5" />
           Payments
-        </Button>
-      )}
-      {visible && settledCount > 0 && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 text-xs text-muted-foreground hover:text-destructive"
-          disabled={clearSettledPending}
-          onClick={onClearSettled}
-        >
-          <Trash className="size-3.5" />
-          Clear settled ({settledCount})
         </Button>
       )}
       {visible && debtor.totalOwed > 0 && (
@@ -421,27 +404,26 @@ function DebtorHeader({
   debtors,
   privacyMode,
   isRevealed,
-  clearSettledPending,
   onReveal,
   onShowPayments,
-  onClearSettled,
 }: {
   debtor: DebtorWithLoans;
   accounts: AccountWithBalance[];
   debtors: DebtorWithLoans[];
   privacyMode: boolean;
   isRevealed: boolean;
-  clearSettledPending: boolean;
   onReveal: () => void;
   onShowPayments: () => void;
-  onClearSettled: () => void;
 }) {
   const visible = !privacyMode || isRevealed;
-  const settledCount = debtor.loans.filter((l) => !l.isActive).length;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-y-2 px-4 py-3 bg-card">
-      <div className="flex items-center gap-3 min-w-0">
+      <CollapsibleTrigger
+        className="group flex min-w-0 items-center gap-3 text-left"
+        render={<button type="button" />}
+      >
+        <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[panel-open]:rotate-180" />
         <span className="font-medium">{debtor.name}</span>
         <span className="font-mono text-sm text-muted-foreground whitespace-nowrap">
           {privacyMode && !isRevealed ? MASK : formatCOP(debtor.totalOwed)}
@@ -449,7 +431,7 @@ function DebtorHeader({
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           {debtor.activeLoansCount} active loan{debtor.activeLoansCount !== 1 ? "s" : ""}
         </span>
-      </div>
+      </CollapsibleTrigger>
       <DebtorActionButtons
         debtor={debtor}
         accounts={accounts}
@@ -457,11 +439,8 @@ function DebtorHeader({
         privacyMode={privacyMode}
         isRevealed={isRevealed}
         visible={visible}
-        settledCount={settledCount}
-        clearSettledPending={clearSettledPending}
         onReveal={onReveal}
         onShowPayments={onShowPayments}
-        onClearSettled={onClearSettled}
       />
     </div>
   );
@@ -535,67 +514,121 @@ function DebtorCard({
   debtors,
   privacyMode,
   revealedDebtorId,
-  clearSettledPending,
+  showSettled,
   onReveal,
   onShowPayments,
-  onClearSettled,
 }: {
   debtor: DebtorWithLoans;
   accounts: AccountWithBalance[];
   debtors: DebtorWithLoans[];
   privacyMode: boolean;
   revealedDebtorId: string | null;
-  clearSettledPending: boolean;
+  showSettled: boolean;
   onReveal: () => void;
   onShowPayments: () => void;
-  onClearSettled: () => void;
 }) {
   const masked = privacyMode && debtor.id !== revealedDebtorId;
+  const visibleLoans = showSettled ? debtor.loans : debtor.loans.filter((l) => l.isActive);
 
   return (
-    <div className="rounded-xl border border-border overflow-hidden">
+    <Collapsible defaultOpen={debtor.totalOwed > 0} className="rounded-xl border border-border overflow-hidden">
       <DebtorHeader
         debtor={debtor}
         accounts={accounts}
         debtors={debtors}
         privacyMode={privacyMode}
         isRevealed={revealedDebtorId === debtor.id}
-        clearSettledPending={clearSettledPending}
         onReveal={onReveal}
         onShowPayments={onShowPayments}
-        onClearSettled={onClearSettled}
       />
-      {debtor.loans.length > 0 && (
-        <div className="border-t border-border">
-          {/* Mobile: stacked rows — 6+ fixed-width columns force
-              horizontal scroll well before 375px. */}
-          <div className="sm:hidden">
-            {debtor.loans.map((loan) => (
-              <LoanMobileRow key={loan.id} loan={loan} accounts={accounts} debtors={debtors} masked={masked} />
-            ))}
-          </div>
-
-          <Table className="hidden table-fixed sm:table">
-            <TableHeader>
-              <TableRow className="bg-muted/20 hover:bg-muted/20 border-border/50">
-                <TableHead className="px-2 h-8 w-12 text-xs text-muted-foreground">Account</TableHead>
-                <TableHead className="px-4 h-8 w-30 text-xs text-muted-foreground">Date</TableHead>
-                <TableHead className="px-4 h-8 w-35 text-xs text-muted-foreground">Original</TableHead>
-                <TableHead className="px-4 h-8 w-33.75 text-xs text-muted-foreground">Repaid</TableHead>
-                <TableHead className="px-4 h-8 w-31.25 text-right text-xs text-muted-foreground">Remaining</TableHead>
-                <TableHead className="px-4 h-8 w-15 text-right text-xs text-muted-foreground hidden md:table-cell">Age</TableHead>
-                <TableHead className="px-4 h-8 w-21.25 text-right text-xs text-muted-foreground">Status</TableHead>
-                <TableHead className="px-4 h-8 w-40 text-xs text-muted-foreground hidden md:table-cell">Notes</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {debtor.loans.map((loan) => (
-                <LoanRow key={loan.id} loan={loan} accounts={accounts} debtors={debtors} masked={masked} />
+      <CollapsibleContent>
+        {visibleLoans.length > 0 ? (
+          <div className="border-t border-border">
+            {/* Mobile: stacked rows — 6+ fixed-width columns force
+                horizontal scroll well before 375px. */}
+            <div className="sm:hidden">
+              {visibleLoans.map((loan) => (
+                <LoanMobileRow key={loan.id} loan={loan} accounts={accounts} debtors={debtors} masked={masked} />
               ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+            </div>
+
+            <Table className="hidden table-fixed sm:table">
+              <TableHeader>
+                <TableRow className="bg-muted/20 hover:bg-muted/20 border-border/50">
+                  <TableHead className="px-2 h-8 w-12 text-xs text-muted-foreground">Account</TableHead>
+                  <TableHead className="px-4 h-8 w-30 text-xs text-muted-foreground">Date</TableHead>
+                  <TableHead className="px-4 h-8 w-35 text-xs text-muted-foreground">Original</TableHead>
+                  <TableHead className="px-4 h-8 w-33.75 text-xs text-muted-foreground">Repaid</TableHead>
+                  <TableHead className="px-4 h-8 w-31.25 text-right text-xs text-muted-foreground">Remaining</TableHead>
+                  <TableHead className="px-4 h-8 w-15 text-right text-xs text-muted-foreground hidden md:table-cell">Age</TableHead>
+                  <TableHead className="px-4 h-8 w-21.25 text-right text-xs text-muted-foreground">Status</TableHead>
+                  <TableHead className="px-4 h-8 w-40 text-xs text-muted-foreground hidden md:table-cell">Notes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visibleLoans.map((loan) => (
+                  <LoanRow key={loan.id} loan={loan} accounts={accounts} debtors={debtors} masked={masked} />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <p className="border-t border-border px-4 py-3 text-sm text-muted-foreground">
+            All loans settled.
+          </p>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function ShowSettledToggle({
+  settledCount,
+  showSettled,
+  onToggle,
+}: {
+  settledCount: number;
+  showSettled: boolean;
+  onToggle: () => void;
+}) {
+  if (settledCount === 0) return null;
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className={cn("h-7 gap-1 text-xs", showSettled ? "text-primary" : "text-muted-foreground")}
+      onClick={onToggle}
+    >
+      {showSettled ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+      {showSettled ? "Hide settled" : `Show settled (${settledCount})`}
+    </Button>
+  );
+}
+
+function PortfolioStatsStrip({
+  totalEverLent,
+  totalRecovered,
+  privacyMode,
+}: {
+  totalEverLent: number;
+  totalRecovered: number;
+  privacyMode: boolean;
+}) {
+  const recoveryPct = totalEverLent > 0 ? (totalRecovered / totalEverLent) * 100 : 0;
+  return (
+    <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-lg bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
+      <span>
+        <span className="font-medium text-foreground">{privacyMode ? MASK : formatCOP(totalEverLent)}</span>
+        {" "}total lent
+      </span>
+      <span>
+        <span className="font-medium text-success">{privacyMode ? MASK : formatCOP(totalRecovered)}</span>
+        {" "}recovered
+      </span>
+      <span>
+        <span className="font-mono font-medium text-foreground">{privacyMode ? MASK : `${recoveryPct.toFixed(1)}%`}</span>
+        {" "}recovery rate
+      </span>
     </div>
   );
 }
@@ -621,9 +654,9 @@ export function DebtorsSection({
 }) {
   const [paymentsDebtor, setPaymentsDebtor] = useState<DebtorWithLoans | null>(null);
   const [deletePaymentPending, startDeletePayment] = useTransition();
-  const [clearSettledPending, startClearSettled] = useTransition();
+  const [showSettled, setShowSettled] = useState(false);
 
-  const recoveryPct = totalEverLent > 0 ? (totalRecovered / totalEverLent) * 100 : 0;
+  const settledCount = debtors.reduce((s, d) => s + d.loans.filter((l) => !l.isActive).length, 0);
 
   return (
     <section className="space-y-3">
@@ -632,25 +665,19 @@ export function DebtorsSection({
         <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Debtors
         </h2>
-        <LoansClient accounts={accounts} debtors={debtors} mode="add-debtor" />
+        <div className="flex items-center gap-2">
+          <ShowSettledToggle
+            settledCount={settledCount}
+            showSettled={showSettled}
+            onToggle={() => setShowSettled((v) => !v)}
+          />
+          <LoansClient accounts={accounts} debtors={debtors} mode="add-debtor" />
+        </div>
       </div>
 
       {/* Portfolio stats strip */}
       {debtors.length > 0 && (
-        <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-lg bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
-          <span>
-            <span className="font-medium text-foreground">{privacyMode ? MASK : formatCOP(totalEverLent)}</span>
-            {" "}total lent
-          </span>
-          <span>
-            <span className="font-medium text-success">{privacyMode ? MASK : formatCOP(totalRecovered)}</span>
-            {" "}recovered
-          </span>
-          <span>
-            <span className="font-mono font-medium text-foreground">{privacyMode ? MASK : `${recoveryPct.toFixed(1)}%`}</span>
-            {" "}recovery rate
-          </span>
-        </div>
+        <PortfolioStatsStrip totalEverLent={totalEverLent} totalRecovered={totalRecovered} privacyMode={privacyMode} />
       )}
 
       {debtors.length === 0 ? (
@@ -670,10 +697,9 @@ export function DebtorsSection({
                     debtors={debtors}
                     privacyMode={privacyMode}
                     revealedDebtorId={revealedDebtorId}
-                    clearSettledPending={clearSettledPending}
+                    showSettled={showSettled}
                     onReveal={() => onReveal(debtor.id)}
                     onShowPayments={() => setPaymentsDebtor(debtors.find((d) => d.id === debtor.id) ?? null)}
-                    onClearSettled={() => startClearSettled(async () => { await deleteSettledLoans(debtor.id); })}
                   />
                 ))}
               </div>

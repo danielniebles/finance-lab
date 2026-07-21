@@ -5,7 +5,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from "@/components/ui/carousel";
+import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 import { MonthNav } from "./month-nav";
 import { DueThisMonthTable } from "./due-this-month-table";
 import { AllInstallmentsTable } from "./all-installments-table";
@@ -73,10 +73,6 @@ export function InstallmentsDashboard({
 
   function handlePrivacyToggle() {
     setPrivacyMode((prev) => !prev);
-  }
-
-  function handleEditCard() {
-    setCardManagerOpen(true);
   }
 
   function handleCardClick(cardId: string) {
@@ -153,20 +149,12 @@ export function InstallmentsDashboard({
                     <CreditCardTile
                       card={c}
                       masked={privacyMode}
-                      onEdit={() => handleEditCard()}
-                      onDelete={() => setCardManagerOpen(false)}
                       selected={selectedCardId === null ? undefined : selectedCardId === c.id}
                       onCardClick={() => handleCardClick(c.id)}
                     />
                   </CarouselItem>
                 ))}
               </CarouselContent>
-              {cards.length > 1 && (
-                <>
-                  <CarouselPrevious className="hidden sm:flex -left-4" />
-                  <CarouselNext className="hidden sm:flex -right-4" />
-                </>
-              )}
             </Carousel>
           )}
           {cards.length === 0 && (
