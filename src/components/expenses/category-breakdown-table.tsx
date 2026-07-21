@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BudgetProgressBar } from "./budget-progress-bar";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { CategorySeverity, CategoryBudgetType } from "@/lib/queries/expenses";
@@ -144,7 +145,7 @@ function CategoryBreakdownCard({
                   <TableCell>
                     {row.percentUsed !== null ? (
                       <div className="flex items-center gap-2">
-                        <ProgressBar percent={row.percentUsed} className="flex-1" />
+                        <BudgetProgressBar percent={row.percentUsed} className="flex-1" />
                         <span className="font-mono text-xs tabular-nums text-muted-foreground w-9 text-right shrink-0">
                           {row.percentUsed.toFixed(0)}%
                         </span>
@@ -290,7 +291,7 @@ function CategoryMobileRow({ row, onClick }: { row: CategoryRow; onClick: () => 
       </div>
       {row.percentUsed !== null && (
         <div className="flex items-center gap-2">
-          <ProgressBar percent={row.percentUsed} className="flex-1" />
+          <BudgetProgressBar percent={row.percentUsed} className="flex-1" />
           <span className="w-8 shrink-0 text-right font-mono text-[10px] tabular-nums text-muted-foreground">
             {row.percentUsed.toFixed(0)}%
           </span>
@@ -331,8 +332,8 @@ function CategoryTransactionMobileRow({ transaction }: { transaction: CategoryTr
 
 function TypePill({ type }: { type: string }) {
   const styles: Record<string, string> = {
-    FIXED:    "border-blue-500/25 bg-blue-500/8 text-blue-600 dark:text-blue-400",
-    VARIABLE: "border-violet-500/25 bg-violet-500/8 text-violet-600 dark:text-violet-400",
+    FIXED:    "border-border/60 bg-muted text-muted-foreground",
+    VARIABLE: "border-border/60 bg-muted text-muted-foreground",
     MIXED:    "border-amber-500/25 bg-amber-500/8 text-amber-600 dark:text-amber-400",
   };
   const labels: Record<string, string> = {
@@ -347,22 +348,6 @@ function TypePill({ type }: { type: string }) {
     >
       {labels[type] ?? type}
     </span>
-  );
-}
-
-function ProgressBar({ percent, className }: { percent: number; className?: string }) {
-  const clamped = Math.min(percent, 100);
-  const barColor =
-    percent >= 100 ? "bg-destructive" :
-    percent >= 80  ? "bg-warning" :
-    "bg-success";
-  return (
-    <div className={cn("h-1.5 w-full rounded-full bg-muted/50", className)}>
-      <div
-        className={cn("h-1.5 rounded-full transition-all", barColor)}
-        style={{ width: `${clamped}%` }}
-      />
-    </div>
   );
 }
 

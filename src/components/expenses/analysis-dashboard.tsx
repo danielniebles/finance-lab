@@ -2,9 +2,10 @@ import Link from "next/link";
 import { getMonthlyAnalysis } from "@/lib/queries/expenses";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Minus, AlertTriangle, Filter, X } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, AlertTriangle, X } from "lucide-react";
 import { resolveEffectiveCategoryStyle } from "@/lib/category-style";
 import { CategoryBreakdownTable, SeverityBadge } from "@/components/expenses/category-breakdown-table";
+import { BudgetProgressBar } from "@/components/expenses/budget-progress-bar";
 import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 
 type GroupFilter = "FIXED" | "VARIABLE";
@@ -76,7 +77,7 @@ export async function AnalysisDashboard({ month, year, walletId, groupFilter }: 
                     )}
                   </p>
                   {cat.percentUsed !== null && (
-                    <ProgressBar percent={cat.percentUsed} className="mt-1.5" />
+                    <BudgetProgressBar percent={cat.percentUsed} className="mt-1.5" />
                   )}
                 </div>
                 <SeverityBadge severity={cat.severity} />
@@ -119,8 +120,6 @@ export async function AnalysisDashboard({ month, year, walletId, groupFilter }: 
               <BudgetGroupCard
                 title="Fixed Expenses"
                 pillLabel="ESSENTIAL"
-                pillClass="border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                ringColorClass="stroke-blue-500"
                 percentUsed={fixedPercentUsed}
                 actual={data.fixedActual}
                 budget={data.fixedBudget}
@@ -129,6 +128,7 @@ export async function AnalysisDashboard({ month, year, walletId, groupFilter }: 
                 topCategoriesLabel="Priority outlays"
                 topCategories={topFixedCategories}
                 filterHref={buildAnalysisUrl(month, year, walletId, "FIXED")}
+                clearHref={buildAnalysisUrl(month, year, walletId)}
                 isActiveFilter={groupFilter === "FIXED"}
               />
             ),
@@ -139,8 +139,6 @@ export async function AnalysisDashboard({ month, year, walletId, groupFilter }: 
               <BudgetGroupCard
                 title="Variable Expenses"
                 pillLabel="DISCRETIONARY"
-                pillClass="border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
-                ringColorClass="stroke-violet-500"
                 percentUsed={variablePercentUsed}
                 actual={data.variableActual}
                 budget={data.variableBudget}
@@ -149,6 +147,7 @@ export async function AnalysisDashboard({ month, year, walletId, groupFilter }: 
                 topCategoriesLabel="Top variances"
                 topCategories={topVariableCategories}
                 filterHref={buildAnalysisUrl(month, year, walletId, "VARIABLE")}
+                clearHref={buildAnalysisUrl(month, year, walletId)}
                 isActiveFilter={groupFilter === "VARIABLE"}
                 extraBadge={
                   burnRateAlert ? (
@@ -208,7 +207,7 @@ export async function AnalysisDashboard({ month, year, walletId, groupFilter }: 
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
-// Same-page filter (not a separate view) — a card's "Filter table below" link
+// Same-page filter (not a separate view) — clicking a Fixed/Variable card
 // re-renders this server component with ?groupFilter=FIXED|VARIABLE, which
 // narrows `tableRows` before it reaches CategoryBreakdownTable. Preserves
 // view=analysis + month/year/walletId so the rest of the page is unaffected.
@@ -288,8 +287,6 @@ function SavingsCard({ data }: { data: Awaited<ReturnType<typeof getMonthlyAnaly
 function BudgetGroupCard({
   title,
   pillLabel,
-  pillClass,
-  ringColorClass,
   percentUsed,
   actual,
   budget,
@@ -298,13 +295,12 @@ function BudgetGroupCard({
   topCategoriesLabel,
   topCategories,
   filterHref,
+  clearHref,
   isActiveFilter,
   extraBadge,
 }: {
   title: string;
   pillLabel: string;
-  pillClass: string;
-  ringColorClass: string;
   percentUsed: number | null;
   actual: number;
   budget: number;
@@ -313,25 +309,38 @@ function BudgetGroupCard({
   topCategoriesLabel: string;
   topCategories: TopCategory[];
   filterHref: string;
+  clearHref: string;
   isActiveFilter: boolean;
   extraBadge?: React.ReactNode;
 }) {
   const isUnder = control >= 0;
+  const isOverBudget = (percentUsed ?? 0) > 100;
 
   return (
-    <div className="h-full rounded-xl border border-border/60 bg-card p-4 space-y-4">
+    <Link
+      href={isActiveFilter ? clearHref : filterHref}
+      className={cn(
+        "block h-full rounded-xl border p-4 space-y-4 transition-colors cursor-pointer",
+        isActiveFilter
+          ? "border-primary/50 bg-primary/5 ring-1 ring-primary/30"
+          : "border-border/60 bg-card hover:border-border hover:bg-muted/30"
+      )}
+    >
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-heading text-sm font-semibold">{title}</h3>
         <div className="flex items-center gap-1.5">
           {extraBadge}
-          <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-wide", pillClass)}>
+          <span className="inline-flex items-center rounded-full border border-border/60 bg-muted px-2.5 py-1 text-[11px] font-semibold tracking-wide text-muted-foreground">
             {pillLabel}
           </span>
         </div>
       </div>
 
       <div className="flex items-center gap-4">
-        <CircularProgress percent={percentUsed ?? 0} colorClass={ringColorClass} />
+        <CircularProgress
+          percent={percentUsed ?? 0}
+          colorClass={isOverBudget ? "stroke-destructive" : "stroke-primary"}
+        />
         <div className="flex-1 min-w-0 space-y-2">
           <div>
             <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -384,20 +393,7 @@ function BudgetGroupCard({
           })}
         </div>
       )}
-
-      <Link
-        href={isActiveFilter ? "#category-breakdown" : filterHref}
-        className={cn(
-          "flex items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-medium transition-colors",
-          isActiveFilter
-            ? "border-primary/40 bg-primary/10 text-primary"
-            : "border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground"
-        )}
-      >
-        <Filter className="size-3.5" />
-        {isActiveFilter ? "Filtering table below" : "Filter table below"}
-      </Link>
-    </div>
+    </Link>
   );
 }
 
@@ -413,6 +409,7 @@ function CircularProgress({
   strokeWidth?: number;
 }) {
   const clamped = Math.min(Math.max(percent, 0), 100);
+  const displayPercent = Math.round(Math.max(0, percent));
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - clamped / 100);
@@ -435,7 +432,7 @@ function CircularProgress({
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-mono text-base font-bold tabular-nums">{Math.round(clamped)}%</span>
+        <span className="font-mono text-base font-bold tabular-nums">{displayPercent}%</span>
         <span className="text-[9px] uppercase tracking-wide text-muted-foreground">Used</span>
       </div>
     </div>
@@ -528,19 +525,3 @@ function PillRow({
   );
 }
 
-function ProgressBar({ percent, className }: { percent: number; className?: string }) {
-  const clamped = Math.min(percent, 100);
-  const barColor =
-    percent >= 100 ? "bg-destructive" :
-    percent >= 80  ? "bg-warning" :
-    "bg-success";
-
-  return (
-    <div className={cn("h-1.5 w-full rounded-full bg-muted/50", className)}>
-      <div
-        className={cn("h-1.5 rounded-full transition-all", barColor)}
-        style={{ width: `${clamped}%` }}
-      />
-    </div>
-  );
-}

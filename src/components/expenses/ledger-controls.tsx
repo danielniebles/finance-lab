@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { Filter } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -10,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { WalletSelect } from "@/components/shared/wallet-select";
 import type { LedgerGroupBy, LedgerFilters } from "@/lib/queries/transactions";
@@ -99,12 +101,26 @@ export function LedgerControls({
   return (
     <div className="space-y-3">
       <GroupByToggle value={groupBy} onChange={(v) => navigate({ groupBy: v })} />
-      <FilterBar
-        filters={filters}
-        categories={categories}
-        walletOptions={walletOptions}
-        onChange={navigate}
-      />
+      {/* Desktop: every filter inline, as before. */}
+      <div className="hidden sm:block">
+        <FilterBar
+          filters={filters}
+          categories={categories}
+          walletOptions={walletOptions}
+          onChange={navigate}
+        />
+      </div>
+      {/* Mobile: same filters, condensed behind a single trigger — four
+          stacked/wrapping selects ate too much vertical space above the
+          ledger itself. */}
+      <div className="sm:hidden">
+        <MobileFilters
+          filters={filters}
+          categories={categories}
+          walletOptions={walletOptions}
+          onChange={navigate}
+        />
+      </div>
       {/* Whole-region dim during re-query — no spinner, no skeleton (matches
           category-breakdown-table.tsx's restraint). */}
       <div className={cn("transition-opacity", isPending && "opacity-50 pointer-events-none")}>
@@ -180,21 +196,80 @@ function FilterBar({
   );
 }
 
+function MobileFilters({
+  filters,
+  categories,
+  walletOptions,
+  onChange,
+}: {
+  filters: LedgerFilters;
+  categories: CategoryOption[];
+  walletOptions: { id: string; name: string }[];
+  onChange: (patch: FilterPatch) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasActiveFilters = !!(filters.category || filters.walletId || filters.type || filters.search);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="flex h-9 w-full items-center justify-between rounded-lg border border-border bg-card px-3 text-sm">
+        <span className="flex items-center gap-1.5">
+          <Filter className="size-3.5 text-muted-foreground" />
+          Filters
+          {hasActiveFilters && <span className="size-1.5 rounded-full bg-primary" />}
+        </span>
+        <span className="text-xs text-muted-foreground">{open ? "Hide" : "Show"}</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 space-y-2 rounded-lg border border-border bg-card p-3">
+        <div className="grid grid-cols-2 gap-2">
+          <CategorySelect
+            value={filters.category}
+            categories={categories}
+            onChange={(v) => onChange({ category: v ?? "" })}
+            className="h-8 w-full"
+          />
+          <WalletSelect
+            value={filters.walletId || ALL_SENTINEL}
+            options={[{ id: ALL_SENTINEL, name: "All wallets" }, ...walletOptions]}
+            onChange={(v) => onChange({ walletId: v === ALL_SENTINEL ? "" : v })}
+            className="h-8 w-full"
+            ariaLabel="Filter by wallet"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <TypeSelect
+            value={filters.type}
+            onChange={(v) => onChange({ type: v ?? "" })}
+            className="h-8 w-full"
+          />
+          <SearchInput
+            value={filters.search}
+            onChange={(v) => onChange({ search: v ?? "" })}
+            className="h-8 w-full"
+          />
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 function CategorySelect({
   value,
   categories,
   onChange,
+  className = "h-8 w-36",
 }: {
   value?: string;
   categories: CategoryOption[];
   onChange: (v?: string) => void;
+  className?: string;
 }) {
   return (
     <Select
       value={value ?? ALL_SENTINEL}
       onValueChange={(v) => v && onChange(v === ALL_SENTINEL ? undefined : v)}
     >
-      <SelectTrigger className="h-8 w-36" aria-label="Filter by category">
+      <SelectTrigger className={className} aria-label="Filter by category">
         <span className="text-sm truncate">{value ?? "All categories"}</span>
       </SelectTrigger>
       <SelectContent>
@@ -218,9 +293,11 @@ const TYPE_LABELS: Record<"all" | "expense" | "income", string> = {
 function TypeSelect({
   value,
   onChange,
+  className = "h-8 w-24",
 }: {
   value?: "expense" | "income";
   onChange: (v?: "expense" | "income") => void;
+  className?: string;
 }) {
   const current = value ?? "all";
   return (
@@ -228,7 +305,7 @@ function TypeSelect({
       value={current}
       onValueChange={(v) => v && onChange(v === "all" ? undefined : (v as "expense" | "income"))}
     >
-      <SelectTrigger className="h-8 w-24" aria-label="Filter by type">
+      <SelectTrigger className={className} aria-label="Filter by type">
         <span className="text-sm">{TYPE_LABELS[current]}</span>
       </SelectTrigger>
       <SelectContent>
@@ -248,9 +325,11 @@ function TypeSelect({
 function SearchInput({
   value,
   onChange,
+  className = "h-8 w-48 text-sm",
 }: {
   value?: string;
   onChange: (v?: string) => void;
+  className?: string;
 }) {
   const [text, setText] = useState(value ?? "");
   const [prevValue, setPrevValue] = useState(value ?? "");
@@ -295,7 +374,7 @@ function SearchInput({
       onChange={(e) => setText(e.target.value)}
       placeholder="Buscar por nota…"
       aria-label="Buscar por nota"
-      className="h-8 w-48 text-sm"
+      className={className}
     />
   );
 }

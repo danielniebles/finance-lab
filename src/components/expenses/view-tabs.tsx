@@ -29,7 +29,7 @@ export function ViewTabs({ view, month, year, currentParams }: Props) {
   }
 
   return (
-    <div role="tablist" aria-label="Expenses view" className="flex items-center gap-1">
+    <div role="tablist" aria-label="Expenses view" className="flex w-full items-center gap-1 sm:w-auto">
       <ViewTab label="Analysis" active={view === "analysis"} onClick={() => navigate("analysis")} />
       <ViewTab label="Ledger" active={view === "ledger"} onClick={() => navigate("ledger")} />
     </div>
@@ -44,7 +44,7 @@ function ViewTab({ label, active, onClick }: { label: string; active: boolean; o
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        "h-8 rounded-lg px-3 text-sm font-medium transition-colors",
+        "h-8 flex-1 rounded-lg px-3 text-center text-sm font-medium transition-colors sm:flex-none",
         active
           ? "bg-muted text-primary"
           : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
