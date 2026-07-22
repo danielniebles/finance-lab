@@ -1,6 +1,6 @@
 # Data Model
 
-> Last updated: 2026-07-13
+> Last updated: 2026-07-21
 
 ## Entities
 
@@ -384,6 +384,7 @@ Ledger entry for a vault. Positive = contribution, negative = withdrawal.
 | createdAt | DateTime | Record creation time |
 | sourceAccountId | String? | FK → SavingsAccount via "VaultFundingSource" (optional). When set, this entry is a sourced contribution — the amount is deducted from that account's computed balance. Null = notional earmark (no account balance impact). |
 | sourceWalletId | String? | FK → Wallet via "VaultFundingWallet" (ADR-036/037, optional) — alongside `sourceAccountId` (kept for backward-compat; derivable from the wallet). C1 always defaults it to the source account's `savingsWalletId` (set by `addVaultEntry`); per-transaction wallet selection is a C2 follow-up. |
+| transactionId | String? @unique | (ADR-045) FK → Transaction (optional). Set only when the contribution was funded via a specific wallet + category (`addVaultEntry({ walletId, appCategoryId })`) — a real, categorized `Transaction` was created alongside this entry, and the wallet's balance drops through the normal transaction sum rather than the `sourceWalletId` earmark subtraction (`wallet-balance-utils.ts` excludes any entry with `transactionId` set from that earmark term, to avoid double-counting). Deleting a `VaultEntry` with `transactionId` set cascades to delete the linked `Transaction` too (`deleteVaultEntry`). Null = either the legacy/notional `sourceAccountId`-only path or a fully notional entry. |
 
 `VaultEntryRow` (the query return type) also exposes `sourceAccountName: string | null` (resolved from the relation).
 

@@ -1,6 +1,6 @@
 # Concepts
 
-> Last updated: 2026-07-13
+> Last updated: 2026-07-21
 
 ## What this project is
 Finance Lab is a personal finance tracking application built for a single user living in Colombia. It imports expense data from the MoneyLover mobile app, maps raw categories to a custom budget structure, and provides dashboards for monthly expense analysis, installment obligations, loan/savings tracking, goal-based vaults, and recurring-expense planning. An AI advisor (Claude Sonnet 4.6) answers questions about the user's real financial data and can propose vault contributions, recurring expense payments, and other actions for the user to approve. All amounts are in Colombian Pesos (COP).
@@ -50,7 +50,7 @@ A named, goal-based savings pocket. Distinct from `SavingsAccount` — vault bal
 A ledger record for a vault. Positive amount = contribution, negative = withdrawal. The vault balance is `sum(entries.amount)`. An entry may carry an optional `sourceAccountId` — a sourced entry is a real money move that also reduces that savings account's balance (ADR-021). An entry with no source is notional.
 
 **Sourced vs notional vault contribution**
-A vault contribution is **sourced** when it names a `sourceAccountId` — the money moves from that savings account's available balance into the vault (like putting cash into a bank pocket). The account balance drops; the vault balance rises; `netWorth` is unchanged. A contribution is **notional** when no source is named — it earmarks money conceptually but does not affect any account balance. Existing entries with no source remain notional; no backfill.
+A vault contribution is **sourced** when it names a `sourceAccountId` — the money moves from that savings account's available balance into the vault (like putting cash into a bank pocket). The account balance drops; the vault balance rises; `netWorth` is unchanged. A contribution is **notional** when no source is named — it earmarks money conceptually but does not affect any account balance. Existing entries with no source remain notional; no backfill. Since ADR-045, a sourced contribution can go one step further: naming a specific wallet **and** an `AppCategory` creates a real, categorized `Transaction` alongside the `VaultEntry` (`VaultEntry.transactionId`) — the money leaves through the normal transaction sum and shows up in Expenses analysis like any other categorized spend, rather than through the plain earmark subtraction. Both are still "sourced"; `transactionId` just distinguishes *how* the source wallet's balance was reduced.
 
 **inVaults**
 The total real money that has left savings accounts and now sits in vaults (sum of all sourced vault entry amounts, globally). Reported separately from `totalSavings` — never rolled in. `totalSavings = available + inLoans` is unchanged. `netWorth = totalSavings + inVaults` is the conserved quantity shown as an informational line. `liquidityRatio` and the Health Score are untouched (ADR-021, ADR-011).

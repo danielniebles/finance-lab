@@ -1,10 +1,11 @@
 # Backlog
 
-> Last updated: 2026-07-13
+> Last updated: 2026-07-21
 
 ## Known issues
 - **Import dedup misses same-transaction rows that land on different calendar dates (bot vs. MoneyLover).** The MoneyLover-import dedup (ADR-030) matches an existing MANUAL row only on exact calendar day + exact amount. A bot-captured transaction and the same transaction's later MoneyLover-sourced row can legitimately carry different dates — the bot records a bank notification the day it arrives (a posting-date), while MoneyLover sometimes attributes the same purchase to the actual transaction date one day earlier — so a 1-day drift slips through the dedup entirely and both rows get counted. Confirmed in production (2026-07-13): 3 transactions were double-counted in the `debit/daily` wallet for one financial month this way, found only because the user cross-checked Finance Lab's total against MoneyLover's own reported figure. Fixed manually for that occurrence (the 3 duplicate MANUAL rows were deleted, keeping the richer MoneyLover-sourced versions); the underlying dedup gap in `src/lib/actions/import.ts` is **not** fixed — it will recur on the next date-drifted transaction. A real fix needs a fuzzier match (e.g. a ±1 day window) rather than the current exact-day key.
-- `next-themes` is listed as a dependency (`package.json`) but is not used — theme is managed via a plain cookie mechanism instead. The package can be removed.
+- `next-themes` is listed as a dependency (`package.json`) but is not used — theme is managed via a plain cookie mechanism instead (extended by ADR-043's `THEME_FAMILY` env var, which is a separate, independent mechanism). The package can be removed.
+- **Pre-fix noisy interest-rate values still in the DB.** ADR-044 fixed the EA→monthly interest-rate conversion so newly-entered rates are rounded before storing, and fixed the display side so any already-noisy value renders cleanly (2 decimals). It did **not** clean up existing rows written before the fix — confirmed in production: an installment named "Cuota Javier" (two rows, same `debtorId`) still stores `monthlyInterestRate: 2.088436099590463` rather than a rounded value. Cosmetically fixed (renders as "2.09% m.v."), but the raw stored value is still long. A one-off script or manual `UPDATE` rounding every `Installment.monthlyInterestRate` to 4 decimals would close this out; not done here since it's a direct data mutation outside the scope of a display-bug fix.
 - `@anthropic-ai/sdk` and the `@googleapis/drive` packages are production dependencies, which means they are bundled for the server but not tree-shaken. This is acceptable for a server-rendered app but worth noting if bundle size ever matters.
 - ✅ RESOLVED (ADR-029) — The chat history window loads the most-recent 20 messages (`desc + take: 20`, reversed), not the 20 oldest. Two follow-on ideas from the same investigation are still open, not yet built:
   1. **Time-bounded window** — additionally filter to messages within a recent window (e.g. ~2 hours), so a stale topic drops off instead of bleeding into a new one once 20 messages haven't yet been reached.
@@ -210,10 +211,16 @@ pre-migration computed balance), the wallet-resolution write path on every Trans
 double-count epoch guard.
 
 **Deferred to C2/C3 (see HANDOFF.md "Phasing" for the full breakdown):**
-- **C2** — per-transaction source-wallet selection (editable wallet field on loan/vault-funding/transaction
-  proposals), categories on savings movements (savings in/out becomes a categorized `Transaction` instead
-  of a category-less `AccountEntry`), and a wallet settings screen (create/rename/toggle `isSavings`/
-  `includeInAvailable` — no CRUD UI exists yet, HANDOFF's fixed known set is hard-coded by the migration).
+- **C2** — per-transaction source-wallet selection (editable wallet field on loan/transaction proposals — the
+  vault-funding UI itself now has a wallet+category picker, see ✅ below), and a wallet settings screen
+  (create/rename/toggle `isSavings`/`includeInAvailable` — no CRUD UI exists yet, HANDOFF's fixed known set
+  is hard-coded by the migration).
+  - ✅ PARTIALLY RESOLVED (ADR-045) — **Categories on vault-funding savings movements.** `addVaultEntry()`
+    can now fund a contribution from a specific wallet + `AppCategory`, creating a real categorized
+    `Transaction` (`VaultEntry.transactionId`) instead of a category-less earmark-only `AccountEntry`-style
+    adjustment. This resolves the vault-funding slice of the original C2 item; a general savings-movement
+    categorization (e.g. `AccountEntry` itself gaining a category, or the same treatment for loan
+    disbursements) is still open.
 - **C3** — first-class envelope→envelope `Transfer` (net-zero, distinct from a counterparty "transferencia
   a cuenta X" payment), `AccountEntry.walletId` for per-wallet adjustments, reconciliation UI, and an
   agent read-only wallet-balance tool + `propose_move_between_wallets`.
