@@ -1,11 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, Plus, Trash2, ScrollText, Trash } from "lucide-react";
+import { Pencil, Plus, Trash2, ScrollText, Trash, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { formatCOP } from "@/lib/format";
 import { deleteAccount, deleteEntry } from "@/lib/actions/loans";
@@ -303,27 +306,29 @@ export function AccountCard({ account, masked }: { account: AccountWithBalance; 
               <Plus className="size-3.5" />
               Add entry
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 gap-1 text-xs"
-              onClick={() => setLogOpen(true)}
-            >
-              <ScrollText className="size-3.5" />
-              Log
-            </Button>
-            <Button variant="ghost" size="icon" className="size-6" onClick={() => setEditOpen(true)}>
-              <Pencil className="size-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6 text-destructive hover:text-destructive"
-              onClick={handleDelete}
-              disabled={deletePending}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button variant="ghost" size="icon" className="size-6">
+                    <MoreHorizontal className="size-3.5" />
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setLogOpen(true)}>
+                  <ScrollText className="size-3.5" />
+                  Log
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setEditOpen(true)}>
+                  <Pencil className="size-3.5" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onClick={handleDelete} disabled={deletePending}>
+                  <Trash2 className="size-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>
