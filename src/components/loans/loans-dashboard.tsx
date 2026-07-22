@@ -22,20 +22,31 @@ function maskValue(v: number, masked: boolean): string {
 // ─── KPI card primitive ────────────────────────────────────────────────────────
 
 function KpiCard({
-  label, value, sub, highlight, warn,
+  label, value, sub, highlight, warn, hero, className,
 }: {
   label: string;
   value: string;
   sub?: string;
   highlight?: "good" | "bad" | "neutral";
   warn?: boolean;
+  hero?: boolean;
+  className?: string;
 }) {
   const color = highlight === "good" ? "text-success" : highlight === "bad" ? "text-destructive" : "text-foreground";
   return (
-    <div className="rounded-xl border border-border bg-muted px-5 py-4 space-y-1">
+    <div
+      className={cn(
+        "rounded-xl border border-border bg-muted px-5 py-4 space-y-1",
+        // Signal-only: a subtle gradient + tinted border promote this card as
+        // the strip's headline reading. Default theme renders it exactly like
+        // any other KpiCard — same size delta comes from the value text below.
+        hero && "signal:border-primary/30 signal:bg-gradient-to-br signal:from-primary/12 signal:to-transparent",
+        className
+      )}
+    >
       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
       <div className="flex items-end gap-2">
-        <p className={cn("font-mono text-lg font-semibold", color)}>{value}</p>
+        <p className={cn("font-mono font-semibold", hero ? "text-3xl" : "text-lg", color)}>{value}</p>
         {warn && <AlertTriangle className="size-5 text-warning mb-0.5 shrink-0" />}
       </div>
       {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
@@ -60,23 +71,34 @@ function KpiStrip({ data, masked, liquidityWarn, activeDebtorCount }: KpiStripPr
     : "—";
 
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="flex flex-wrap gap-3">
+      <KpiCard
+        hero
+        label="Net worth"
+        value={maskValue(data.netWorth, masked)}
+        sub="savings + vaults"
+        highlight="neutral"
+        className="grow shrink basis-64"
+      />
       <KpiCard
         label="Available"
         value={maskValue(data.available, masked)}
         sub="liquid accounts"
         highlight={masked ? "neutral" : data.available >= 0 ? "neutral" : "bad"}
+        className="grow shrink basis-37.5"
       />
       <KpiCard
         label="In Loans"
         value={maskValue(data.inLoans, masked)}
         sub={`${activeDebtorCount} active debtor${activeDebtorCount !== 1 ? "s" : ""}`}
+        className="grow shrink basis-37.5"
       />
       <KpiCard
         label="Total Savings"
         value={maskValue(data.totalSavings, masked)}
         sub="available + in loans"
         highlight="neutral"
+        className="grow shrink basis-37.5"
       />
       <KpiCard
         label="Liquidity"
@@ -84,17 +106,13 @@ function KpiStrip({ data, masked, liquidityWarn, activeDebtorCount }: KpiStripPr
         sub="available / total"
         highlight={liquidityWarn ? "bad" : "neutral"}
         warn={liquidityWarn}
+        className="grow shrink basis-37.5"
       />
       <KpiCard
         label="Earmarked in vaults"
         value={maskValue(data.inVaults, masked)}
         sub="sourced from accounts"
-      />
-      <KpiCard
-        label="Net worth"
-        value={maskValue(data.netWorth, masked)}
-        sub="savings + vaults"
-        highlight="neutral"
+        className="grow shrink basis-37.5"
       />
     </div>
   );

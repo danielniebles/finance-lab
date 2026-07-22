@@ -88,17 +88,9 @@ export async function AnalysisDashboard({ month, year, walletId, groupFilter }: 
       )}
 
       {/* ── Top stat strip ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <StatCard label="Monthly Income" value={data.totalIncome} tone="neutral" />
-        <StatCard label="Total Expenses" value={data.totalExpenses} tone="neutral" />
-        <StatCard label="Total Budget" value={data.totalBudget} tone="neutral" />
+      <div className="flex flex-wrap gap-3">
         <StatCard
-          label="Over / Under Budget"
-          value={-data.overexpense}
-          tone={data.overexpense > 0 ? "bad" : "good"}
-          showTrend
-        />
-        <StatCard
+          hero
           label="Savings Rate"
           rawValue={data.savingsRate !== null ? `${data.savingsRate.toFixed(1)}%` : "—"}
           tone={
@@ -108,6 +100,17 @@ export async function AnalysisDashboard({ month, year, walletId, groupFilter }: 
             : "bad"
           }
           hint={data.savingsRate !== null && data.savingsRate < 20 ? "Target: 20%" : undefined}
+          className="grow shrink basis-64"
+        />
+        <StatCard label="Monthly Income" value={data.totalIncome} tone="neutral" className="grow shrink basis-37.5" />
+        <StatCard label="Total Expenses" value={data.totalExpenses} tone="neutral" className="grow shrink basis-37.5" />
+        <StatCard label="Total Budget" value={data.totalBudget} tone="neutral" className="grow shrink basis-37.5" />
+        <StatCard
+          label="Over / Under Budget"
+          value={-data.overexpense}
+          tone={data.overexpense > 0 ? "bad" : "good"}
+          showTrend
+          className="grow shrink basis-37.5"
         />
       </div>
 
@@ -439,6 +442,22 @@ function CircularProgress({
   );
 }
 
+function statCardValueColor(tone: "good" | "bad" | "neutral"): string {
+  if (tone === "good") return "text-success";
+  if (tone === "bad") return "text-destructive";
+  return "text-foreground";
+}
+
+// Signal-only: a subtle gradient + tinted border promote this card as the
+// strip's headline reading. Default theme renders it exactly like any other
+// StatCard — same size delta comes from the value text alone.
+function statCardSurfaceClass(surface: "card" | "raised", hero?: boolean): string {
+  return cn(
+    surface === "raised" ? "bg-muted" : "bg-card",
+    hero && "signal:border-primary/30 signal:bg-gradient-to-br signal:from-primary/12 signal:to-transparent"
+  );
+}
+
 export function StatCard({
   label,
   value,
@@ -447,6 +466,8 @@ export function StatCard({
   showTrend,
   hint,
   surface = "card",
+  hero,
+  className,
 }: {
   label: string;
   value?: number;
@@ -455,31 +476,29 @@ export function StatCard({
   showTrend?: boolean;
   hint?: string;
   surface?: "card" | "raised";
+  hero?: boolean;
+  className?: string;
 }) {
-  const valueColor =
-    tone === "good" ? "text-success" :
-    tone === "bad" ? "text-destructive" :
-    "text-foreground";
-
+  const valueColor = statCardValueColor(tone);
   const TrendIcon =
     tone === "good" ? TrendingUp :
     tone === "bad" ? TrendingDown :
     Minus;
-
   const display = rawValue ?? (value !== undefined ? formatCOP(Math.abs(value)) : "—");
 
   return (
     <div
       className={cn(
         "rounded-xl border border-border/60 px-4 py-4",
-        surface === "raised" ? "bg-muted" : "bg-card"
+        statCardSurfaceClass(surface, hero),
+        className
       )}
     >
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
         {label}
       </p>
       <div className="flex items-end justify-between gap-2">
-        <p className={cn("font-mono text-lg font-semibold tabular-nums leading-tight", valueColor)}>
+        <p className={cn("font-mono font-semibold tabular-nums leading-tight", hero ? "text-3xl" : "text-lg", valueColor)}>
           {display}
         </p>
         {showTrend && (

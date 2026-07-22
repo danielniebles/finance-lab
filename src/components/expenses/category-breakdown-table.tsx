@@ -119,7 +119,7 @@ function CategoryBreakdownCard({
                 <TableRow
                   key={row.id}
                   className={cn(
-                    "border-border/40 transition-colors cursor-pointer",
+                    "border-border/40 transition-colors cursor-pointer signal:odd:bg-foreground/[3%]",
                     rowBg(row.severity)
                   )}
                   onClick={() => onRowClick(row)}
@@ -356,15 +356,16 @@ export function SeverityBadge({ severity }: { severity: CategorySeverity }) {
     OK:        "border-success/25 bg-success/10 text-success",
     Issue:     "border-warning/25 bg-warning/10 text-warning",
     Critical:  "border-destructive/25 bg-destructive/10 text-destructive",
-    Unplanned: "border-warning/25 bg-warning/10 text-warning",
+    Unplanned: "border-unplanned/25 bg-unplanned/10 text-unplanned",
   };
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
         styles[severity]
       )}
     >
+      <span className="hidden size-1.5 rounded-full bg-current signal:inline-block" />
       {severity}
     </span>
   );

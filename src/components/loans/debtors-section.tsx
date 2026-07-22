@@ -54,13 +54,15 @@ function remainingColorClass(loan: LoanWithRemaining, masked: boolean | undefine
 function LoanStatusBadge({ isActive, isOverdue }: { isActive: boolean; isOverdue: boolean }) {
   if (!isActive) {
     return (
-      <span className="rounded-full bg-success/10 text-success px-1.5 py-0.5 text-xs font-medium whitespace-nowrap">
+      <span className="inline-flex items-center gap-1 rounded-full bg-success/10 text-success px-1.5 py-0.5 text-xs font-medium whitespace-nowrap">
+        <span className="hidden size-1.5 rounded-full bg-current signal:inline-block" />
         Settled
       </span>
     );
   }
   return (
-    <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium whitespace-nowrap", isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning")}>
+    <span className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium whitespace-nowrap", isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning")}>
+      <span className="hidden size-1.5 rounded-full bg-current signal:inline-block" />
       {isOverdue ? "Overdue" : "Active"}
     </span>
   );
@@ -86,7 +88,7 @@ function LoanRow({
     <>
       <TableRow
         className={cn(
-          "group/loanrow border-border/50",
+          "group/loanrow border-border/50 signal:odd:bg-foreground/[3%]",
           !masked && "cursor-pointer transition-colors hover:bg-muted/40"
         )}
         onClick={masked ? undefined : () => setOpen(true)}

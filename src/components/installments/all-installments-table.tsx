@@ -35,7 +35,7 @@ function InstallmentTableRow({
   return (
     <>
       <TableRow
-        className="border-border cursor-pointer transition-colors hover:bg-muted/40"
+        className="border-border cursor-pointer transition-colors hover:bg-muted/40 signal:odd:bg-foreground/[3%]"
         onClick={() => setOpen(true)}
       >
         <TableCell className="px-4">
@@ -165,13 +165,15 @@ function InstallmentMobileRow({
 function StatusBadge({ status }: { status: "Active" | "Finished" }) {
   if (status === "Finished") {
     return (
-      <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+      <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+        <span className="hidden size-1.5 rounded-full bg-current signal:inline-block" />
         Finished
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+    <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+      <span className="hidden size-1.5 rounded-full bg-current signal:inline-block" />
       Active
     </span>
   );

@@ -126,7 +126,7 @@ export function DueThisMonthTable({ dueThisMonth, totalObligation }: Props) {
                   "border-border cursor-pointer select-none transition-colors",
                   isSelected
                     ? "bg-primary/8 ring-1 ring-inset ring-primary/20 hover:bg-primary/10"
-                    : "hover:bg-muted/30"
+                    : "hover:bg-muted/30 signal:odd:bg-foreground/[3%]"
                 )}
               >
                 <TableCell className="px-4 font-medium">{due.installment.description}</TableCell>

@@ -46,11 +46,15 @@ export default async function RootLayout({
 }>) {
   const cookieStore = await cookies();
   const theme = cookieStore.get("theme")?.value === "light" ? "light" : "dark";
+  // Deployment-level "skin" choice, not a per-user preference — unlike the
+  // light/dark cookie above, this never needs a runtime toggle, so a plain
+  // server-only env var read once here is enough. Left unset, this is a no-op.
+  const family = process.env.THEME_FAMILY === "signal" ? "signal" : "";
 
   return (
     <html
       lang="en"
-      className={`${theme} ${sora.variable} ${dmSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${theme} ${family} ${sora.variable} ${dmSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="h-full">
         {children}

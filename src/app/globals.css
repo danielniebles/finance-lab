@@ -3,10 +3,12 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant signal (&:is(.signal *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-unplanned: var(--unplanned);
   --font-sans: var(--font-dm-sans);
   --font-mono: var(--font-jetbrains-mono);
   --font-heading: var(--font-sora);
@@ -69,6 +71,7 @@
   --destructive: oklch(0.58 0.22 27);
   --success: oklch(0.527 0.154 163);
   --warning: oklch(0.62 0.15 60);
+  --unplanned: oklch(0.62 0.15 60); /* same as --warning — default theme keeps Unplanned on the warning scale */
   --border: oklch(0.88 0.005 250);
   --input: oklch(0.88 0.005 250);
   --ring: oklch(0.52 0.18 155);
@@ -107,6 +110,7 @@
   --destructive: oklch(0.68 0.22 25);
   --success: oklch(0.762 0.157 164);
   --warning: oklch(0.80 0.15 80);
+  --unplanned: oklch(0.80 0.15 80); /* same as --warning — default theme keeps Unplanned on the warning scale */
   --border: oklch(0.28 0.01 250 / 70%);
   --input: oklch(0.28 0.01 250 / 80%);
   --ring: oklch(0.72 0.18 155);
@@ -123,6 +127,93 @@
   --sidebar-accent-foreground: oklch(0.92 0.006 250);
   --sidebar-border: oklch(0.25 0.01 250 / 60%);
   --sidebar-ring: oklch(0.72 0.18 155);
+}
+
+/* ─── Signal theme (opt-in via THEME_FAMILY=signal, see layout.tsx) ─────────
+   Values here are plain hex/rgb rather than oklch, unlike the two blocks
+   above — the dark values are copied verbatim from the Signal handoff mocks
+   (.handoff/signal-theme/*.dc.html) to avoid introducing color drift through
+   a manual oklch conversion; the light values are extrapolated from those
+   using Tailwind's canonical 400↔600 dark/light accent pairing (the same
+   relationship the default theme's own oklch light/dark pair already uses —
+   a lighter, higher-L accent in dark mode, a darker one in light mode for
+   contrast against a white surface). `.signal` alone covers light-Signal;
+   `.dark.signal` (two classes = higher specificity than `.dark` alone)
+   layers the dark-Signal overrides on top, so source order doesn't matter. */
+.signal {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #0d9488;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --destructive: #dc2626;
+  --success: #059669;
+  --warning: #d97706;
+  --unplanned: #4f46e5;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #0d9488;
+  --chart-1: #0d9488;
+  --chart-2: #0284c7;
+  --chart-3: #d97706;
+  --chart-4: #dc2626;
+  --chart-5: #4f46e5;
+  --radius: 0.75rem;
+  --sidebar: #f1f5f9;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #0d9488;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgb(13 148 136 / 12%);
+  --sidebar-accent-foreground: #0d9488;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #0d9488;
+}
+
+.dark.signal {
+  --background: #0d0f12;
+  --foreground: #eef1f3;
+  --card: #15181c;
+  --card-foreground: #eef1f3;
+  --popover: #15181c;
+  --popover-foreground: #eef1f3;
+  --primary: #3dd6c4;
+  --primary-foreground: #06201d;
+  --secondary: #1c2126;
+  --secondary-foreground: #eef1f3;
+  --muted: #1c2126;
+  --muted-foreground: #9aa4ad;
+  --accent: #1c2126;
+  --accent-foreground: #eef1f3;
+  --destructive: #f0555a;
+  --success: #3ecf8e;
+  --warning: #e8b93d;
+  --unplanned: #7c86ff;
+  --border: #252a30;
+  --input: #252a30;
+  --ring: #3dd6c4;
+  --chart-1: #3dd6c4;
+  --chart-2: #38bdf8;
+  --chart-3: #e8b93d;
+  --chart-4: #f0555a;
+  --chart-5: #7c86ff;
+  --radius: 0.75rem;
+  --sidebar: #101317;
+  --sidebar-foreground: #eef1f3;
+  --sidebar-primary: #3dd6c4;
+  --sidebar-primary-foreground: #06201d;
+  --sidebar-accent: rgb(61 214 196 / 12%);
+  --sidebar-accent-foreground: #3dd6c4;
+  --sidebar-border: #252a30;
+  --sidebar-ring: #3dd6c4;
 }
 
 /* ─── Base ────────────────────────────────────────────────────────────────── */
