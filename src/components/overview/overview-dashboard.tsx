@@ -79,19 +79,20 @@ function BudgetBarsPanel({
 // ─── KPI card ─────────────────────────────────────────────────────────────────
 
 function KpiCard({
-  label, value, sub, tone,
+  label, value, sub, tone, className,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: "good" | "bad" | "neutral";
+  className?: string;
 }) {
   const color =
     tone === "good" ? "text-success" :
     tone === "bad"  ? "text-destructive" :
     "text-foreground";
   return (
-    <div className="rounded-xl border border-border bg-muted px-5 py-4 space-y-1">
+    <div className={cn("rounded-xl border border-border bg-muted px-5 py-4 space-y-1", className)}>
       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className={cn("font-mono text-lg font-semibold", color)}>{value}</p>
       {sub && <p className="text-sm text-muted-foreground">{sub}</p>}
@@ -268,30 +269,37 @@ export async function OverviewDashboard() {
         {" "}— last imported month
       </p>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {/* KPI strip — Income/Expenses (long COP values) are paired with their
+          related percentage card and span more of the row on mobile, so a
+          10-11 digit value doesn't sit cramped in the same width as a short
+          "12.3%" (mirrors the variable-width KpiCard strip in Loans). */}
+      <div className="grid grid-cols-5 gap-4 lg:grid-cols-4">
         <KpiCard
           label="Income"
           value={formatCOP(analysis.totalIncome)}
           tone="neutral"
-        />
-        <KpiCard
-          label="Expenses"
-          value={formatCOP(analysis.totalExpenses)}
-          sub={`budget ${formatCOP(analysis.totalBudget)}`}
-          tone={analysis.totalExpenses > analysis.totalBudget ? "bad" : "neutral"}
+          className="col-span-3 lg:col-span-1"
         />
         <KpiCard
           label="Savings Rate"
           value={analysis.savingsRate !== null ? `${analysis.savingsRate.toFixed(1)}%` : "—"}
           sub={formatCOP(analysis.realSavings)}
           tone={savingsTone}
+          className="col-span-2 lg:col-span-1"
+        />
+        <KpiCard
+          label="Expenses"
+          value={formatCOP(analysis.totalExpenses)}
+          sub={`budget ${formatCOP(analysis.totalBudget)}`}
+          tone={analysis.totalExpenses > analysis.totalBudget ? "bad" : "neutral"}
+          className="col-span-3 lg:col-span-1"
         />
         <KpiCard
           label="Variable Burn"
           value={analysis.variableBurnRate !== null ? `${analysis.variableBurnRate.toFixed(1)}%` : "—"}
           sub="of variable budget"
           tone={burnTone}
+          className="col-span-2 lg:col-span-1"
         />
       </div>
 
