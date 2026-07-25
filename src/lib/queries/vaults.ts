@@ -118,7 +118,7 @@ export async function getVaults(
       r.goalType === "RECURRING" ? recurringRequiredFor(r.recurringExpenses, period) : undefined;
 
     const metrics = computeVaultMetrics(vaultShape, balance, period, recurringRequired);
-    const status = classifyVault(vaultShape, balance, contributedThisMonth, period, recurringRequired);
+    const status = classifyVault(vaultShape, balance, contributedThisMonth, period, metrics.requiredThisMonth);
 
     return {
       id: r.id,
@@ -210,7 +210,7 @@ export async function getVaultObligations(
       r.goalType === "RECURRING" ? recurringRequiredFor(r.recurringExpenses, period) : undefined;
 
     const metrics = computeVaultMetrics(vaultShape, balance, period, recurringRequired);
-    const status = classifyVault(vaultShape, balance, contributedThisMonth, period, recurringRequired);
+    const status = classifyVault(vaultShape, balance, contributedThisMonth, period, metrics.requiredThisMonth);
 
     const stillNeeded = Math.max(
       0,

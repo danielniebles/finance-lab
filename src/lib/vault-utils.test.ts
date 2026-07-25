@@ -59,6 +59,21 @@ describe("classifyVault — FIXED_DEADLINE", () => {
   });
 });
 
+describe("computeVaultMetrics — RECURRING", () => {
+  const vault = { goalType: "RECURRING" as const };
+  const period: VaultPeriod = { month: 7, year: 2026 };
+
+  it("nets the pooled set-aside against the existing balance (Car expenses case)", () => {
+    const metrics = computeVaultMetrics(vault, 272_350, period, 544_700);
+    expect(metrics.requiredThisMonth).toBe(272_350);
+  });
+
+  it("floors at 0 once the balance covers the pooled set-aside", () => {
+    const metrics = computeVaultMetrics(vault, 600_000, period, 544_700);
+    expect(metrics.requiredThisMonth).toBe(0);
+  });
+});
+
 describe("classifyVault — RECURRING", () => {
   const vault = { goalType: "RECURRING" as const };
   const period: VaultPeriod = { month: 7, year: 2026 };

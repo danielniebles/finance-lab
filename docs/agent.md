@@ -102,7 +102,7 @@ Tools come in two classes. **Read tools** execute immediately and return data.
 | `get_trends(n)` | `getTrends(n)` | Multi-month income/expense/savings-rate patterns |
 | `get_installments()` | `getAllInstallments()` | Active + finished installments, monthly obligation |
 | `get_loans()` | `getLoansOverview()` | Savings accounts, debtors, liquidity KPIs |
-| `get_vaults()` | `getVaults()` | All vaults with computed balance + progress. A RECURRING vault's `requiredThisMonth` reflects the sum of set-asides from its linked recurring expenses. |
+| `get_vaults()` | `getVaults()` | All vaults with computed balance + progress. A RECURRING vault's `requiredThisMonth` reflects the sum of set-asides from its linked recurring expenses, net of the vault's existing balance. |
 | `get_vault_obligations(month, year)` | `getVaultObligations()` | Per-vault required / contributed / still-needed this month |
 | `get_recurring_expenses(month, year)` | `getRecurringExpenses()` | All active recurring expenses with computed set-aside amounts and status |
 | `get_forecast(month, year)` | `getForecast()` | Projected savings rate + per-category landing ranges from trend history (historical only). When an IN_PROGRESS batch exists for the month, returns pacing mode fields: `pacingMode`, `spentSoFar`, `projectedVariableSpend`, `daysElapsed`, `daysInMonth`. |
@@ -205,7 +205,7 @@ A **recurring expense** is a non-monthly cost the user knows is coming: taxes, o
 
 **Cycle roll:** On payment, `nextDueDate` advances by `cadenceMonths` via `rollCycle()`. The actual paid amount can differ from the estimate (user adjusts at pay time).
 
-**Sinking-fund vault (goalType = RECURRING):** A vault that accumulates monthly set-asides for a basket of recurring expenses linked via `fundingVaultId`. Its `requiredThisMonth` is `sum(monthlySetAside(item))` over all active linked expenses. The agent should:
+**Sinking-fund vault (goalType = RECURRING):** A vault that accumulates monthly set-asides for a basket of recurring expenses linked via `fundingVaultId`. Its `requiredThisMonth` is `max(0, sum(monthlySetAside(item)) − balance)` over all active linked expenses — same "remaining = target − balance" idea as `FIXED_DEADLINE`, applied to the pooled total, so an existing balance offsets the ask instead of being double-counted. The agent should:
 - Use `get_recurring_expenses` to see upcoming bills and set-asides.
 - Use `get_vault_obligations` to see if the sinking fund is on pace (`On track`) or `Underfunded`.
 - When the user mentions a bill they pay periodically, propose `propose_create_recurring_expense`.

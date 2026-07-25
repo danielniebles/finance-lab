@@ -86,11 +86,15 @@ export function computeVaultMetrics(
   }
 
   if (vault.goalType === "RECURRING") {
+    // Same "remaining = target − balance" idea as FIXED_DEADLINE, applied to
+    // the pooled total across linked recurring expenses — dollars in the
+    // vault are fungible, so existing balance offsets the smoothed ask
+    // regardless of which linked expense it was originally saved for.
     return {
       balance,
       remaining: 0,
       monthsLeft: 0,
-      requiredThisMonth: recurringRequired ?? 0,
+      requiredThisMonth: Math.max(0, (recurringRequired ?? 0) - balance),
       progressPct: null,
     };
   }
