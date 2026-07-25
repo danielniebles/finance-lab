@@ -212,10 +212,13 @@ export async function getVaultObligations(
     const metrics = computeVaultMetrics(vaultShape, balance, period, recurringRequired);
     const status = classifyVault(vaultShape, balance, contributedThisMonth, period, metrics.requiredThisMonth);
 
-    const stillNeeded = Math.max(
-      0,
-      metrics.requiredThisMonth - contributedThisMonth,
-    );
+    // RECURRING's requiredThisMonth is already netted against the vault's
+    // current balance (which includes contributedThisMonth), so subtracting
+    // contributedThisMonth again here would double-count it.
+    const stillNeeded =
+      r.goalType === "RECURRING"
+        ? metrics.requiredThisMonth
+        : Math.max(0, metrics.requiredThisMonth - contributedThisMonth);
 
     return {
       id: r.id,

@@ -87,15 +87,20 @@ export function VaultTile({
   const circumference = 163.36; // 2 * Math.PI * 26
   const pct = progressPct ?? 0;
   const dashOffset = circumference * (1 - Math.min(pct, 100) / 100);
+  const isRecurring = goalType === "RECURRING";
   // How much is still missing to cover this month's target — not the flat
   // target itself, so a vault already fully contributed to this month reads
   // as $0 rather than repeating a number you've already met.
-  const stillNeededThisMonth = Math.max(0, requiredThisMonth - contributedThisMonth);
+  // RECURRING's requiredThisMonth is already netted against the vault's
+  // current balance (which includes contributedThisMonth), so subtracting
+  // contributedThisMonth again here would double-count it.
+  const stillNeededThisMonth = isRecurring
+    ? requiredThisMonth
+    : Math.max(0, requiredThisMonth - contributedThisMonth);
 
   const isMet = status === "Met";
   const isOverdue = status === "Overdue";
   const isOpen = goalType === "OPEN_ENDED";
-  const isRecurring = goalType === "RECURRING";
 
   return (
     <article
