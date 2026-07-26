@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselPrevious,
+  CarouselNext,
+} from "@/components/ui/carousel";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { VaultTile } from "./vault-tile";
@@ -208,16 +214,21 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
         </div>
       ) : (
         <section aria-label="Vault tiles">
-          {/* Mobile: carousel — a single stacked column of full tiles is a
-              lot of scrolling; swipe through them instead. */}
-          <Carousel opts={{ align: "start" }} className="sm:hidden">
+          {/* Carousel at every breakpoint — with 5-6+ vaults a wrapping grid
+              grows the page tall fast; scrolling one row horizontally keeps
+              the section a fixed height. basis widens per breakpoint so more
+              tiles are visible at once on larger screens. */}
+          <Carousel opts={{ align: "start" }}>
             <CarouselContent>
               {vaults.map((v) => (
                 // py-1: the tile's ring-1 border needs room to render —
                 // horizontal carousels get pl-4 from CarouselItem by default
                 // but no vertical padding, so the viewport's overflow-hidden
                 // otherwise clips the ring flush at the top/bottom edge.
-                <CarouselItem key={v.id} className="basis-[85%] py-1">
+                <CarouselItem
+                  key={v.id}
+                  className="basis-[85%] py-1 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4"
+                >
                   <VaultTile
                     vault={v}
                     onContribute={() => openEntryDialog(v.id, "contribute")}
@@ -227,19 +238,13 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
                 </CarouselItem>
               ))}
             </CarouselContent>
+            {/* Positioned inside the carousel bounds (not the default
+                off-edge -left-12/-right-12) so they don't get clipped by
+                the page's own padding; disabled:hidden drops the button
+                once there's no next/prev slide left to reach. */}
+            <CarouselPrevious className="left-2 disabled:hidden" />
+            <CarouselNext className="right-2 disabled:hidden" />
           </Carousel>
-
-          <div className="hidden sm:grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {vaults.map((v) => (
-              <VaultTile
-                key={v.id}
-                vault={v}
-                onContribute={() => openEntryDialog(v.id, "contribute")}
-                onEdit={() => openEditDialog(v.id)}
-                onHistory={() => openLedger(v.id)}
-              />
-            ))}
-          </div>
         </section>
       )}
 
