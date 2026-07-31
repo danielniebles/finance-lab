@@ -74,6 +74,10 @@ function signedAmount(type: TxnType, rawAmount: string): number {
 type Props = {
   categories: CategoryOption[];
   walletOptions: { id: string; name: string }[];
+  // The ledger's current ?walletId= filter, if any — takes priority over
+  // lastWallet so opening the dialog from a wallet-scoped view defaults to
+  // that wallet rather than whatever was last used this session.
+  activeWalletId?: string;
 };
 
 // Renders a trigger button that opens a modal creation form — kept out of
@@ -82,20 +86,20 @@ type Props = {
 // instead of the old inline-expanding row: expanding in place pushed the
 // list down and stole scroll position, and its autoFocus fired every time
 // the row expanded even when it wasn't the user's intent to type immediately.
-export function AddTransactionRow({ categories, walletOptions }: Props) {
+export function AddTransactionRow({ categories, walletOptions, activeWalletId }: Props) {
   const [open, setOpen] = useState(false);
   const [lastWallet, setLastWallet] = useState("");
-  const [values, setValues] = useState<FormValues>(() => defaultValues(""));
+  const [values, setValues] = useState<FormValues>(() => defaultValues(activeWalletId ?? ""));
   const [pending, startTransition] = useTransition();
   const amountInputRef = useRef<HTMLInputElement>(null);
 
   function openDialog() {
-    setValues(defaultValues(lastWallet));
+    setValues(defaultValues(activeWalletId || lastWallet));
     setOpen(true);
   }
 
   function closeDialog() {
-    setValues(defaultValues(lastWallet));
+    setValues(defaultValues(activeWalletId || lastWallet));
     setOpen(false);
   }
 
@@ -192,6 +196,8 @@ function CreateForm({
             ref={amountInputRef}
             id={`${idPrefix}-amount`}
             type="number"
+            inputMode="numeric"
+            pattern="[0-9]*"
             min="0"
             value={values.amount}
             onChange={(e) => onChange({ amount: e.target.value })}

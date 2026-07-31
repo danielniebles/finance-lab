@@ -7,11 +7,13 @@
 //
 // Per-item category resolution: a counterparty rule lookup by vendor first
 // (treating `vendor` as the MERCHANT candidate, direction always EXPENSE —
-// card purchases are never income), falling back to the same no-name guess
-// resolveCategoryGuess/buildCategoryShortlist already give a normal
-// propose_add_transaction card when no rule matches and no name was given.
-// Only the rule's appCategoryId is borrowed — NOT its wallet: every included
-// row's wallet is the batch-level cardLabel, a deliberate difference from the
+// card purchases are never income); failing that, the model's own per-row
+// appCategoryName guess (its knowledge of the vendor, e.g. "Rappi" → Going
+// Out) resolved via the same resolveCategoryGuess/buildCategoryShortlist a
+// normal propose_add_transaction card uses; failing that (no guess or no
+// match), the shared no-name fallback (categories[0]). Only the rule's
+// appCategoryId is borrowed — NOT its wallet: every included row's wallet is
+// the batch-level cardLabel, a deliberate difference from the
 // single-transaction ADR-033 auto-record flow (see docs/decisions.md ADR-034).
 
 import { getCategories } from "@/lib/queries/expenses";
@@ -28,16 +30,19 @@ type RawBatchItem = {
   vendor?: string;
   amount?: number;
   date?: string;
+  appCategoryName?: string;
   scratched?: boolean;
 };
 
 /**
  * Resolves one raw vision-extracted item into a BatchItem: category from a
- * matching counterparty rule (by vendor, direction always EXPENSE — card
- * purchases are never income) or, failing that, the same no-name fallback
- * guess resolveAddTransaction's normal card uses. `included` is purely
- * `!scratched` — scratch-out detection is entirely the model's job, this
- * resolver only reads whatever boolean it sent.
+ * matching counterparty rule first (by vendor, direction always EXPENSE —
+ * card purchases are never income), else the model's own per-row
+ * appCategoryName guess (resolved the same way resolveAddTransaction's
+ * normal card resolves its guess), else the shared no-name fallback
+ * (categories[0]). `included` is purely `!scratched` — scratch-out
+ * detection is entirely the model's job, this resolver only reads whatever
+ * boolean it sent.
  */
 async function resolveBatchItem(
   raw: RawBatchItem,
@@ -53,7 +58,7 @@ async function resolveBatchItem(
 
   const appCategoryId = rule
     ? rule.appCategoryId
-    : resolveCategoryGuess(categories, undefined).id;
+    : resolveCategoryGuess(categories, raw.appCategoryName).id;
 
   return {
     vendor,

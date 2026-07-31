@@ -168,7 +168,11 @@ export async function TransactionLedgerPage({ month, year, groupBy, filters }: P
       {/* Sibling of LedgerControls, not a child — must stay interactive
           during LedgerControls's filter-requery dimming (see
           .scratch/manual-transaction-entry.md). */}
-      <AddTransactionRow categories={categories} walletOptions={walletOptions} />
+      <AddTransactionRow
+        categories={categories}
+        walletOptions={walletOptions}
+        activeWalletId={filters.walletId}
+      />
 
       <LedgerControls
         month={month}

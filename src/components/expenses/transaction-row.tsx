@@ -265,6 +265,8 @@ function TransactionEditForm({
           <Input
             id={`${idPrefix}-amount`}
             type="number"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={values.amount}
             onChange={(e) => onChange({ amount: e.target.value })}
             className="font-mono"

@@ -1,8 +1,8 @@
 // Resolver tests for propose_add_transactions_batch (ADR-034 — card-screenshot
 // batch ingestion). Focus: per-item category resolution (rule match by
-// vendor vs. no-name fallback), scratch-out → included mapping, card-label
-// shortlist degrade behavior, and the two blocking cases (no items, no
-// categories).
+// vendor, then appCategoryName guess, then no-name fallback), scratch-out →
+// included mapping, card-label shortlist degrade behavior, and the two
+// blocking cases (no items, no categories).
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -76,13 +76,22 @@ describe("resolveAddTransactionsBatch", () => {
     expect(batch.items[0].appCategoryId).toBe("cat-going-out");
   });
 
-  it("falls back to the no-name guess (first category) when no rule matches", async () => {
+  it("falls back to the no-name guess (first category) when no rule matches and no appCategoryName guess", async () => {
     const result = await resolveAddTransactionsBatch({
       items: [{ vendor: "Unknown Vendor", amount: 12000 }],
     });
 
     const batch = result.params.batch as BatchDescriptor;
     expect(batch.items[0].appCategoryId).toBe(CATEGORIES[0].id);
+  });
+
+  it("uses the model's appCategoryName guess when no rule matches", async () => {
+    const result = await resolveAddTransactionsBatch({
+      items: [{ vendor: "Uber", amount: 12000, appCategoryName: "Transport" }],
+    });
+
+    const batch = result.params.batch as BatchDescriptor;
+    expect(batch.items[0].appCategoryId).toBe("cat-transport");
   });
 
   it("maps scratched: true to included: false and sets scratchDetected", async () => {
