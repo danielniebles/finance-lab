@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { TransactionSource } from "@/generated/prisma";
 import { computeInstallmentDue, computeMonthlyAmount } from "@/lib/installment-utils";
 
 export async function createInstallment(data: {
@@ -131,6 +132,94 @@ export async function unmarkPayment(paymentId: string) {
 export async function unmarkPaymentBySlot(installmentId: string, installmentNum: number) {
   await db.installmentPayment.deleteMany({ where: { installmentId, installmentNum } });
   revalidatePath("/installments");
+}
+
+/**
+ * "Pay all" — marks a batch of selected installment slots (from the Due This
+ * Month table) as paid in one go, AND records a single MANUAL Transaction for
+ * the combined amount so the payment shows up on the wallet's ledger, same as
+ * markPayment does per-slot for the auto-loan case, but batched into one
+ * ledger entry instead of one per slot.
+ */
+export async function payInstallmentsBulk(
+  items: { installmentId: string; installmentNum: number }[],
+  data: {
+    walletId: string;
+    wallet: string;
+    appCategoryId: string;
+    date: Date;
+    note: string;
+  },
+): Promise<{ loansCreated: number }> {
+  if (items.length === 0) throw new Error("No installments selected");
+
+  const installments = await db.installment.findMany({
+    where: { id: { in: [...new Set(items.map((i) => i.installmentId))] } },
+    include: { debtor: { select: { id: true, name: true } } },
+  });
+  const byId = new Map(installments.map((inst) => [inst.id, inst]));
+
+  let loansCreated = 0;
+  let totalAmount = 0;
+
+  await db.$transaction(async (tx) => {
+    for (const item of items) {
+      const inst = byId.get(item.installmentId);
+      if (!inst) continue;
+
+      await tx.installmentPayment.create({
+        data: {
+          installmentId: item.installmentId,
+          installmentNum: item.installmentNum,
+          paidAt: data.date,
+        },
+      });
+
+      const amount = computeInstallmentDue(
+        inst.totalAmount,
+        inst.numInstallments,
+        item.installmentNum,
+        inst.monthlyInterestRate ?? undefined,
+      );
+      totalAmount += amount;
+
+      if (inst.debtorId && inst.fundingAccountId) {
+        await tx.loan.create({
+          data: {
+            debtorId: inst.debtorId,
+            accountId: inst.fundingAccountId,
+            amount,
+            date: data.date,
+            notes: `Cuota ${item.installmentNum}/${inst.numInstallments} — ${inst.description}`,
+          },
+        });
+        loansCreated++;
+      }
+    }
+
+    await tx.transaction.create({
+      data: {
+        amount: -totalAmount,
+        date: data.date,
+        appCategoryId: data.appCategoryId,
+        wallet: data.wallet,
+        walletId: data.walletId,
+        note: data.note,
+        source: TransactionSource.MANUAL,
+        batchId: null,
+        externalId: null,
+        moneyLoverCategoryId: null,
+      },
+    });
+  });
+
+  revalidatePath("/installments");
+  revalidatePath("/loans");
+  revalidatePath("/expenses");
+  revalidatePath("/overview");
+  revalidatePath("/trends");
+
+  return { loansCreated };
 }
 
 // ─── Credit Card CRUD ─────────────────────────────────────────────────────────

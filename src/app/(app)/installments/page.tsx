@@ -5,6 +5,8 @@ import {
   getCardSummaries,
   getInstallmentFormData,
 } from "@/lib/queries/installments";
+import { listWalletOptions } from "@/lib/queries/wallets";
+import { getCategories } from "@/lib/queries/expenses";
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +20,12 @@ export default async function InstallmentsPage({
   const month = params.month ? parseInt(params.month, 10) : now.getMonth() + 1;
   const year = params.year ? parseInt(params.year, 10) : now.getFullYear();
 
-  const [allInstallments, cards, formData] = await Promise.all([
+  const [allInstallments, cards, formData, walletOptions, categories] = await Promise.all([
     getAllInstallments(),
     getCardSummaries(month, year),
     getInstallmentFormData(),
+    listWalletOptions(),
+    getCategories(),
   ]);
   const summary = await getMonthSummary(month, year, allInstallments);
 
@@ -35,6 +39,8 @@ export default async function InstallmentsPage({
       formCards={formData.cards}
       formDebtors={formData.debtors}
       formAccounts={formData.accounts}
+      walletOptions={walletOptions}
+      categories={categories}
     />
   );
 }

@@ -13,6 +13,8 @@ import { CreditCardTile } from "./credit-card-tile";
 import { CreditCardManager } from "./credit-card-manager";
 import { computeMonthSummary } from "@/lib/installment-utils";
 import type { InstallmentRow, MonthSummary, CreditCardSummary } from "@/lib/queries/installments";
+import type { WalletOption } from "@/components/shared/wallet-select";
+import type { CategoryOption } from "@/lib/queries/expenses";
 
 // ─── StatInline ───────────────────────────────────────────────────────────────
 
@@ -55,6 +57,8 @@ type Props = {
   formCards: { id: string; name: string; color: string | null }[];
   formDebtors: { id: string; name: string }[];
   formAccounts: { id: string; name: string }[];
+  walletOptions: WalletOption[];
+  categories: CategoryOption[];
 };
 
 export function InstallmentsDashboard({
@@ -66,6 +70,8 @@ export function InstallmentsDashboard({
   formCards,
   formDebtors,
   formAccounts,
+  walletOptions,
+  categories,
 }: Props) {
   const [privacyMode, setPrivacyMode] = useState(false);
   const [cardManagerOpen, setCardManagerOpen] = useState(false);
@@ -226,6 +232,8 @@ export function InstallmentsDashboard({
           <DueThisMonthTable
             dueThisMonth={activeSummary.dueThisMonth}
             totalObligation={activeSummary.totalObligation}
+            walletOptions={walletOptions}
+            categories={categories}
           />
         )}
       </section>
