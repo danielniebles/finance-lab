@@ -162,3 +162,124 @@ export async function updateTransaction(
   await db.transaction.update({ where: { id }, data: { ...data, ...detachFields, ...walletFields } });
   revalidateAll();
 }
+
+// ─── Suggestions (AddTransactionRow autofill) ──────────────────────────────
+
+export type TransactionSuggestion = {
+  appCategoryId: string;
+  categoryName: string;
+  walletId: string;
+  walletName: string;
+  source: "note" | "amount";
+  sampleCount: number;
+};
+
+// Selects everything needed to resolve a transaction's *effective* category
+// the same way every other read in the app does (ADR-030): direct
+// appCategoryId if set, else the linked MoneyLoverCategory's mapping. Most
+// rows are MONEYLOVER-sourced with appCategoryId null, so skipping this
+// fallback would starve the suggestion of nearly all historical data.
+const SUGGESTION_ROW_SELECT = {
+  appCategoryId: true,
+  walletId: true,
+  appCategory: { select: { name: true } },
+  walletRef: { select: { name: true } },
+  moneyLoverCategory: {
+    select: { mapping: { select: { appCategoryId: true, appCategory: { select: { name: true } } } } },
+  },
+} as const;
+
+type SuggestionCandidateRow = {
+  appCategoryId: string | null;
+  walletId: string | null;
+  appCategory: { name: string } | null;
+  walletRef: { name: string } | null;
+  moneyLoverCategory: { mapping: { appCategoryId: string; appCategory: { name: string } } | null } | null;
+};
+
+const SUGGESTION_SAMPLE_SIZE = 20;
+const AMOUNT_TOLERANCE_RATIO = 0.03;
+
+function resolveEffectiveCategory(row: SuggestionCandidateRow): { id: string; name: string } | null {
+  if (row.appCategoryId && row.appCategory) return { id: row.appCategoryId, name: row.appCategory.name };
+  const mapped = row.moneyLoverCategory?.mapping;
+  return mapped ? { id: mapped.appCategoryId, name: mapped.appCategory.name } : null;
+}
+
+/** Groups candidate rows by (category, wallet) pair and returns the most
+ * frequent combination — ties favor the most recent (rows arrive date-desc). */
+function pickMajoritySuggestion(
+  rows: SuggestionCandidateRow[],
+  source: "note" | "amount",
+): TransactionSuggestion | null {
+  const counts = new Map<
+    string,
+    { count: number; category: { id: string; name: string }; walletId: string; walletName: string }
+  >();
+  for (const row of rows) {
+    const category = resolveEffectiveCategory(row);
+    if (!category || !row.walletId || !row.walletRef) continue;
+    const key = `${category.id}|${row.walletId}`;
+    const existing = counts.get(key);
+    if (existing) existing.count++;
+    else counts.set(key, { count: 1, category, walletId: row.walletId, walletName: row.walletRef.name });
+  }
+  if (counts.size === 0) return null;
+
+  const best = [...counts.values()].sort((a, b) => b.count - a.count)[0];
+  return {
+    appCategoryId: best.category.id,
+    categoryName: best.category.name,
+    walletId: best.walletId,
+    walletName: best.walletName,
+    source,
+    sampleCount: best.count,
+  };
+}
+
+async function suggestFromNote(note: string): Promise<TransactionSuggestion | null> {
+  const rows = await db.transaction.findMany({
+    where: { note: { contains: note, mode: "insensitive" } },
+    orderBy: { date: "desc" },
+    take: SUGGESTION_SAMPLE_SIZE,
+    select: SUGGESTION_ROW_SELECT,
+  });
+  return pickMajoritySuggestion(rows, "note");
+}
+
+async function suggestFromAmount(amount: number): Promise<TransactionSuggestion | null> {
+  const tolerance = Math.abs(amount) * AMOUNT_TOLERANCE_RATIO;
+  const rows = await db.transaction.findMany({
+    where: { amount: { gte: amount - tolerance, lte: amount + tolerance } },
+    orderBy: { date: "desc" },
+    take: SUGGESTION_SAMPLE_SIZE,
+    select: SUGGESTION_ROW_SELECT,
+  });
+  return pickMajoritySuggestion(rows, "amount");
+}
+
+/**
+ * AddTransactionRow autofill: given the note typed so far and/or the signed
+ * amount (same sign convention as Transaction.amount — negative = expense),
+ * looks at past transactions to suggest a category + wallet. Note match is
+ * tried first (more specific — e.g. "Rappi" matches prior "Rappi delivery"
+ * rows regardless of amount), falling back to an amount-tolerance match
+ * (±3%) when the note is too short or has no history. Caller decides whether
+ * to show this as a dismissible suggestion vs. auto-apply it.
+ */
+export async function suggestTransactionFields(input: {
+  amount?: number;
+  note?: string;
+}): Promise<TransactionSuggestion | null> {
+  const note = input.note?.trim();
+  if (note && note.length >= 3) {
+    const noteSuggestion = await suggestFromNote(note);
+    if (noteSuggestion) return noteSuggestion;
+  }
+
+  if (input.amount !== undefined && !Number.isNaN(input.amount) && input.amount !== 0) {
+    return suggestFromAmount(input.amount);
+  }
+
+  return null;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { Plus, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,9 +21,10 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { dateInputValue } from "@/lib/format";
-import { createTransaction } from "@/lib/actions/transactions";
+import { createTransaction, suggestTransactionFields } from "@/lib/actions/transactions";
 import { WalletSelect } from "@/components/shared/wallet-select";
 import type { CategoryOption } from "@/lib/queries/expenses";
+import type { TransactionSuggestion } from "@/lib/actions/transactions";
 
 type TxnType = "expense" | "income";
 
@@ -69,6 +70,41 @@ function canSubmit(values: FormValues): boolean {
 function signedAmount(type: TxnType, rawAmount: string): number {
   const magnitude = Math.abs(parseFloat(rawAmount));
   return type === "expense" ? -magnitude : magnitude;
+}
+
+const SUGGESTION_DEBOUNCE_MS = 500;
+
+// Debounced lookup against past transactions as the user types note/amount —
+// server-side matching lives in suggestTransactionFields (note match first,
+// falling back to an amount-tolerance match). Returns a suggestion the
+// caller renders as a dismissible chip; it never auto-applies itself, since
+// silently overwriting a field the user hasn't touched yet is the failure
+// mode to avoid (see conversation that led to this feature).
+function useTransactionSuggestion(note: string, amount: string, type: TxnType) {
+  const [suggestion, setSuggestion] = useState<TransactionSuggestion | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const parsedAmount = parseFloat(amount);
+      const hasAmount = !Number.isNaN(parsedAmount) && parsedAmount !== 0;
+      const trimmedNote = note.trim();
+      if (!hasAmount && !trimmedNote) {
+        setSuggestion(null);
+        return;
+      }
+      suggestTransactionFields({
+        amount: hasAmount ? signedAmount(type, amount) : undefined,
+        note: trimmedNote || undefined,
+      }).then((result) => {
+        setSuggestion(result);
+        setDismissed(false);
+      });
+    }, SUGGESTION_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [note, amount, type]);
+
+  return { suggestion, dismissed, dismiss: () => setDismissed(true) };
 }
 
 type Props = {
@@ -184,6 +220,15 @@ function CreateForm({
 }) {
   const idPrefix = useId();
   const submitDisabled = pending || !canSubmit(values);
+  const { suggestion, dismissed, dismiss } = useTransactionSuggestion(
+    values.note,
+    values.amount,
+    values.type,
+  );
+  const showSuggestion =
+    suggestion !== null &&
+    !dismissed &&
+    (values.appCategoryId !== suggestion.appCategoryId || values.walletId !== suggestion.walletId);
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
@@ -217,6 +262,16 @@ function CreateForm({
           />
         </div>
       </div>
+
+      {showSuggestion && (
+        <SuggestionBanner
+          suggestion={suggestion}
+          onApply={() =>
+            onChange({ appCategoryId: suggestion.appCategoryId, walletId: suggestion.walletId })
+          }
+          onDismiss={dismiss}
+        />
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
@@ -259,6 +314,35 @@ function CreateForm({
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+function SuggestionBanner({
+  suggestion,
+  onApply,
+  onDismiss,
+}: {
+  suggestion: TransactionSuggestion;
+  onApply: () => void;
+  onDismiss: () => void;
+}) {
+  const matchLabel = suggestion.source === "note" ? "note" : "amount";
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2">
+      <span className="text-xs text-muted-foreground">
+        Suggest <span className="font-medium text-foreground">{suggestion.categoryName}</span> ·{" "}
+        <span className="font-medium text-foreground">{suggestion.walletName}</span> —{" "}
+        {suggestion.sampleCount} similar {matchLabel} match{suggestion.sampleCount > 1 ? "es" : ""}
+      </span>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={onApply}>
+          Apply
+        </Button>
+        <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={onDismiss}>
+          Dismiss
+        </Button>
+      </div>
+    </div>
   );
 }
 
