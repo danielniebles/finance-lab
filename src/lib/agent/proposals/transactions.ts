@@ -11,6 +11,7 @@
 
 import { getCategories, type CategoryOption } from "@/lib/queries/expenses";
 import { matchCounterpartyRule } from "@/lib/queries/counterparty-rules";
+import { getTagsByNames } from "@/lib/queries/tags";
 import { formatCOP } from "@/lib/format";
 import { blockingProposal, buildResolvedProposal, type ResolvedProposal } from "./shared";
 import type { EditableOption } from "../types";
@@ -83,6 +84,38 @@ function deriveFallbackNote(input: Record<string, unknown>, note: string | undef
   return undefined;
 }
 
+function normalizeTagName(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+/**
+ * Resolves the model's extracted #hashtags (tool input's `tags` array)
+ * against real Tag rows. `tagNames` is returned regardless of whether each
+ * one matched an existing row — an unmatched name is just a tag that gets
+ * created on the fly at write time (setTransactionTags' connectOrCreate),
+ * same as typing a new name into the manual TagsField. `categoryOverrideId`
+ * is the first matched tag (in the order given) that has a
+ * defaultAppCategoryId — this only feeds the LLM-guess fallback in
+ * buildNormalTransactionCard, it never overrides an explicit
+ * CounterpartyRule match (see resolveAddTransaction), which stays
+ * authoritative.
+ */
+async function resolveTags(
+  rawTags: unknown,
+): Promise<{ tagNames: string[]; categoryOverrideId?: string }> {
+  const names = Array.isArray(rawTags)
+    ? [...new Set(rawTags.map((t) => normalizeTagName(String(t))).filter(Boolean))]
+    : [];
+  if (names.length === 0) return { tagNames: [] };
+
+  const matches = await getTagsByNames(names);
+  const categoryOverrideId = names
+    .map((name) => matches.find((m) => m.name === name)?.defaultAppCategoryId)
+    .find((id): id is string => Boolean(id));
+
+  return { tagNames: names, categoryOverrideId };
+}
+
 /**
  * Looks up a CounterpartyRule from whichever extraction fields the model
  * populated on this turn (counterpartyAccount/Merchant/Sender + direction).
@@ -114,6 +147,8 @@ type NormalCardArgs = {
   wallet: string;
   note: string | undefined;
   hadCounterpartyMatch: boolean;
+  tagNames: string[];
+  categoryOverrideId?: string;
 };
 
 /**
@@ -124,7 +159,7 @@ type NormalCardArgs = {
  * additional branching of its own beyond the category guess/blocking check.
  */
 async function buildNormalTransactionCard(args: NormalCardArgs): Promise<ResolvedProposal> {
-  const { input, amount, date, wallet, note, hadCounterpartyMatch } = args;
+  const { input, amount, date, wallet, note, hadCounterpartyMatch, tagNames, categoryOverrideId } = args;
   const appCategoryName = input.appCategoryName as string | undefined;
 
   const categories = await getCategories();
@@ -135,7 +170,13 @@ async function buildNormalTransactionCard(args: NormalCardArgs): Promise<Resolve
       input,
     );
   }
-  const guess = resolveCategoryGuess(categories, appCategoryName);
+  // A matched tag's default category takes priority over the model's own
+  // free-text guess (a real, user-configured mapping beats an LLM guess) —
+  // but never over an explicit CounterpartyRule match, which short-circuits
+  // into auto-record before this function is ever called.
+  const guess =
+    (categoryOverrideId && categories.find((c) => c.id === categoryOverrideId)) ||
+    resolveCategoryGuess(categories, appCategoryName);
 
   const params: Record<string, unknown> = {
     amount,
@@ -143,6 +184,7 @@ async function buildNormalTransactionCard(args: NormalCardArgs): Promise<Resolve
     appCategoryId: guess.id,
     wallet,
     note: note ?? null,
+    tagNames,
     // Not rendered on the card (formatting.ts skipKeys) — read back after
     // approval by execute-proposal.ts's learn-from-correction nudge (ADR-033)
     // to decide whether to offer "remember this" (only when there was no
@@ -161,6 +203,7 @@ async function buildNormalTransactionCard(args: NormalCardArgs): Promise<Resolve
     { label: "Date", value: date },
     { label: "Wallet", value: wallet },
     { label: "Notes", value: note ?? "—" },
+    ...(tagNames.length > 0 ? [{ label: "Tags", value: tagNames.map((t) => `#${t}`).join(" ") }] : []),
   ];
 
   const editable: EditableOption[] = buildCategoryShortlist(categories, guess);
@@ -195,6 +238,7 @@ export async function resolveAddTransaction(
   const date = (input.date as string | undefined) ?? new Date().toISOString().slice(0, 10);
   const wallet = (input.wallet as string | undefined) ?? "—";
   const note = deriveFallbackNote(input, input.note as string | undefined);
+  const { tagNames, categoryOverrideId } = await resolveTags(input.tags);
 
   const rule = await lookupRuleFromInput(input, amount);
 
@@ -213,7 +257,7 @@ export async function resolveAddTransaction(
     isConfidentTransaction(amount, date) &&
     AUTO_RECORD_CHANNELS.has(channel)
   ) {
-    const result = await autoRecordFromRule({ amount, date, note, rule, channel });
+    const result = await autoRecordFromRule({ amount, date, note, rule, channel, tagNames });
     return { params: {}, title: "", fields: [], autoRecorded: result };
   }
 
@@ -224,5 +268,7 @@ export async function resolveAddTransaction(
     wallet,
     note,
     hadCounterpartyMatch: rule != null,
+    tagNames,
+    categoryOverrideId,
   });
 }

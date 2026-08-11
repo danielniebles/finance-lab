@@ -450,6 +450,11 @@ export const TOOLS: Anthropic.Tool[] = [
           enum: ["expense", "income"],
           description: "Whether this is money out (expense) or in (income) — used to match rules with a direction restriction. Defaults from the sign of amount if omitted.",
         },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Hashtags mentioned in the message, without the # (e.g. [\"uber\"] for \"#uber\"). Extract verbatim if present, omit otherwise. If a tag has a default category configured, it takes priority over your own appCategoryName guess.",
+        },
       },
       required: ["amount"],
     },

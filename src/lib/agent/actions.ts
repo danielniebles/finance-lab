@@ -35,7 +35,7 @@ import {
   deleteTransfer,
 } from "@/lib/actions/loans";
 import { importFromDrive } from "@/lib/actions/drive";
-import { createTransaction, deleteTransaction } from "@/lib/actions/transactions";
+import { createTransaction, deleteTransaction, setTransactionTags } from "@/lib/actions/transactions";
 import {
   createCounterpartyRule,
   updateCounterpartyRule,
@@ -411,6 +411,10 @@ async function executeAddTransaction(
     wallet: params.wallet as string,
     note: (params.note as string | undefined) ?? undefined,
   });
+  const tagNames = params.tagNames as string[] | undefined;
+  if (tagNames && tagNames.length > 0) {
+    await setTransactionTags(created.id, tagNames);
+  }
   return { createdId: created.id };
 }
 

@@ -28,9 +28,11 @@ vi.mock("@/lib/actions/drive", () => ({ importFromDrive: vi.fn() }));
 
 const createTransactionMock = vi.fn();
 const deleteTransactionMock = vi.fn();
+const setTransactionTagsMock = vi.fn();
 vi.mock("@/lib/actions/transactions", () => ({
   createTransaction: (...args: unknown[]) => createTransactionMock(...args),
   deleteTransaction: (...args: unknown[]) => deleteTransactionMock(...args),
+  setTransactionTags: (...args: unknown[]) => setTransactionTagsMock(...args),
 }));
 
 vi.mock("@/lib/actions/counterparty-rules", () => ({

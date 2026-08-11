@@ -20,6 +20,7 @@ type Props = {
     type?: string;
     search?: string;
     groupFilter?: string;
+    tagId?: string;
   }>;
 };
 
@@ -89,6 +90,7 @@ export default async function ExpensesPage({ searchParams }: Props) {
               walletId: params.walletId || undefined,
               type: parseType(params.type),
               search: params.search || undefined,
+              tagId: params.tagId || undefined,
             }}
           />
         </Suspense>

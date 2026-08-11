@@ -20,10 +20,13 @@ import {
 import { formatCOP, dateInputValue } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { resolveEffectiveCategoryStyle } from "@/lib/category-style";
-import { updateTransaction, deleteTransaction } from "@/lib/actions/transactions";
+import { updateTransaction, deleteTransaction, setTransactionTags } from "@/lib/actions/transactions";
 import { WalletSelect } from "@/components/shared/wallet-select";
+import { TagsField } from "@/components/shared/tags-field";
+import { parseTagNames } from "@/lib/tag-utils";
 import type { LedgerItem, LedgerGroupBy } from "@/lib/queries/transactions";
 import type { CategoryOption } from "@/lib/queries/expenses";
+import type { TagOption } from "@/lib/queries/tags";
 
 const NONE_CATEGORY = "__none__";
 
@@ -35,6 +38,10 @@ type RowFormValues = {
   appCategoryId: string;
   walletId: string;
   note: string;
+  // Comma-separated tag names as typed — parsed into a list at save time
+  // (parseTagNames), not kept structured here since a free-text input is the
+  // simplest way to add/remove several tags at once without a picker widget.
+  tagNames: string;
 };
 
 function formatRowDate(date: Date): string {
@@ -65,6 +72,7 @@ function formValuesFromItem(item: LedgerItem, categories: CategoryOption[]): Row
     appCategoryId: categories.find((c) => c.name === item.categoryName)?.id ?? NONE_CATEGORY,
     walletId: item.walletId ?? "",
     note: item.note ?? "",
+    tagNames: item.tags.map((t) => t.name).join(", "),
   };
 }
 
@@ -73,9 +81,10 @@ type Props = {
   groupBy: LedgerGroupBy;
   categories: CategoryOption[];
   walletOptions: { id: string; name: string }[];
+  tags: TagOption[];
 };
 
-export function TransactionRow({ item, groupBy, categories, walletOptions }: Props) {
+export function TransactionRow({ item, groupBy, categories, walletOptions, tags }: Props) {
   const [mode, setMode] = useState<Mode>("default");
   const [values, setValues] = useState<RowFormValues>(() => formValuesFromItem(item, categories));
   const [pending, startTransition] = useTransition();
@@ -100,13 +109,16 @@ export function TransactionRow({ item, groupBy, categories, walletOptions }: Pro
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      await updateTransaction(item.id, {
-        amount: parseFloat(values.amount),
-        date: new Date(values.date + "T12:00:00"),
-        appCategoryId: values.appCategoryId === NONE_CATEGORY ? null : values.appCategoryId,
-        walletId: values.walletId,
-        note: values.note.trim() === "" ? null : values.note,
-      });
+      await Promise.all([
+        updateTransaction(item.id, {
+          amount: parseFloat(values.amount),
+          date: new Date(values.date + "T12:00:00"),
+          appCategoryId: values.appCategoryId === NONE_CATEGORY ? null : values.appCategoryId,
+          walletId: values.walletId,
+          note: values.note.trim() === "" ? null : values.note,
+        }),
+        setTransactionTags(item.id, parseTagNames(values.tagNames)),
+      ]);
       setMode("default");
     });
   }
@@ -137,6 +149,7 @@ export function TransactionRow({ item, groupBy, categories, walletOptions }: Pro
               values={values}
               categories={categories}
               walletOptions={walletOptions}
+              tags={tags}
               pending={pending}
               onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
               onSubmit={handleSave}
@@ -207,8 +220,22 @@ function TransactionDefaultRow({
             {item.categoryName}
           </span>
         )}
-        {item.source === "MANUAL" && (
-          <span className="text-xs text-muted-foreground shrink-0">manual</span>
+        {/* Tags — inline in the main row (same spot the old "manual" source
+            label used to sit), not a wrapping line of their own: a separate
+            line under every tagged row pushed row height up and shifted the
+            amount down. Few tags per transaction in practice, so this fits
+            without crowding the note/amount. */}
+        {item.tags.length > 0 && (
+          <div className="flex shrink-0 items-center gap-1">
+            {item.tags.map((t) => (
+              <span
+                key={t.id}
+                className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
+              >
+                #{t.name}
+              </span>
+            ))}
+          </div>
         )}
         <span className="hidden sm:block text-sm truncate flex-1 min-w-0">{item.note || "—"}</span>
         <span
@@ -234,6 +261,7 @@ function TransactionEditForm({
   values,
   categories,
   walletOptions,
+  tags,
   pending,
   onChange,
   onSubmit,
@@ -243,6 +271,7 @@ function TransactionEditForm({
   values: RowFormValues;
   categories: CategoryOption[];
   walletOptions: { id: string; name: string }[];
+  tags: TagOption[];
   pending: boolean;
   onChange: (patch: Partial<RowFormValues>) => void;
   onSubmit: (e: React.FormEvent) => void;
@@ -327,6 +356,13 @@ function TransactionEditForm({
           placeholder="Note"
         />
       </div>
+
+      <TagsField
+        idPrefix={idPrefix}
+        value={values.tagNames}
+        tags={tags}
+        onChange={(v) => onChange({ tagNames: v })}
+      />
 
       <DialogFooter>
         <Button

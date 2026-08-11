@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { WalletSelect } from "@/components/shared/wallet-select";
 import type { LedgerGroupBy, LedgerFilters } from "@/lib/queries/transactions";
 import type { CategoryOption } from "@/lib/queries/expenses";
+import type { TagOption } from "@/lib/queries/tags";
 
 const GROUP_BY_OPTIONS: { value: LedgerGroupBy; label: string }[] = [
   { value: "day", label: "Day" },
@@ -31,6 +32,7 @@ type FilterPatch = Partial<{
   walletId: string;
   type: string;
   search: string;
+  tagId: string;
 }>;
 
 // A patched field wins over the current value; falls back to "" (not
@@ -47,6 +49,7 @@ function resolveNextLedgerState(groupBy: LedgerGroupBy, filters: LedgerFilters, 
     walletId: resolvePatchedValue(patch.walletId, filters.walletId),
     type: resolvePatchedValue(patch.type, filters.type),
     search: resolvePatchedValue(patch.search, filters.search),
+    tagId: resolvePatchedValue(patch.tagId, filters.tagId),
   };
 }
 
@@ -68,6 +71,7 @@ export function buildLedgerUrl(
   if (next.walletId) params.set("walletId", next.walletId);
   if (next.type) params.set("type", next.type);
   if (next.search) params.set("search", next.search);
+  if (next.tagId) params.set("tagId", next.tagId);
   return `/expenses?${params.toString()}`;
 }
 
@@ -78,6 +82,7 @@ type Props = {
   filters: LedgerFilters;
   categories: CategoryOption[];
   walletOptions: { id: string; name: string }[];
+  tags: TagOption[];
   children: ReactNode;
 };
 
@@ -88,6 +93,7 @@ export function LedgerControls({
   filters,
   categories,
   walletOptions,
+  tags,
   children,
 }: Props) {
   const router = useRouter();
@@ -107,6 +113,7 @@ export function LedgerControls({
           filters={filters}
           categories={categories}
           walletOptions={walletOptions}
+          tags={tags}
           onChange={navigate}
         />
       </div>
@@ -118,6 +125,7 @@ export function LedgerControls({
           filters={filters}
           categories={categories}
           walletOptions={walletOptions}
+          tags={tags}
           onChange={navigate}
         />
       </div>
@@ -163,11 +171,13 @@ function FilterBar({
   filters,
   categories,
   walletOptions,
+  tags,
   onChange,
 }: {
   filters: LedgerFilters;
   categories: CategoryOption[];
   walletOptions: { id: string; name: string }[];
+  tags: TagOption[];
   onChange: (patch: FilterPatch) => void;
 }) {
   return (
@@ -188,6 +198,11 @@ function FilterBar({
         value={filters.type}
         onChange={(v) => onChange({ type: v ?? "" })}
       />
+      <TagSelect
+        value={filters.tagId}
+        tags={tags}
+        onChange={(v) => onChange({ tagId: v ?? "" })}
+      />
       <SearchInput
         value={filters.search}
         onChange={(v) => onChange({ search: v ?? "" })}
@@ -200,15 +215,23 @@ function MobileFilters({
   filters,
   categories,
   walletOptions,
+  tags,
   onChange,
 }: {
   filters: LedgerFilters;
   categories: CategoryOption[];
   walletOptions: { id: string; name: string }[];
+  tags: TagOption[];
   onChange: (patch: FilterPatch) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const hasActiveFilters = !!(filters.category || filters.walletId || filters.type || filters.search);
+  const hasActiveFilters = !!(
+    filters.category ||
+    filters.walletId ||
+    filters.type ||
+    filters.search ||
+    filters.tagId
+  );
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -242,12 +265,18 @@ function MobileFilters({
             onChange={(v) => onChange({ type: v ?? "" })}
             className="h-8 w-full"
           />
-          <SearchInput
-            value={filters.search}
-            onChange={(v) => onChange({ search: v ?? "" })}
+          <TagSelect
+            value={filters.tagId}
+            tags={tags}
+            onChange={(v) => onChange({ tagId: v ?? "" })}
             className="h-8 w-full"
           />
         </div>
+        <SearchInput
+          value={filters.search}
+          onChange={(v) => onChange({ search: v ?? "" })}
+          className="h-8 w-full"
+        />
       </CollapsibleContent>
     </Collapsible>
   );
@@ -277,6 +306,41 @@ function CategorySelect({
         {categories.map((c) => (
           <SelectItem key={c.id} value={c.name}>
             {c.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+// Filters by Tag.id, not name (unlike CategorySelect) — tag names can be
+// renamed/reused across rows and id is what getTransactionList's
+// matchesTag() actually compares against.
+function TagSelect({
+  value,
+  tags,
+  onChange,
+  className = "h-8 w-32",
+}: {
+  value?: string;
+  tags: TagOption[];
+  onChange: (v?: string) => void;
+  className?: string;
+}) {
+  const selectedName = tags.find((t) => t.id === value)?.name;
+  return (
+    <Select
+      value={value ?? ALL_SENTINEL}
+      onValueChange={(v) => v && onChange(v === ALL_SENTINEL ? undefined : v)}
+    >
+      <SelectTrigger className={className} aria-label="Filter by tag">
+        <span className="text-sm truncate">{selectedName ? `#${selectedName}` : "All tags"}</span>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL_SENTINEL}>All tags</SelectItem>
+        {tags.map((t) => (
+          <SelectItem key={t.id} value={t.id}>
+            #{t.name}
           </SelectItem>
         ))}
       </SelectContent>

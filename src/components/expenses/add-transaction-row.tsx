@@ -20,11 +20,14 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { dateInputValue } from "@/lib/format";
-import { createTransaction, suggestTransactionFields } from "@/lib/actions/transactions";
+import { dateInputValue, formatCOP } from "@/lib/format";
+import { createTransaction, suggestTransactionFields, setTransactionTags } from "@/lib/actions/transactions";
 import { WalletSelect } from "@/components/shared/wallet-select";
+import { TagsField } from "@/components/shared/tags-field";
+import { parseTagNames } from "@/lib/tag-utils";
 import type { CategoryOption } from "@/lib/queries/expenses";
 import type { TransactionSuggestion } from "@/lib/actions/transactions";
+import type { TagOption } from "@/lib/queries/tags";
 
 type TxnType = "expense" | "income";
 
@@ -35,6 +38,7 @@ type FormValues = {
   appCategoryId: string;
   walletId: string;
   note: string;
+  tagNames: string;
 };
 
 // Open-time / post-cancel defaults. `walletId` is the one field that carries
@@ -48,6 +52,7 @@ function defaultValues(lastWallet: string): FormValues {
     appCategoryId: "",
     walletId: lastWallet,
     note: "",
+    tagNames: "",
   };
 }
 
@@ -70,6 +75,26 @@ function canSubmit(values: FormValues): boolean {
 function signedAmount(type: TxnType, rawAmount: string): number {
   const magnitude = Math.abs(parseFloat(rawAmount));
   return type === "expense" ? -magnitude : magnitude;
+}
+
+// Turns a suggestion into a form patch: category + wallet always, plus
+// whichever complementary field the suggestion carries (a note-sourced
+// suggestion's signed amount gets split back into type + magnitude to match
+// how the amount input stores it; an amount-sourced suggestion's note is
+// copied as-is).
+function suggestionToPatch(suggestion: TransactionSuggestion): Partial<FormValues> {
+  const patch: Partial<FormValues> = {
+    appCategoryId: suggestion.appCategoryId,
+    walletId: suggestion.walletId,
+  };
+  if (suggestion.amount !== undefined) {
+    patch.type = suggestion.amount < 0 ? "expense" : "income";
+    patch.amount = String(Math.abs(suggestion.amount));
+  }
+  if (suggestion.note !== undefined) {
+    patch.note = suggestion.note;
+  }
+  return patch;
 }
 
 const SUGGESTION_DEBOUNCE_MS = 500;
@@ -110,6 +135,7 @@ function useTransactionSuggestion(note: string, amount: string, type: TxnType) {
 type Props = {
   categories: CategoryOption[];
   walletOptions: { id: string; name: string }[];
+  tags: TagOption[];
   // The ledger's current ?walletId= filter, if any — takes priority over
   // lastWallet so opening the dialog from a wallet-scoped view defaults to
   // that wallet rather than whatever was last used this session.
@@ -122,7 +148,7 @@ type Props = {
 // instead of the old inline-expanding row: expanding in place pushed the
 // list down and stole scroll position, and its autoFocus fired every time
 // the row expanded even when it wasn't the user's intent to type immediately.
-export function AddTransactionRow({ categories, walletOptions, activeWalletId }: Props) {
+export function AddTransactionRow({ categories, walletOptions, tags, activeWalletId }: Props) {
   const [open, setOpen] = useState(false);
   const [lastWallet, setLastWallet] = useState("");
   const [values, setValues] = useState<FormValues>(() => defaultValues(activeWalletId ?? ""));
@@ -144,9 +170,10 @@ export function AddTransactionRow({ categories, walletOptions, activeWalletId }:
     if (!canSubmit(values)) return;
     const submittedWalletId = values.walletId;
     const submittedWalletName = walletOptions.find((w) => w.id === submittedWalletId)?.name ?? "";
+    const tagNames = parseTagNames(values.tagNames);
     startTransition(async () => {
       try {
-        await createTransaction({
+        const created = await createTransaction({
           amount: signedAmount(values.type, values.amount),
           date: new Date(values.date + "T12:00:00"),
           appCategoryId: values.appCategoryId,
@@ -154,11 +181,12 @@ export function AddTransactionRow({ categories, walletOptions, activeWalletId }:
           walletId: submittedWalletId,
           note: values.note.trim() === "" ? undefined : values.note,
         });
+        if (tagNames.length > 0) await setTransactionTags(created.id, tagNames);
         toast.success("Transaction added");
         setLastWallet(submittedWalletId);
-        // Speed optimization for batch entry: only clear amount/note, keep
-        // type/date/appCategoryId/walletId as-is and stay open.
-        setValues((v) => ({ ...v, amount: "", note: "" }));
+        // Speed optimization for batch entry: only clear amount/note/tags,
+        // keep type/date/appCategoryId/walletId as-is and stay open.
+        setValues((v) => ({ ...v, amount: "", note: "", tagNames: "" }));
         amountInputRef.current?.focus();
       } catch {
         toast.error("Couldn't add transaction");
@@ -187,6 +215,7 @@ export function AddTransactionRow({ categories, walletOptions, activeWalletId }:
             values={values}
             categories={categories}
             walletOptions={walletOptions}
+            tags={tags}
             pending={pending}
             amountInputRef={amountInputRef}
             onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
@@ -203,6 +232,7 @@ function CreateForm({
   values,
   categories,
   walletOptions,
+  tags,
   pending,
   amountInputRef,
   onChange,
@@ -212,6 +242,7 @@ function CreateForm({
   values: FormValues;
   categories: CategoryOption[];
   walletOptions: { id: string; name: string }[];
+  tags: TagOption[];
   pending: boolean;
   amountInputRef: React.RefObject<HTMLInputElement | null>;
   onChange: (patch: Partial<FormValues>) => void;
@@ -266,9 +297,7 @@ function CreateForm({
       {showSuggestion && (
         <SuggestionBanner
           suggestion={suggestion}
-          onApply={() =>
-            onChange({ appCategoryId: suggestion.appCategoryId, walletId: suggestion.walletId })
-          }
+          onApply={() => onChange(suggestionToPatch(suggestion))}
           onDismiss={dismiss}
         />
       )}
@@ -304,6 +333,13 @@ function CreateForm({
         />
       </div>
 
+      <TagsField
+        idPrefix={idPrefix}
+        value={values.tagNames}
+        tags={tags}
+        onChange={(v) => onChange({ tagNames: v })}
+      />
+
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
@@ -327,12 +363,24 @@ function SuggestionBanner({
   onDismiss: () => void;
 }) {
   const matchLabel = suggestion.source === "note" ? "note" : "amount";
+  const complement =
+    suggestion.amount !== undefined
+      ? formatCOP(suggestion.amount)
+      : suggestion.note !== undefined
+      ? `“${suggestion.note}”`
+      : null;
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2">
       <span className="text-xs text-muted-foreground">
         Suggest <span className="font-medium text-foreground">{suggestion.categoryName}</span> ·{" "}
-        <span className="font-medium text-foreground">{suggestion.walletName}</span> —{" "}
-        {suggestion.sampleCount} similar {matchLabel} match{suggestion.sampleCount > 1 ? "es" : ""}
+        <span className="font-medium text-foreground">{suggestion.walletName}</span>
+        {complement && (
+          <>
+            {" · "}
+            <span className="font-medium text-foreground">{complement}</span>
+          </>
+        )}{" "}
+        — {suggestion.sampleCount} similar {matchLabel} match{suggestion.sampleCount > 1 ? "es" : ""}
       </span>
       <div className="flex shrink-0 items-center gap-1">
         <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={onApply}>

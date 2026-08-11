@@ -47,6 +47,11 @@ describe("buildLedgerUrl", () => {
     expect(url).toContain("search=uber");
   });
 
+  it("adds a tagId filter param when patched", () => {
+    const url = buildLedgerUrl(7, 2026, "day", NO_FILTERS, { tagId: "tag-uber" });
+    expect(url).toContain("tagId=tag-uber");
+  });
+
   it("preserves an existing filter not present in the patch", () => {
     const filters: LedgerFilters = { category: "Groceries", walletId: "wlt_nequi" };
     const url = buildLedgerUrl(7, 2026, "day", filters, { search: "uber" });

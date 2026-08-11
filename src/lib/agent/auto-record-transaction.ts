@@ -11,7 +11,7 @@
 // reversible PendingProposal row regardless of how it got approved).
 
 import { db } from "@/lib/db";
-import { createTransaction } from "@/lib/actions/transactions";
+import { createTransaction, setTransactionTags } from "@/lib/actions/transactions";
 import { bumpCounterpartyRuleMatch, type CounterpartyRuleRow } from "@/lib/queries/counterparty-rules";
 import { getCategories } from "@/lib/queries/expenses";
 import { formatCOP } from "@/lib/format";
@@ -72,8 +72,12 @@ export async function autoRecordFromRule(args: {
   note?: string;
   rule: CounterpartyRuleRow;
   channel: string;
+  // Hashtags extracted from the message (proposals/transactions.ts's
+  // resolveTags) — attached after creation regardless of the rule match,
+  // since a tag is independent of which category/wallet the rule routed to.
+  tagNames?: string[];
 }): Promise<AutoRecordResult> {
-  const { amount, date, note, rule, channel } = args;
+  const { amount, date, note, rule, channel, tagNames } = args;
 
   const created = await createTransaction({
     amount,
@@ -88,6 +92,10 @@ export async function autoRecordFromRule(args: {
     note,
   });
 
+  if (tagNames && tagNames.length > 0) {
+    await setTransactionTags(created.id, tagNames);
+  }
+
   await bumpCounterpartyRuleMatch(rule.id);
 
   const params: Record<string, unknown> = {
@@ -96,6 +104,7 @@ export async function autoRecordFromRule(args: {
     appCategoryId: rule.appCategoryId,
     wallet: rule.wallet,
     note: note ?? null,
+    tagNames: tagNames ?? [],
     createdId: created.id,
     // Denormalized onto the proposal row so the Telegram delivery layer can
     // render the "Regla: ..." notification line without a second query to

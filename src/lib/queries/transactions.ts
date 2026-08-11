@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { getFinancialPeriodBounds } from "@/lib/financial-period-utils";
 import type { TransactionSource } from "@/generated/prisma";
+import type { TagOption } from "@/lib/queries/tags";
 
 export type LedgerGroupBy = "day" | "category" | "wallet";
 
@@ -15,6 +16,7 @@ export type LedgerFilters = {
   walletId?: string; // Wallet.id — the real wallet-partition filter (ADR-036/037)
   type?: "expense" | "income"; // amount sign
   search?: string; // note contains, case-insensitive
+  tagId?: string; // Tag.id — a transaction matches if it carries this tag
 };
 
 export type LedgerItem = {
@@ -38,6 +40,7 @@ export type LedgerItem = {
   categoryIcon: string | null;
   categoryColor: string | null;
   source: TransactionSource;
+  tags: TagOption[];
 };
 
 export type LedgerGroup = {
@@ -74,6 +77,7 @@ type RawTransaction = {
   source: TransactionSource;
   appCategory: RawAppCategory | null;
   moneyLoverCategory: { mapping: { appCategory: RawAppCategory } | null } | null;
+  tags: TagOption[];
 };
 
 // Category resolution rule (ADR-030), applied everywhere a transaction's
@@ -100,6 +104,7 @@ function toLedgerItem(t: RawTransaction): LedgerItem {
     categoryIcon: category?.icon ?? null,
     categoryColor: category?.color ?? null,
     source: t.source,
+    tags: t.tags,
   };
 }
 
@@ -148,13 +153,18 @@ function matchesSearch(item: LedgerItem, search?: string): boolean {
   return !needle || (item.note ?? "").toLowerCase().includes(needle);
 }
 
+function matchesTag(item: LedgerItem, tagId?: string): boolean {
+  return !tagId || item.tags.some((t) => t.id === tagId);
+}
+
 function matchesFilters(item: LedgerItem, filters?: LedgerFilters): boolean {
   if (!filters) return true;
   return (
     matchesCategory(item, filters.category) &&
     matchesWallet(item, filters.walletId) &&
     matchesType(item, filters.type) &&
-    matchesSearch(item, filters.search)
+    matchesSearch(item, filters.search) &&
+    matchesTag(item, filters.tagId)
   );
 }
 
@@ -269,6 +279,7 @@ export async function getTransactionList(
       appCategory: true,
       moneyLoverCategory: { include: { mapping: { include: { appCategory: true } } } },
       walletRef: { select: { name: true } },
+      tags: { select: { id: true, name: true, color: true } },
     },
     orderBy: { date: "desc" },
   });

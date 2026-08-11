@@ -6,6 +6,7 @@ import {
 } from "@/lib/queries/transactions";
 import { getCategories } from "@/lib/queries/expenses";
 import { getWalletBalances } from "@/lib/queries/wallets";
+import { getTags } from "@/lib/queries/tags";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/expenses/analysis-dashboard";
@@ -28,7 +29,9 @@ function hasAnyFilter(filters: LedgerFilters): boolean {
   // compares walletId) and no longer written by ledger-controls.tsx, so
   // counting it would let a stale ?wallet= bookmark param report "active
   // filters" on an unfiltered result set.
-  return Boolean(filters.category || filters.walletId || filters.type || filters.search);
+  return Boolean(
+    filters.category || filters.walletId || filters.type || filters.search || filters.tagId,
+  );
 }
 
 // ─── Balance summary (top of ledger) ───────────────────────────────────────
@@ -126,10 +129,11 @@ function BalanceSummaryDesktop({
 // it isn't a real Wallet row — same exclusion behavior as before, no longer
 // needing a sentinel-based filter to enforce it.
 export async function TransactionLedgerPage({ month, year, groupBy, filters }: Props) {
-  const [result, walletBalances, categories] = await Promise.all([
+  const [result, walletBalances, categories, tags] = await Promise.all([
     getTransactionList(month, year, groupBy, filters),
     getWalletBalances(),
     getCategories(),
+    getTags(),
   ]);
 
   const walletOptions = walletBalances.accounts.flatMap((account) =>
@@ -171,6 +175,7 @@ export async function TransactionLedgerPage({ month, year, groupBy, filters }: P
       <AddTransactionRow
         categories={categories}
         walletOptions={walletOptions}
+        tags={tags}
         activeWalletId={filters.walletId}
       />
 
@@ -181,6 +186,7 @@ export async function TransactionLedgerPage({ month, year, groupBy, filters }: P
         filters={filters}
         categories={categories}
         walletOptions={walletOptions}
+        tags={tags}
       >
         {result.groups.length === 0 ? (
           <LedgerEmptyState hasActiveFilters={activeFilters} month={month} year={year} />
@@ -190,6 +196,7 @@ export async function TransactionLedgerPage({ month, year, groupBy, filters }: P
             groupBy={groupBy}
             categories={categories}
             walletOptions={walletOptions}
+            tags={tags}
           />
         )}
       </LedgerControls>

@@ -14,6 +14,7 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/lib/actions/transactions", () => ({
   createTransaction: vi.fn(),
+  setTransactionTags: vi.fn(),
 }));
 vi.mock("@/lib/queries/counterparty-rules", () => ({
   bumpCounterpartyRuleMatch: vi.fn(),
@@ -23,12 +24,13 @@ vi.mock("@/lib/queries/expenses", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { createTransaction } from "@/lib/actions/transactions";
+import { createTransaction, setTransactionTags } from "@/lib/actions/transactions";
 import { bumpCounterpartyRuleMatch, type CounterpartyRuleRow } from "@/lib/queries/counterparty-rules";
 import { getCategories } from "@/lib/queries/expenses";
 import { autoRecordFromRule, isConfidentTransaction } from "./auto-record-transaction";
 
 const createTransactionMock = createTransaction as unknown as ReturnType<typeof vi.fn>;
+const setTransactionTagsMock = setTransactionTags as unknown as ReturnType<typeof vi.fn>;
 const bumpMock = bumpCounterpartyRuleMatch as unknown as ReturnType<typeof vi.fn>;
 const getCategoriesMock = getCategories as unknown as ReturnType<typeof vi.fn>;
 const pendingProposalCreateMock = db.pendingProposal.create as unknown as ReturnType<typeof vi.fn>;
@@ -160,5 +162,28 @@ describe("autoRecordFromRule", () => {
     expect(result.transactionId).toBe("txn-1");
     expect(result.proposalId).toBe("proposal-1");
     expect(result.message).toContain("Pets");
+  });
+
+  it("attaches extracted tags to the created transaction when present", async () => {
+    await autoRecordFromRule({
+      amount: -45_000,
+      date: TEST_DATE,
+      rule: RULE,
+      channel: TEST_CHANNEL,
+      tagNames: ["uber"],
+    });
+
+    expect(setTransactionTagsMock).toHaveBeenCalledWith("txn-1", ["uber"]);
+  });
+
+  it("does not call setTransactionTags when no tags were extracted", async () => {
+    await autoRecordFromRule({
+      amount: -45_000,
+      date: TEST_DATE,
+      rule: RULE,
+      channel: TEST_CHANNEL,
+    });
+
+    expect(setTransactionTagsMock).not.toHaveBeenCalled();
   });
 });

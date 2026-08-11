@@ -14,6 +14,7 @@ import type { CategoryOption } from "@/lib/queries/expenses";
 vi.mock("@/lib/actions/transactions", () => ({
   updateTransaction: vi.fn(),
   deleteTransaction: vi.fn(),
+  setTransactionTags: vi.fn(),
 }));
 
 const CATEGORIES: CategoryOption[] = [{ id: "cat-groceries", name: "Groceries", budgetType: "VARIABLE" }];
@@ -36,6 +37,7 @@ const GROUPS: LedgerGroup[] = [
         categoryIcon: null,
         categoryColor: null,
         source: "MONEYLOVER",
+        tags: [],
       },
     ],
   },
@@ -52,7 +54,7 @@ function dateColumnPresent(container: HTMLElement): boolean {
 describe("TransactionGroupList — redundant-column suppression", () => {
   it("day mode: hides the date column, shows the category chip", () => {
     const { container } = render(
-      <TransactionGroupList groups={GROUPS} groupBy="day" categories={CATEGORIES} walletOptions={[]} />
+      <TransactionGroupList groups={GROUPS} groupBy="day" categories={CATEGORIES} walletOptions={[]} tags={[]} />
     );
 
     expect(dateColumnPresent(container)).toBe(false);
@@ -61,7 +63,7 @@ describe("TransactionGroupList — redundant-column suppression", () => {
 
   it("category mode: shows the date column, hides the category chip", () => {
     const { container } = render(
-      <TransactionGroupList groups={GROUPS} groupBy="category" categories={CATEGORIES} walletOptions={[]} />
+      <TransactionGroupList groups={GROUPS} groupBy="category" categories={CATEGORIES} walletOptions={[]} tags={[]} />
     );
 
     expect(dateColumnPresent(container)).toBe(true);
@@ -70,7 +72,7 @@ describe("TransactionGroupList — redundant-column suppression", () => {
 
   it("wallet mode: shows the date column, shows the category chip", () => {
     const { container } = render(
-      <TransactionGroupList groups={GROUPS} groupBy="wallet" categories={CATEGORIES} walletOptions={[]} />
+      <TransactionGroupList groups={GROUPS} groupBy="wallet" categories={CATEGORIES} walletOptions={[]} tags={[]} />
     );
 
     expect(dateColumnPresent(container)).toBe(true);
@@ -79,7 +81,7 @@ describe("TransactionGroupList — redundant-column suppression", () => {
 
   it("renders the group header label and a signed subtotal in neutral text", () => {
     const { container } = render(
-      <TransactionGroupList groups={GROUPS} groupBy="day" categories={CATEGORIES} walletOptions={[]} />
+      <TransactionGroupList groups={GROUPS} groupBy="day" categories={CATEGORIES} walletOptions={[]} tags={[]} />
     );
 
     expect(screen.getByText("Mié 8 jul")).toBeInTheDocument();

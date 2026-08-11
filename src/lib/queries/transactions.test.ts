@@ -27,6 +27,7 @@ function itemIds(result: TransactionListResult): string[] {
 
 const GROCERIES = { name: "Groceries" };
 const TRANSPORT = { name: "Transport" };
+const TAG_UBER = { id: "tag-uber", name: "uber", color: null };
 
 function txn(overrides: Record<string, unknown> = {}) {
   return {
@@ -40,6 +41,7 @@ function txn(overrides: Record<string, unknown> = {}) {
     source: "MONEYLOVER",
     appCategory: null,
     moneyLoverCategory: null,
+    tags: [],
     ...overrides,
   };
 }
@@ -159,6 +161,7 @@ describe("getTransactionList — filters", () => {
       walletRef: { name: "Nequi" },
       note: "Uber ride",
       appCategory: TRANSPORT,
+      tags: [TAG_UBER],
     }),
     txn({
       id: "t3",
@@ -206,6 +209,11 @@ describe("getTransactionList — filters", () => {
 
   it("narrows by search against note, case-insensitive", async () => {
     const result = await getTransactionList(7, 2026, "day", { search: "uber" });
+    expect(itemIds(result)).toEqual(["t2"]);
+  });
+
+  it("narrows by tagId", async () => {
+    const result = await getTransactionList(7, 2026, "day", { tagId: "tag-uber" });
     expect(itemIds(result)).toEqual(["t2"]);
   });
 

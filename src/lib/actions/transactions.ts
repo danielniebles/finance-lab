@@ -163,6 +163,37 @@ export async function updateTransaction(
   revalidateAll();
 }
 
+// ─── Tags ───────────────────────────────────────────────────────────────────
+
+// Canonical storage form so "#Uber" and "uber " resolve to the same Tag row —
+// mirrors normalizeMatchValue's trim (used for CounterpartyRule's
+// MERCHANT/SENDER/KEYWORD fields), lowercased instead of uppercased since
+// these read as hashtags, not bank-message fields.
+function normalizeTagName(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+/**
+ * Replaces a transaction's full tag set — the ledger row editor's save path.
+ * Unknown names are created on the fly (connectOrCreate), so tagging is a
+ * single soft action with no separate "create a tag first" step. `set: []`
+ * clears anything not in the new list, so this fully replaces rather than
+ * merges — callers passing an empty array untag the transaction entirely.
+ */
+export async function setTransactionTags(transactionId: string, tagNames: string[]) {
+  const names = [...new Set(tagNames.map(normalizeTagName).filter(Boolean))];
+  await db.transaction.update({
+    where: { id: transactionId },
+    data: {
+      tags: {
+        set: [],
+        connectOrCreate: names.map((name) => ({ where: { name }, create: { name } })),
+      },
+    },
+  });
+  revalidateAll();
+}
+
 // ─── Suggestions (AddTransactionRow autofill) ──────────────────────────────
 
 export type TransactionSuggestion = {
@@ -172,6 +203,13 @@ export type TransactionSuggestion = {
   walletName: string;
   source: "note" | "amount";
   sampleCount: number;
+  // The complementary field to whichever one drove the match — signed amount
+  // (same convention as Transaction.amount) when source is "note", or a note
+  // when source is "amount". Undefined when there's nothing to suggest back
+  // (e.g. the matched rows have no note) or the field isn't the complement
+  // (a note-sourced suggestion never carries a note, it's already known).
+  amount?: number;
+  note?: string;
 };
 
 // Selects everything needed to resolve a transaction's *effective* category
@@ -180,6 +218,8 @@ export type TransactionSuggestion = {
 // rows are MONEYLOVER-sourced with appCategoryId null, so skipping this
 // fallback would starve the suggestion of nearly all historical data.
 const SUGGESTION_ROW_SELECT = {
+  amount: true,
+  note: true,
   appCategoryId: true,
   walletId: true,
   appCategory: { select: { name: true } },
@@ -190,6 +230,8 @@ const SUGGESTION_ROW_SELECT = {
 } as const;
 
 type SuggestionCandidateRow = {
+  amount: number;
+  note: string | null;
   appCategoryId: string | null;
   walletId: string | null;
   appCategory: { name: string } | null;
@@ -207,14 +249,24 @@ function resolveEffectiveCategory(row: SuggestionCandidateRow): { id: string; na
 }
 
 /** Groups candidate rows by (category, wallet) pair and returns the most
- * frequent combination — ties favor the most recent (rows arrive date-desc). */
+ * frequent combination — ties favor the most recent (rows arrive date-desc).
+ * The representative row kept per group is the first one seen (i.e. most
+ * recent, since rows arrive date-desc), and supplies the complementary
+ * amount/note suggested alongside the category + wallet. */
 function pickMajoritySuggestion(
   rows: SuggestionCandidateRow[],
   source: "note" | "amount",
 ): TransactionSuggestion | null {
   const counts = new Map<
     string,
-    { count: number; category: { id: string; name: string }; walletId: string; walletName: string }
+    {
+      count: number;
+      category: { id: string; name: string };
+      walletId: string;
+      walletName: string;
+      amount: number;
+      note: string | null;
+    }
   >();
   for (const row of rows) {
     const category = resolveEffectiveCategory(row);
@@ -222,7 +274,16 @@ function pickMajoritySuggestion(
     const key = `${category.id}|${row.walletId}`;
     const existing = counts.get(key);
     if (existing) existing.count++;
-    else counts.set(key, { count: 1, category, walletId: row.walletId, walletName: row.walletRef.name });
+    else {
+      counts.set(key, {
+        count: 1,
+        category,
+        walletId: row.walletId,
+        walletName: row.walletRef.name,
+        amount: row.amount,
+        note: row.note,
+      });
+    }
   }
   if (counts.size === 0) return null;
 
@@ -234,6 +295,8 @@ function pickMajoritySuggestion(
     walletName: best.walletName,
     source,
     sampleCount: best.count,
+    amount: source === "note" ? best.amount : undefined,
+    note: source === "amount" && best.note ? best.note : undefined,
   };
 }
 

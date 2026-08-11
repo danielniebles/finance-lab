@@ -65,6 +65,10 @@ vi.mock("@/lib/queries/expenses", () => ({
   getCategories: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock("@/lib/queries/tags", () => ({
+  getTagsByNames: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock("@/lib/queries/trends", () => ({
   getTrends: vi.fn().mockResolvedValue({}),
 }));
@@ -102,6 +106,7 @@ import { db } from "@/lib/db";
 import { getLoansOverview } from "@/lib/queries/loans";
 import { getAllInstallments, getCardSummaries } from "@/lib/queries/installments";
 import { getCategories } from "@/lib/queries/expenses";
+import { getTagsByNames } from "@/lib/queries/tags";
 import { listDriveFiles } from "@/lib/actions/drive";
 import { createTransaction } from "@/lib/actions/transactions";
 import { matchCounterpartyRule } from "@/lib/queries/counterparty-rules";
@@ -1261,6 +1266,7 @@ describe("resolveAddTransaction", () => {
       appCategoryId: GOING_OUT.id,
       wallet: "Bancolombia",
       note: "Uber Rides",
+      tagNames: [],
       hadCounterpartyMatch: false,
       counterpartyAccount: null,
       counterpartyMerchant: null,
@@ -1284,6 +1290,83 @@ describe("resolveAddTransaction", () => {
     const today = new Date().toISOString().slice(0, 10);
     expect(result.params.date).toBe(today);
     expect(result.params.wallet).toBe("—");
+  });
+});
+
+describe("resolveAddTransaction — tags", () => {
+  beforeEach(() => {
+    vi.mocked(getTagsByNames).mockResolvedValue([]);
+  });
+
+  it("normalizes and passes extracted hashtags through to params.tagNames", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory()]);
+
+    const result = await resolveAddTransaction({ amount: -20_000, tags: ["Uber", " uber ", "Work-Trip"] });
+
+    expect(result.params.tagNames).toEqual(["uber", "work-trip"]);
+  });
+
+  it("ignores a non-array tags input rather than throwing", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory()]);
+
+    const result = await resolveAddTransaction({ amount: -20_000, tags: "uber" });
+
+    expect(result.params.tagNames).toEqual([]);
+  });
+
+  it("adds a Tags field to the card when tags are present, omits it otherwise", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory()]);
+
+    const withTags = await resolveAddTransaction({ amount: -20_000, tags: ["uber"] });
+    expect(withTags.fields.find((f) => f.label === "Tags")?.value).toBe("#uber");
+
+    const withoutTags = await resolveAddTransaction({ amount: -20_000 });
+    expect(withoutTags.fields.some((f) => f.label === "Tags")).toBe(false);
+  });
+
+  it("prefers a matched tag's default category over the model's appCategoryName guess", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT, TRANSPORT]);
+    vi.mocked(getTagsByNames).mockResolvedValue([
+      { id: "tag-1", name: "uber", defaultAppCategoryId: TRANSPORT.id },
+    ]);
+
+    const result = await resolveAddTransaction({
+      amount: -20_000,
+      appCategoryName: "Going Out",
+      tags: ["uber"],
+    });
+
+    expect(result.params.appCategoryId).toBe(TRANSPORT.id);
+  });
+
+  it("falls back to the appCategoryName guess when the matched tag has no default category", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT]);
+    vi.mocked(getTagsByNames).mockResolvedValue([
+      { id: "tag-1", name: "uber", defaultAppCategoryId: null },
+    ]);
+
+    const result = await resolveAddTransaction({
+      amount: -20_000,
+      appCategoryName: "Going Out",
+      tags: ["uber"],
+    });
+
+    expect(result.params.appCategoryId).toBe(GOING_OUT.id);
+  });
+
+  it("uses the first tag (in order) that has a default category when several are given", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT, TRANSPORT]);
+    vi.mocked(getTagsByNames).mockResolvedValue([
+      { id: "tag-1", name: "no-default", defaultAppCategoryId: null },
+      { id: "tag-2", name: "uber", defaultAppCategoryId: TRANSPORT.id },
+    ]);
+
+    const result = await resolveAddTransaction({
+      amount: -20_000,
+      tags: ["no-default", "uber"],
+    });
+
+    expect(result.params.appCategoryId).toBe(TRANSPORT.id);
   });
 });
 

@@ -51,6 +51,25 @@ model AppCategory {
   budgetItems       BudgetItem[]
   transactions      Transaction[]
   counterpartyRules CounterpartyRule[]
+  // Tags that hint at this category (Tag.defaultAppCategoryId) — lets the bot
+  // map a hashtag like "#uber" straight to a category guess.
+  tagDefaults       Tag[]
+}
+
+// Soft, budget-free label for filtering transactions — many-to-many,
+// deliberately lighter than AppCategory (no BudgetItem, no severity
+// tracking). defaultAppCategoryId is optional and only used by the bot
+// (propose_add_transaction) to map a hashtag in a message straight to a
+// category guess, mirroring CounterpartyRule's confident-match short-circuit
+// (ADR-033) — the ledger filter itself ignores it.
+model Tag {
+  id                  String       @id @default(cuid())
+  name                String       @unique // normalized: trimmed + lowercased on write
+  color               String?
+  defaultAppCategoryId String?
+  defaultAppCategory  AppCategory? @relation(fields: [defaultAppCategoryId], references: [id], onDelete: SetNull)
+  transactions        Transaction[]
+  createdAt           DateTime     @default(now())
 }
 
 model BudgetItem {
@@ -96,6 +115,8 @@ model Transaction {
   // Back-relation for a VaultEntry this transaction was created for (wallet
   // + category vault funding) — see VaultEntry.transactionId.
   vaultEntry           VaultEntry?
+  // Soft, budget-free labels (ledger filter + bot hashtag mapping) — see Tag.
+  tags                 Tag[]
 }
 
 enum BudgetType {

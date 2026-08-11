@@ -38,6 +38,7 @@ const navItems = [
 
 const settingsItems = [
   { title: "Categories", href: "/settings/categories" },
+  { title: "Tags", href: "/settings/tags" },
   { title: "Mappings", href: "/settings/mappings" },
   { title: "Rules", href: "/settings/rules" },
 ];
