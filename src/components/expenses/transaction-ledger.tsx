@@ -167,7 +167,13 @@ export async function TransactionLedgerPage({ month, year, groupBy, filters }: P
         hint={walletHint}
       />
 
-      <CategorySummaryPanel rows={result.categorySummary} />
+      <CategorySummaryPanel
+        rows={result.categorySummary}
+        month={month}
+        year={year}
+        groupBy={groupBy}
+        filters={filters}
+      />
 
       {/* Sibling of LedgerControls, not a child — must stay interactive
           during LedgerControls's filter-requery dimming (see

@@ -44,8 +44,16 @@ type RowFormValues = {
   tagNames: string;
 };
 
+// Built from Intl parts (not toLocaleDateString directly) to drop the " de "
+// connector es-CO inserts between day and month ("11 de sept") — that made
+// the date overflow to a second line in the row's fixed-width mobile column.
 function formatRowDate(date: Date): string {
-  return new Date(date).toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
+  const parts = new Intl.DateTimeFormat("es-CO", { day: "2-digit", month: "short" }).formatToParts(
+    new Date(date)
+  );
+  const day = parts.find((p) => p.type === "day")?.value ?? "";
+  const month = parts.find((p) => p.type === "month")?.value ?? "";
+  return `${day} ${month}`;
 }
 
 // Contextual accessible name for the tap-to-edit row button — must
@@ -203,14 +211,14 @@ function TransactionDefaultRow({
           note demoted to its own line below since it doesn't fit here. */}
       <div className="flex w-full min-w-0 items-center gap-3">
         {groupBy !== "day" && (
-          <span className="text-xs tabular-nums text-muted-foreground w-11 shrink-0">
+          <span className="text-xs tabular-nums text-muted-foreground w-14 shrink-0 whitespace-nowrap">
             {formatRowDate(item.date)}
           </span>
         )}
         <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-full", iconWrap)}>
           <CategoryIcon className="size-5" />
         </span>
-        {groupBy !== "category" && item.categoryName && (
+        {item.categoryName && (
           <span
             className={cn(
               "inline-flex w-fit shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-medium",

@@ -21,6 +21,15 @@ import { BudgetProgressBar } from "./budget-progress-bar";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { CategorySeverity, CategoryBudgetType } from "@/lib/queries/expenses";
+import type { TagOption } from "@/lib/queries/tags";
+
+// Falls back to the transaction's tags when there's no note — a bare "—"
+// left the row with no identifying text at all once a note is missing.
+function noteOrTagsLabel(note: string | null, tags: TagOption[]): string {
+  if (note) return note;
+  if (tags.length > 0) return tags.map((t) => `#${t.name}`).join(" ");
+  return "—";
+}
 
 type CategoryRow = {
   id: string;
@@ -215,9 +224,6 @@ function CategoryTransactionsDialog({
                       Date
                     </TableHead>
                     <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Category
-                    </TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
                       Note
                     </TableHead>
                     <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -238,9 +244,8 @@ function CategoryTransactionsDialog({
                           year: "numeric",
                         })}
                       </TableCell>
-                      <TableCell className="text-sm">{t.mlCategoryName}</TableCell>
                       <TableCell className="text-sm text-muted-foreground max-w-[180px] truncate">
-                        {t.note ?? "—"}
+                        {noteOrTagsLabel(t.note, t.tags)}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{t.wallet}</TableCell>
                       <TableCell className="pr-4 text-right font-mono text-sm tabular-nums">
@@ -301,14 +306,13 @@ function CategoryMobileRow({ row, onClick }: { row: CategoryRow; onClick: () => 
   );
 }
 
-// Mirrors transaction-row.tsx's TransactionDefaultRow priority: amount +
-// category prominent on the top line, date/wallet secondary, note demoted to
-// its own line below (truncated, same as the note column's desktop truncate).
 function CategoryTransactionMobileRow({ transaction }: { transaction: CategoryTransaction }) {
   return (
     <div className="flex w-full flex-col gap-1 border-b border-border/40 px-4 py-2.5 last:border-0">
       <div className="flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate text-sm font-medium">{transaction.mlCategoryName}</span>
+        <span className="min-w-0 truncate text-sm font-medium">
+          {noteOrTagsLabel(transaction.note, transaction.tags)}
+        </span>
         <span className="font-mono text-sm tabular-nums shrink-0">
           {formatCOP(Math.abs(transaction.amount))}
         </span>
@@ -323,9 +327,6 @@ function CategoryTransactionMobileRow({ transaction }: { transaction: CategoryTr
         </span>
         <span className="truncate">{transaction.wallet}</span>
       </div>
-      {transaction.note && (
-        <p className="truncate text-xs text-muted-foreground">{transaction.note}</p>
-      )}
     </div>
   );
 }

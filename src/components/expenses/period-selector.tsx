@@ -91,7 +91,11 @@ export function PeriodSelector({
   const selectedEntry = availableMonths?.find(
     (m) => m.month === selectedMonth && m.year === selectedYear,
   );
-  const isInProgress = selectedEntry?.status === "IN_PROGRESS";
+  // Batch status is set once at import time and never rolls forward, so a
+  // month imported while it was current stays IN_PROGRESS in the DB forever
+  // after — gate the badge on it actually being the current month too, or
+  // stale past months keep showing "in progress".
+  const isInProgress = isCurrentMonth && selectedEntry?.status === "IN_PROGRESS";
 
   return (
     <div className="flex w-full items-center gap-2">

@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { getFinancialPeriodBounds } from "@/lib/financial-period-utils";
+import type { TagOption } from "@/lib/queries/tags";
 
 export type CategoryTransaction = {
   id: string;
@@ -9,7 +10,7 @@ export type CategoryTransaction = {
   amount: number;
   note: string | null;
   wallet: string;
-  mlCategoryName: string;
+  tags: TagOption[];
 };
 
 export async function getCategoryTransactions(
@@ -31,8 +32,8 @@ export async function getCategoryTransactions(
       ],
     },
     include: {
-      moneyLoverCategory: true,
       walletRef: true,
+      tags: { select: { id: true, name: true, color: true } },
     },
     orderBy: { date: "asc" },
   });
@@ -45,6 +46,6 @@ export async function getCategoryTransactions(
     amount: t.amount,
     note: t.note,
     wallet: t.walletRef?.name ?? t.wallet,
-    mlCategoryName: t.moneyLoverCategory?.name ?? "Manual",
+    tags: t.tags,
   }));
 }
