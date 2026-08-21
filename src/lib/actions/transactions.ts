@@ -56,10 +56,89 @@ export async function createTransaction(data: {
   return created;
 }
 
-/** Deletes a transaction (used for undo of a MANUAL add). */
+/**
+ * Deletes a transaction (used for undo of a MANUAL add). If it's one leg of a
+ * wallet transfer (transferPairId set), deletes both legs together — a
+ * transfer can't be left half-applied (money gone from one wallet, never
+ * arrived in the other).
+ */
 export async function deleteTransaction(id: string) {
-  await db.transaction.delete({ where: { id } });
+  const existing = await db.transaction.findUnique({ where: { id }, select: { transferPairId: true } });
+  if (existing?.transferPairId) {
+    await db.transaction.deleteMany({ where: { transferPairId: existing.transferPairId } });
+  } else {
+    await db.transaction.delete({ where: { id } });
+  }
   revalidateAll();
+}
+
+// ─── Wallet-to-wallet transfers ─────────────────────────────────────────────
+
+const TRANSFER_OUT_CATEGORY = "Outgoing Transfer";
+const TRANSFER_IN_CATEGORY = "Incoming Transfer";
+
+/**
+ * Records a transfer between two wallets as a paired MANUAL transaction on
+ * each side (AddTransactionRow's "Transfer" tab) — an outgoing leg (negative,
+ * "Outgoing Transfer" category) in fromWalletId and an incoming leg
+ * (positive, "Incoming Transfer" category) in toWalletId, sharing a
+ * transferPairId so deleteTransaction can remove both together. The two
+ * categories are seeded once (see migration add_wallet_transfers) with
+ * isTransfer: true, which is what excludes them from budget analysis —
+ * never user-created or manually selectable (getCategories() filters them
+ * out).
+ */
+export async function createWalletTransfer(data: {
+  amount: number; // positive magnitude
+  date: Date;
+  fromWalletId: string;
+  toWalletId: string;
+  note?: string;
+}) {
+  if (data.fromWalletId === data.toWalletId) {
+    throw new Error("From and To wallets must be different");
+  }
+  const magnitude = Math.abs(data.amount);
+
+  const [outgoingCategory, incomingCategory, fromWallet, toWallet] = await Promise.all([
+    db.appCategory.findUniqueOrThrow({ where: { name: TRANSFER_OUT_CATEGORY } }),
+    db.appCategory.findUniqueOrThrow({ where: { name: TRANSFER_IN_CATEGORY } }),
+    db.wallet.findUniqueOrThrow({ where: { id: data.fromWalletId } }),
+    db.wallet.findUniqueOrThrow({ where: { id: data.toWalletId } }),
+  ]);
+
+  const pairId = crypto.randomUUID();
+  const [outgoing, incoming] = await db.$transaction([
+    db.transaction.create({
+      data: {
+        amount: -magnitude,
+        date: data.date,
+        appCategoryId: outgoingCategory.id,
+        wallet: fromWallet.name,
+        walletId: fromWallet.id,
+        note: data.note ?? `Transfer to ${toWallet.name}`,
+        source: TransactionSource.MANUAL,
+        isTransfer: true,
+        transferPairId: pairId,
+      },
+    }),
+    db.transaction.create({
+      data: {
+        amount: magnitude,
+        date: data.date,
+        appCategoryId: incomingCategory.id,
+        wallet: toWallet.name,
+        walletId: toWallet.id,
+        note: data.note ?? `Transfer from ${fromWallet.name}`,
+        source: TransactionSource.MANUAL,
+        isTransfer: true,
+        transferPairId: pairId,
+      },
+    }),
+  ]);
+
+  revalidateAll();
+  return { outgoing, incoming };
 }
 
 /**

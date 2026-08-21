@@ -183,7 +183,8 @@ export async function getTrends(n = 6): Promise<TrendsData> {
 
   const [allTransactions, appCategories] = await Promise.all([
     db.transaction.findMany({
-      where: { OR: periods.map((p) => ({ date: { gte: p.start, lt: p.end } })) },
+      // isTransfer excluded — see AppCategory.isTransfer's doc comment.
+      where: { isTransfer: false, OR: periods.map((p) => ({ date: { gte: p.start, lt: p.end } })) },
       include: {
         appCategory: true,
         moneyLoverCategory: {
@@ -191,7 +192,7 @@ export async function getTrends(n = 6): Promise<TrendsData> {
         },
       },
     }),
-    db.appCategory.findMany({ include: { budgetItems: true } }),
+    db.appCategory.findMany({ where: { isTransfer: false }, include: { budgetItems: true } }),
   ]);
 
   const totalBudget = appCategories.reduce(

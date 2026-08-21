@@ -16,11 +16,15 @@ vi.mock("@/lib/db", () => ({
     transaction: {
       create: vi.fn(),
       delete: vi.fn(),
+      deleteMany: vi.fn(),
       update: vi.fn(),
+      findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
     },
     wallet: { findMany: vi.fn().mockResolvedValue([]), findUniqueOrThrow: vi.fn() },
     savingsAccount: { findMany: vi.fn().mockResolvedValue([]) },
+    appCategory: { findUniqueOrThrow: vi.fn() },
+    $transaction: vi.fn(),
   },
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -28,6 +32,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 import { db } from "@/lib/db";
 import {
   createTransaction,
+  createWalletTransfer,
   deleteTransaction,
   updateTransactionCategory,
   updateTransaction,
@@ -38,13 +43,17 @@ const dbMock = db as unknown as {
   transaction: {
     create: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
+    deleteMany: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
     findUniqueOrThrow: ReturnType<typeof vi.fn>;
   };
   wallet: {
     findMany: ReturnType<typeof vi.fn>;
     findUniqueOrThrow: ReturnType<typeof vi.fn>;
   };
+  appCategory: { findUniqueOrThrow: ReturnType<typeof vi.fn> };
+  $transaction: ReturnType<typeof vi.fn>;
 };
 
 beforeEach(() => {
@@ -134,12 +143,79 @@ describe("createTransaction", () => {
 
 describe("deleteTransaction", () => {
   it("deletes the transaction by id and revalidates", async () => {
+    dbMock.transaction.findUnique.mockResolvedValue({ transferPairId: null });
+
     await deleteTransaction("txn-1");
 
     expect(dbMock.transaction.delete).toHaveBeenCalledWith({ where: { id: "txn-1" } });
+    expect(dbMock.transaction.deleteMany).not.toHaveBeenCalled();
     expect(revalidatePath).toHaveBeenCalledWith("/expenses");
     expect(revalidatePath).toHaveBeenCalledWith("/overview");
     expect(revalidatePath).toHaveBeenCalledWith("/trends");
+  });
+
+  it("deletes both legs of a wallet transfer via their shared transferPairId", async () => {
+    dbMock.transaction.findUnique.mockResolvedValue({ transferPairId: "pair-1" });
+
+    await deleteTransaction("txn-outgoing");
+
+    expect(dbMock.transaction.deleteMany).toHaveBeenCalledWith({
+      where: { transferPairId: "pair-1" },
+    });
+    expect(dbMock.transaction.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe("createWalletTransfer", () => {
+  beforeEach(() => {
+    dbMock.appCategory.findUniqueOrThrow.mockImplementation(({ where }: { where: { name: string } }) =>
+      Promise.resolve({ id: where.name === "Outgoing Transfer" ? "cat-out" : "cat-in", name: where.name }),
+    );
+    dbMock.wallet.findUniqueOrThrow.mockImplementation(({ where }: { where: { id: string } }) =>
+      Promise.resolve({ id: where.id, name: where.id === "wallet-from" ? "Nequi" : "Nu" }),
+    );
+    dbMock.$transaction.mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops));
+    dbMock.transaction.create.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
+      Promise.resolve({ id: data.amount && (data.amount as number) < 0 ? "txn-out" : "txn-in", ...data }),
+    );
+  });
+
+  it("creates a negative outgoing leg and a positive incoming leg sharing a transferPairId", async () => {
+    const { outgoing, incoming } = await createWalletTransfer({
+      amount: 50_000,
+      date: new Date(2026, 2, 10),
+      fromWalletId: "wallet-from",
+      toWalletId: "wallet-to",
+    });
+
+    expect(outgoing).toMatchObject({
+      amount: -50_000,
+      appCategoryId: "cat-out",
+      walletId: "wallet-from",
+      wallet: "Nequi",
+      isTransfer: true,
+      note: "Transfer to Nu",
+    });
+    expect(incoming).toMatchObject({
+      amount: 50_000,
+      appCategoryId: "cat-in",
+      walletId: "wallet-to",
+      wallet: "Nu",
+      isTransfer: true,
+      note: "Transfer from Nequi",
+    });
+    expect(outgoing.transferPairId).toBe(incoming.transferPairId);
+  });
+
+  it("rejects a transfer to the same wallet", async () => {
+    await expect(
+      createWalletTransfer({
+        amount: 1000,
+        date: new Date(),
+        fromWalletId: "wallet-a",
+        toWalletId: "wallet-a",
+      }),
+    ).rejects.toThrow("From and To wallets must be different");
   });
 });
 

@@ -92,7 +92,19 @@ export function deriveCategoryBudgetType(items: BudgetItemShape[]): {
   return { budgetType, fixedBudgetPortion, variableBudgetPortion };
 }
 
-export type CategoryOption = { id: string; name: string; budgetType: CategoryBudgetType };
+export type CategoryOption = {
+  id: string;
+  name: string;
+  budgetType: CategoryBudgetType;
+  // True for the two seeded "Outgoing Transfer"/"Incoming Transfer"
+  // categories createWalletTransfer auto-assigns. Deliberately still
+  // returned here (not filtered out) — transaction-row.tsx's edit form needs
+  // it present so editing a transfer row doesn't fall through to "Sin
+  // categoría" and silently clear it on save. Callers that build a picker for
+  // a brand-new manual transaction (AddTransactionRow's Expense/Income tab)
+  // filter it out client-side instead.
+  isTransfer: boolean;
+};
 
 /** All AppCategories with their derived budgetType — used by the agent to guess/shortlist a category. */
 export async function getCategories(): Promise<CategoryOption[]> {
@@ -104,6 +116,7 @@ export async function getCategories(): Promise<CategoryOption[]> {
     id: cat.id,
     name: cat.name,
     budgetType: deriveCategoryBudgetType(cat.budgetItems).budgetType,
+    isTransfer: cat.isTransfer,
   }));
 }
 
@@ -263,7 +276,9 @@ export async function getMonthlyAnalysis(month: number, year: number, walletId?:
 
   const [transactions, appCategories, batch] = await Promise.all([
     db.transaction.findMany({
-      where: { date: { gte: start, lt: end }, ...(walletId ? { walletId } : {}) },
+      // isTransfer excluded — a wallet-to-wallet transfer is neither real
+      // income nor real spending, see mem/ADR note on AppCategory.isTransfer.
+      where: { date: { gte: start, lt: end }, isTransfer: false, ...(walletId ? { walletId } : {}) },
       include: {
         appCategory: true,
         moneyLoverCategory: {
@@ -271,7 +286,7 @@ export async function getMonthlyAnalysis(month: number, year: number, walletId?:
         },
       },
     }),
-    db.appCategory.findMany({ include: { budgetItems: true } }),
+    db.appCategory.findMany({ where: { isTransfer: false }, include: { budgetItems: true } }),
     db.importBatch.findFirst({ where: { month, year }, select: { status: true } }),
   ]);
 

@@ -166,6 +166,7 @@ export function TransactionRow({ item, groupBy, categories, walletOptions, tags 
             />
           ) : (
             <TransactionDeleteConfirm
+              isTransfer={item.isTransfer}
               pending={pending}
               onConfirm={handleDelete}
               onCancel={cancelToDefault}
@@ -394,17 +395,23 @@ function TransactionEditForm({
 }
 
 function TransactionDeleteConfirm({
+  isTransfer,
   pending,
   onConfirm,
   onCancel,
 }: {
+  isTransfer: boolean;
   pending: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
   return (
     <div className="space-y-4">
-      <p className="text-sm text-destructive">Delete this transaction?</p>
+      <p className="text-sm text-destructive">
+        {isTransfer
+          ? "Delete this transfer? Both the outgoing and incoming legs will be removed."
+          : "Delete this transaction?"}
+      </p>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel} autoFocus>
           Cancel

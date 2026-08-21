@@ -47,6 +47,11 @@ model AppCategory {
   // both validated against closed key lists at the action layer, not here.
   icon              String?
   color             String?
+  // Marks the two seeded "Outgoing Transfer"/"Incoming Transfer" categories
+  // auto-assigned by createWalletTransfer (wallet-to-wallet transfers). Never
+  // user-created. getCategories() excludes these from every manual picker;
+  // getMonthlyAnalysis/trends exclude them from budget/analysis entirely.
+  isTransfer        Boolean            @default(false)
   mappings          CategoryMapping[]
   budgetItems       BudgetItem[]
   transactions      Transaction[]
@@ -117,6 +122,18 @@ model Transaction {
   vaultEntry           VaultEntry?
   // Soft, budget-free labels (ledger filter + bot hashtag mapping) — see Tag.
   tags                 Tag[]
+  // Wallet-to-wallet transfer (createWalletTransfer): true on BOTH legs.
+  // Excluded from income/expense totals + budget analysis everywhere they're
+  // computed (getMonthlyAnalysis, the ledger's monthTotal*, trends). Kept on
+  // Transaction itself (not derived from appCategoryId) so exclusion survives
+  // a category rename/reassignment.
+  isTransfer           Boolean             @default(false)
+  // Shared correlation id written to both legs at creation (not a relation —
+  // just a plain string) — lets deleteTransaction find and remove the paired
+  // leg together, so a transfer can never be left half-applied.
+  transferPairId       String?
+
+  @@index([transferPairId])
 }
 
 enum BudgetType {

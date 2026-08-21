@@ -17,7 +17,9 @@ vi.mock("@/lib/actions/transactions", () => ({
   setTransactionTags: vi.fn(),
 }));
 
-const CATEGORIES: CategoryOption[] = [{ id: "cat-groceries", name: "Groceries", budgetType: "VARIABLE" }];
+const CATEGORIES: CategoryOption[] = [
+  { id: "cat-groceries", name: "Groceries", budgetType: "VARIABLE", isTransfer: false },
+];
 
 const GROUPS: LedgerGroup[] = [
   {
@@ -38,6 +40,7 @@ const GROUPS: LedgerGroup[] = [
         categoryColor: null,
         source: "MONEYLOVER",
         tags: [],
+        isTransfer: false,
       },
     ],
   },

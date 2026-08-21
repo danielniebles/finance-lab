@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
-import { Plus, Check } from "lucide-react";
+import { Plus, Check, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,12 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { dateInputValue, formatCOP } from "@/lib/format";
-import { createTransaction, suggestTransactionFields, setTransactionTags } from "@/lib/actions/transactions";
+import {
+  createTransaction,
+  createWalletTransfer,
+  suggestTransactionFields,
+  setTransactionTags,
+} from "@/lib/actions/transactions";
 import { WalletSelect } from "@/components/shared/wallet-select";
 import { TagsField } from "@/components/shared/tags-field";
 import { parseTagNames } from "@/lib/tag-utils";
@@ -29,7 +34,7 @@ import type { CategoryOption } from "@/lib/queries/expenses";
 import type { TransactionSuggestion } from "@/lib/actions/transactions";
 import type { TagOption } from "@/lib/queries/tags";
 
-type TxnType = "expense" | "income";
+type TxnType = "expense" | "income" | "transfer";
 
 type FormValues = {
   type: TxnType;
@@ -37,6 +42,11 @@ type FormValues = {
   date: string;
   appCategoryId: string;
   walletId: string;
+  // Transfer-only: the destination wallet. walletId doubles as the source
+  // ("From") wallet in transfer mode — no separate fromWalletId field needed,
+  // since it's the same "which wallet is this dialog scoped to" concept the
+  // Expense/Income tabs already use.
+  toWalletId: string;
   note: string;
   tagNames: string;
 };
@@ -51,6 +61,7 @@ function defaultValues(lastWallet: string): FormValues {
     date: dateInputValue(new Date()),
     appCategoryId: "",
     walletId: lastWallet,
+    toWalletId: "",
     note: "",
     tagNames: "",
   };
@@ -60,14 +71,19 @@ function defaultValues(lastWallet: string): FormValues {
 // candidate for extraction into a unit test if this logic grows.
 function canSubmit(values: FormValues): boolean {
   const amount = parseFloat(values.amount);
-  return (
-    !Number.isNaN(amount) &&
-    amount !== 0 &&
-    values.appCategoryId !== "" &&
-    values.walletId !== "" &&
-    values.date !== "" &&
-    !Number.isNaN(new Date(values.date + "T12:00:00").getTime())
-  );
+  const validAmount = !Number.isNaN(amount) && amount !== 0;
+  const validDate =
+    values.date !== "" && !Number.isNaN(new Date(values.date + "T12:00:00").getTime());
+  if (values.type === "transfer") {
+    return (
+      validAmount &&
+      validDate &&
+      values.walletId !== "" &&
+      values.toWalletId !== "" &&
+      values.walletId !== values.toWalletId
+    );
+  }
+  return validAmount && validDate && values.appCategoryId !== "" && values.walletId !== "";
 }
 
 // Amount is always typed as a positive magnitude; the sign is applied here
@@ -169,8 +185,37 @@ export function AddTransactionRow({ categories, walletOptions, tags, activeWalle
     e.preventDefault();
     if (!canSubmit(values)) return;
     const submittedWalletId = values.walletId;
-    const submittedWalletName = walletOptions.find((w) => w.id === submittedWalletId)?.name ?? "";
     const tagNames = parseTagNames(values.tagNames);
+    const note = values.note.trim() === "" ? undefined : values.note;
+
+    if (values.type === "transfer") {
+      startTransition(async () => {
+        try {
+          const { outgoing, incoming } = await createWalletTransfer({
+            amount: Math.abs(parseFloat(values.amount)),
+            date: new Date(values.date + "T12:00:00"),
+            fromWalletId: submittedWalletId,
+            toWalletId: values.toWalletId,
+            note,
+          });
+          if (tagNames.length > 0) {
+            await Promise.all([
+              setTransactionTags(outgoing.id, tagNames),
+              setTransactionTags(incoming.id, tagNames),
+            ]);
+          }
+          toast.success("Transfer added");
+          setLastWallet(submittedWalletId);
+          setValues((v) => ({ ...v, amount: "", note: "", tagNames: "" }));
+          amountInputRef.current?.focus();
+        } catch {
+          toast.error("Couldn't add transfer");
+        }
+      });
+      return;
+    }
+
+    const submittedWalletName = walletOptions.find((w) => w.id === submittedWalletId)?.name ?? "";
     startTransition(async () => {
       try {
         const created = await createTransaction({
@@ -179,7 +224,7 @@ export function AddTransactionRow({ categories, walletOptions, tags, activeWalle
           appCategoryId: values.appCategoryId,
           wallet: submittedWalletName,
           walletId: submittedWalletId,
-          note: values.note.trim() === "" ? undefined : values.note,
+          note,
         });
         if (tagNames.length > 0) await setTransactionTags(created.id, tagNames);
         toast.success("Transaction added");
@@ -257,6 +302,7 @@ function CreateForm({
     values.type,
   );
   const showSuggestion =
+    values.type !== "transfer" &&
     suggestion !== null &&
     !dismissed &&
     (values.appCategoryId !== suggestion.appCategoryId || values.walletId !== suggestion.walletId);
@@ -302,24 +348,12 @@ function CreateForm({
         />
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label>Category</Label>
-          <CreateCategorySelect
-            value={values.appCategoryId}
-            categories={categories}
-            onChange={(v) => onChange({ appCategoryId: v })}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Wallet</Label>
-          <WalletSelect
-            value={values.walletId}
-            options={walletOptions}
-            onChange={(v) => onChange({ walletId: v })}
-          />
-        </div>
-      </div>
+      <CategoryOrTransferFields
+        values={values}
+        categories={categories}
+        walletOptions={walletOptions}
+        onChange={onChange}
+      />
 
       <div className="space-y-1.5">
         <Label htmlFor={`${idPrefix}-note`}>
@@ -329,7 +363,7 @@ function CreateForm({
           id={`${idPrefix}-note`}
           value={values.note}
           onChange={(e) => onChange({ note: e.target.value })}
-          placeholder="Note"
+          placeholder={values.type === "transfer" ? "Defaults to “Transfer to/from …”" : "Note"}
         />
       </div>
 
@@ -346,10 +380,70 @@ function CreateForm({
         </Button>
         <Button type="submit" disabled={submitDisabled}>
           <Check className="size-4" />
-          Add transaction
+          {values.type === "transfer" ? "Transfer" : "Add transaction"}
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+// Second field row of CreateForm — a Category+Wallet pair for Expense/Income,
+// or a From+To wallet pair for Transfer. Split out purely to keep CreateForm
+// under the quality gate's max-lines-per-function; no state of its own.
+function CategoryOrTransferFields({
+  values,
+  categories,
+  walletOptions,
+  onChange,
+}: {
+  values: FormValues;
+  categories: CategoryOption[];
+  walletOptions: { id: string; name: string }[];
+  onChange: (patch: Partial<FormValues>) => void;
+}) {
+  if (values.type === "transfer") {
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label>From wallet</Label>
+          <WalletSelect
+            value={values.walletId}
+            options={walletOptions}
+            onChange={(v) =>
+              onChange({ walletId: v, toWalletId: v === values.toWalletId ? "" : values.toWalletId })
+            }
+            ariaLabel="From wallet"
+            placeholder="From wallet"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>To wallet</Label>
+          <WalletSelect
+            value={values.toWalletId}
+            options={walletOptions.filter((w) => w.id !== values.walletId)}
+            onChange={(v) => onChange({ toWalletId: v })}
+            ariaLabel="To wallet"
+            placeholder="To wallet"
+          />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-1.5">
+        <Label>Category</Label>
+        <CreateCategorySelect
+          value={values.appCategoryId}
+          categories={categories}
+          onChange={(v) => onChange({ appCategoryId: v })}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Wallet</Label>
+        <WalletSelect value={values.walletId} options={walletOptions} onChange={(v) => onChange({ walletId: v })} />
+      </div>
+    </div>
   );
 }
 
@@ -421,6 +515,18 @@ function TypeToggle({ value, onChange }: { value: TxnType; onChange: (v: TxnType
       >
         Income
       </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        aria-pressed={value === "transfer"}
+        aria-label="Mark as transfer"
+        onClick={() => onChange("transfer")}
+        className={cn(value === "transfer" && "bg-muted text-foreground hover:bg-muted")}
+      >
+        <ArrowLeftRight className="size-3.5" />
+        Transfer
+      </Button>
     </div>
   );
 }
@@ -434,14 +540,17 @@ function CreateCategorySelect({
   categories: CategoryOption[];
   onChange: (v: string) => void;
 }) {
-  const selectedName = categories.find((c) => c.id === value)?.name ?? "Category";
+  // Outgoing/Incoming Transfer are only ever auto-assigned by
+  // createWalletTransfer (the Transfer tab above) — never a manual pick here.
+  const selectableCategories = categories.filter((c) => !c.isTransfer);
+  const selectedName = selectableCategories.find((c) => c.id === value)?.name ?? "Category";
   return (
     <Select value={value || undefined} onValueChange={(v) => v && onChange(v)}>
       <SelectTrigger className="w-full" aria-label="Category">
         <span className="text-sm truncate">{selectedName}</span>
       </SelectTrigger>
       <SelectContent>
-        {categories.map((c) => (
+        {selectableCategories.map((c) => (
           <SelectItem key={c.id} value={c.id}>
             {c.name}
           </SelectItem>

@@ -35,8 +35,8 @@ vi.mock("@/lib/actions/transactions", () => ({
 }));
 
 const CATEGORIES: CategoryOption[] = [
-  { id: "cat-groceries", name: "Groceries", budgetType: "VARIABLE" },
-  { id: "cat-transport", name: "Transport", budgetType: "VARIABLE" },
+  { id: "cat-groceries", name: "Groceries", budgetType: "VARIABLE", isTransfer: false },
+  { id: "cat-transport", name: "Transport", budgetType: "VARIABLE", isTransfer: false },
 ];
 
 const WALLET_OPTIONS = [
@@ -60,6 +60,7 @@ function makeItem(overrides: Partial<LedgerItem> = {}): LedgerItem {
     categoryColor: null,
     source: "MONEYLOVER",
     tags: [],
+    isTransfer: false,
     ...overrides,
   };
 }

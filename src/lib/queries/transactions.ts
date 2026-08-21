@@ -41,6 +41,10 @@ export type LedgerItem = {
   categoryColor: string | null;
   source: TransactionSource;
   tags: TagOption[];
+  // One leg of a wallet-to-wallet transfer (createWalletTransfer) — still
+  // shown in the raw list/groups, but excluded from monthTotalIncome/Expense
+  // below (a transfer is neither real income nor real spending).
+  isTransfer: boolean;
 };
 
 export type LedgerGroup = {
@@ -78,6 +82,7 @@ type RawTransaction = {
   appCategory: RawAppCategory | null;
   moneyLoverCategory: { mapping: { appCategory: RawAppCategory } | null } | null;
   tags: TagOption[];
+  isTransfer: boolean;
 };
 
 // Category resolution rule (ADR-030), applied everywhere a transaction's
@@ -105,6 +110,7 @@ function toLedgerItem(t: RawTransaction): LedgerItem {
     categoryColor: category?.color ?? null,
     source: t.source,
     tags: t.tags,
+    isTransfer: t.isTransfer,
   };
 }
 
@@ -262,7 +268,9 @@ function computeCategorySummary(items: LedgerItem[]): CategorySummaryRow[] {
  * EXCEPT walletId, which does scope them: when filters.walletId is set, both
  * totals reflect only that wallet's transactions for the month (still the
  * whole month, just restricted to one wallet's balance), since the header
- * band is expected to track the selected wallet.
+ * band is expected to track the selected wallet. Wallet-to-wallet transfer
+ * legs (isTransfer) are excluded from both totals but still appear in the
+ * groups/list below — mirrors getMonthlyAnalysis's exclusion.
  */
 export async function getTransactionList(
   month: number,
@@ -291,10 +299,10 @@ export async function getTransactionList(
   const walletScopedItems = allItems.filter((item) => matchesWallet(item, filters?.walletId));
 
   const monthTotalIncome = walletScopedItems
-    .filter((item) => item.amount > 0)
+    .filter((item) => item.amount > 0 && !item.isTransfer)
     .reduce((sum, item) => sum + item.amount, 0);
   const monthTotalExpense = walletScopedItems
-    .filter((item) => item.amount < 0)
+    .filter((item) => item.amount < 0 && !item.isTransfer)
     .reduce((sum, item) => sum + Math.abs(item.amount), 0);
 
   const filteredItems = allItems.filter((item) => matchesFilters(item, filters));

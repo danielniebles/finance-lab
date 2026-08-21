@@ -1155,7 +1155,7 @@ describe("resolveTransfer", () => {
 const TEST_TXN_DATE = "2026-07-06";
 
 function makeCategory(overrides?: Partial<CategoryOption>): CategoryOption {
-  return { id: "cat-1", name: "Groceries", budgetType: "VARIABLE", ...overrides };
+  return { id: "cat-1", name: "Groceries", budgetType: "VARIABLE", isTransfer: false, ...overrides };
 }
 
 const GOING_OUT = makeCategory({ id: "cat-2", name: "Going Out" });
