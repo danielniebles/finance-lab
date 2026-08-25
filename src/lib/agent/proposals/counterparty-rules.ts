@@ -49,6 +49,7 @@ type RuleFieldInput = {
   recurring: boolean;
   expectedAmount?: number;
   notes?: string;
+  tagNames?: string[];
 };
 
 function ruleFields(
@@ -66,6 +67,9 @@ function ruleFields(
     ...(input.expectedAmount != null
       ? [{ label: "Expected amount", value: String(input.expectedAmount) }]
       : []),
+    ...(input.tagNames && input.tagNames.length > 0
+      ? [{ label: "Tags", value: input.tagNames.map((t) => `#${t}`).join(" ") }]
+      : []),
     { label: "Notes", value: input.notes ?? "—" },
   ];
 }
@@ -82,6 +86,7 @@ export async function resolveCreateCounterpartyRule(
   const recurring = (input.recurring as boolean | undefined) ?? false;
   const expectedAmount = input.expectedAmount as number | undefined;
   const notes = input.notes as string | undefined;
+  const tagNames = Array.isArray(input.tagNames) ? (input.tagNames as string[]) : undefined;
 
   const categories = await getCategories();
   const category = findCategoryByName(categories, appCategoryName);
@@ -103,6 +108,7 @@ export async function resolveCreateCounterpartyRule(
     recurring,
     expectedAmount: expectedAmount ?? null,
     notes: notes ?? null,
+    tagNames: tagNames ?? [],
   };
 
   const title = `Create rule: ${matchType} "${matchValue}" → ${category.name}`;
@@ -115,6 +121,7 @@ export async function resolveCreateCounterpartyRule(
     recurring,
     expectedAmount,
     notes,
+    tagNames,
   });
 
   return buildResolvedProposal(params, title, fields);
@@ -135,6 +142,7 @@ function mergeRuleUpdate(
     expectedAmount:
       (input.expectedAmount as number | undefined) ?? rule.expectedAmount ?? undefined,
     notes: (input.notes as string | undefined) ?? rule.notes ?? undefined,
+    tagNames: Array.isArray(input.tagNames) ? (input.tagNames as string[]) : rule.tagNames,
   };
 }
 
@@ -189,6 +197,7 @@ export async function resolveUpdateCounterpartyRule(
     recurring: merged.recurring,
     expectedAmount: merged.expectedAmount ?? null,
     notes: merged.notes ?? null,
+    tagNames: merged.tagNames ?? [],
   };
 
   const title = `Update rule: ${rule.matchType} "${rule.matchValue}" → ${category.name}`;

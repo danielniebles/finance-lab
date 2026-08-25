@@ -43,6 +43,7 @@ const EXISTING_RULE = {
   matchCount: 3,
   lastMatchedAt: null,
   createdAt: new Date("2026-06-01"),
+  tagNames: ["fruver"],
 };
 
 beforeEach(() => {
@@ -101,6 +102,30 @@ describe("resolveCreateCounterpartyRule", () => {
     expect(result.params.direction).toBe("ANY");
     expect(result.params.autoRecord).toBe(true);
     expect(result.params.recurring).toBe(false);
+  });
+
+  it("threads tagNames through to params and the card fields", async () => {
+    const result = await resolveCreateCounterpartyRule({
+      matchType: "MERCHANT",
+      matchValue: "Fruver Don Pepe",
+      appCategoryName: "Pets",
+      wallet: "Efectivo",
+      tagNames: ["fruver"],
+    });
+
+    expect(result.params.tagNames).toEqual(["fruver"]);
+    expect(result.fields).toContainEqual({ label: "Tags", value: "#fruver" });
+  });
+
+  it("defaults tagNames to an empty array when omitted", async () => {
+    const result = await resolveCreateCounterpartyRule({
+      matchType: "MERCHANT",
+      matchValue: "Rappi",
+      appCategoryName: "Pets",
+      wallet: "Efectivo",
+    });
+
+    expect(result.params.tagNames).toEqual([]);
   });
 });
 

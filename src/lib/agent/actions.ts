@@ -519,6 +519,7 @@ async function executeCreateCounterpartyRule(
     expectedAmount:
       params.expectedAmount != null ? Number(params.expectedAmount) : undefined,
     notes: (params.notes as string | undefined) ?? undefined,
+    tagNames: params.tagNames as string[] | undefined,
   });
   return { createdId: created.id };
 }
@@ -546,6 +547,7 @@ async function executeUpdateCounterpartyRule(
     expectedAmount:
       fields.expectedAmount != null ? Number(fields.expectedAmount) : null,
     notes: (fields.notes as string | undefined) ?? null,
+    tagNames: fields.tagNames as string[] | undefined,
   });
 }
 

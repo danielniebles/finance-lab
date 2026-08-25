@@ -8,6 +8,23 @@ import { resolveWalletFields } from "@/lib/resolve-wallet";
 
 const PATH = "/settings/rules";
 
+function normalizeTagName(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+// Mirrors setTransactionTags' connectOrCreate (src/lib/actions/transactions.ts)
+// — an unmatched tag name is just created on the fly, same as manual entry.
+// `replace: true` (update only) adds `set: []` first so re-saving with a
+// shorter list actually drops the removed tags, instead of only ever adding.
+function tagsConnectOrCreate(tagNames: string[] | undefined, replace: boolean) {
+  if (!tagNames) return undefined;
+  const names = [...new Set(tagNames.map(normalizeTagName).filter(Boolean))];
+  return {
+    ...(replace ? { set: [] } : {}),
+    connectOrCreate: names.map((name) => ({ where: { name }, create: { name } })),
+  };
+}
+
 /**
  * Both `wallet` (required legacy label) and `walletId` (optional curated
  * Wallet.id, ADR-036/037-style upgrade mirroring Transaction) are accepted.
@@ -29,8 +46,10 @@ export async function createCounterpartyRule(data: {
   recurring?: boolean;
   expectedAmount?: number;
   notes?: string;
+  tagNames?: string[];
 }) {
   const walletFields = await resolveWalletFields({ wallet: data.wallet, walletId: data.walletId });
+  const tags = tagsConnectOrCreate(data.tagNames, false);
   const created = await db.counterpartyRule.create({
     data: {
       matchType: data.matchType,
@@ -43,6 +62,7 @@ export async function createCounterpartyRule(data: {
       expectedAmount: data.expectedAmount,
       notes: data.notes,
       ...walletFields,
+      ...(tags ? { tags } : {}),
     },
   });
   revalidatePath(PATH);
@@ -62,9 +82,11 @@ export async function updateCounterpartyRule(
     recurring?: boolean;
     expectedAmount?: number | null;
     notes?: string | null;
+    tagNames?: string[];
   },
 ) {
   const walletFields = await resolveWalletFields({ wallet: data.wallet, walletId: data.walletId });
+  const tags = tagsConnectOrCreate(data.tagNames, true);
   const updated = await db.counterpartyRule.update({
     where: { id },
     data: {
@@ -77,6 +99,7 @@ export async function updateCounterpartyRule(
       recurring: data.recurring,
       expectedAmount: data.expectedAmount,
       notes: data.notes,
+      ...(tags ? { tags } : {}),
       ...walletFields,
     },
   });

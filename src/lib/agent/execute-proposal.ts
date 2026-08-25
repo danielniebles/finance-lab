@@ -23,24 +23,49 @@ export type ResolveProposalResult = {
   learnRuleNudge?: string;
 };
 
+// Mirrors MATCH_PRIORITY in queries/counterparty-rules.ts — same priority
+// order (ACCOUNT > MERCHANT > SENDER) and the same field the counterparty
+// came from, so the rule this nudge offers to create is the exact rule
+// matchCounterpartyRule would actually look up next time.
+const COUNTERPARTY_FIELDS = [
+  { param: "counterpartyAccount", matchType: "ACCOUNT" },
+  { param: "counterpartyMerchant", matchType: "MERCHANT" },
+  { param: "counterpartySender", matchType: "SENDER" },
+] as const;
+
 /**
  * Builds the "remember this?" nudge text when an approved transaction had an
  * extractable counterparty but matched no existing rule. Only fires on the
  * genuinely-unmatched case (`hadCounterpartyMatch === false`), not merely
  * "wasn't auto-recorded" — a match with autoRecord:false already has a rule,
  * there's nothing to learn.
+ *
+ * Spells out matchType/matchValue/category/wallet/tags explicitly (rather
+ * than the old vague "same category and wallet") because this text is now
+ * the ONLY record of the offer the model sees on a later "yes" turn (see
+ * telegram/route.ts's saveMessage call) — it has no other way to reconstruct
+ * a propose_create_counterparty_rule call from history.
  */
-function buildLearnRuleNudge(action: string, params: Record<string, unknown>): string | undefined {
+async function buildLearnRuleNudge(
+  action: string,
+  params: Record<string, unknown>,
+): Promise<string | undefined> {
   if (action !== "propose_add_transaction" || params.hadCounterpartyMatch !== false) {
     return undefined;
   }
-  const counterparty =
-    (params.counterpartyAccount as string | undefined) ??
-    (params.counterpartyMerchant as string | undefined) ??
-    (params.counterpartySender as string | undefined);
-  if (!counterparty) return undefined;
+  const matched = COUNTERPARTY_FIELDS.find(({ param }) => params[param]);
+  if (!matched) return undefined;
+  const counterparty = params[matched.param] as string;
 
-  return `💡 Want me to remember this? The next transaction to/from "${counterparty}" would be recorded automatically with the same category and wallet. Tell me "yes, remember it" if you want to create the rule.`;
+  const appCategoryId = params.appCategoryId as string | undefined;
+  const category = appCategoryId
+    ? await db.appCategory.findUnique({ where: { id: appCategoryId }, select: { name: true } })
+    : null;
+  const wallet = params.wallet as string | undefined;
+  const tagNames = (params.tagNames as string[] | undefined) ?? [];
+  const tagsPart = tagNames.length > 0 ? ` tagged ${tagNames.map((t) => `#${t}`).join(" ")}` : "";
+
+  return `💡 Want me to remember this? The next ${matched.matchType} match for "${counterparty}" would auto-record as ${category?.name ?? "this category"} → ${wallet ?? "this wallet"}${tagsPart}. Tell me "yes, remember it" if you want to create the rule.`;
 }
 
 /**
@@ -129,7 +154,7 @@ export async function resolveProposal(d: ProposalDecision): Promise<ResolvePropo
     return {
       ok: true,
       message: approveMessage,
-      learnRuleNudge: buildLearnRuleNudge(proposal.action, params),
+      learnRuleNudge: await buildLearnRuleNudge(proposal.action, params),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

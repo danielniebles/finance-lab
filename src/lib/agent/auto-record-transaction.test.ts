@@ -51,6 +51,7 @@ const RULE: CounterpartyRuleRow = {
   matchCount: 3,
   lastMatchedAt: null,
   createdAt: new Date("2026-06-01"),
+  tagNames: [],
 };
 
 const TEST_DATE = "2026-07-06";
@@ -185,5 +186,28 @@ describe("autoRecordFromRule", () => {
     });
 
     expect(setTransactionTagsMock).not.toHaveBeenCalled();
+  });
+
+  it("applies the rule's own tags even when the message extracted none", async () => {
+    await autoRecordFromRule({
+      amount: -45_000,
+      date: TEST_DATE,
+      rule: { ...RULE, tagNames: ["fruver"] },
+      channel: TEST_CHANNEL,
+    });
+
+    expect(setTransactionTagsMock).toHaveBeenCalledWith("txn-1", ["fruver"]);
+  });
+
+  it("unions the rule's tags with the message's extracted tags, deduped", async () => {
+    await autoRecordFromRule({
+      amount: -45_000,
+      date: TEST_DATE,
+      rule: { ...RULE, tagNames: ["fruver"] },
+      channel: TEST_CHANNEL,
+      tagNames: ["fruver", "uber"],
+    });
+
+    expect(setTransactionTagsMock).toHaveBeenCalledWith("txn-1", ["fruver", "uber"]);
   });
 });

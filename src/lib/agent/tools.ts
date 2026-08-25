@@ -519,6 +519,11 @@ export const TOOLS: Anthropic.Tool[] = [
         recurring: { type: "boolean", description: "Hint: this is a recurring inflow/outflow (default false)" },
         expectedAmount: { type: "number", description: "Optional expected amount in COP, for recurring validation" },
         notes: { type: "string", description: "Optional notes" },
+        tagNames: {
+          type: "array",
+          items: { type: "string" },
+          description: "Tags (without #) to apply to every transaction this rule matches/auto-records, e.g. [\"fruver\"]",
+        },
       },
       required: ["matchType", "matchValue", "appCategoryName", "wallet"],
     },
@@ -543,6 +548,11 @@ export const TOOLS: Anthropic.Tool[] = [
         recurring: { type: "boolean" },
         expectedAmount: { type: "number" },
         notes: { type: "string" },
+        tagNames: {
+          type: "array",
+          items: { type: "string" },
+          description: "Replaces the rule's tags entirely (omit to leave unchanged)",
+        },
       },
       required: ["ruleId"],
     },

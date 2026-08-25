@@ -92,8 +92,14 @@ export async function autoRecordFromRule(args: {
     note,
   });
 
-  if (tagNames && tagNames.length > 0) {
-    await setTransactionTags(created.id, tagNames);
+  // Union of the rule's own tags (always applied on a match) and any
+  // hashtags extracted from this specific message — neither source excludes
+  // the other, same relationship as the rule's category (authoritative) vs.
+  // a matched tag's defaultAppCategoryId (a lower-priority fallback) is NOT:
+  // tags are additive, not a priority chain.
+  const allTagNames = [...new Set([...rule.tagNames, ...(tagNames ?? [])])];
+  if (allTagNames.length > 0) {
+    await setTransactionTags(created.id, allTagNames);
   }
 
   await bumpCounterpartyRuleMatch(rule.id);
@@ -104,7 +110,7 @@ export async function autoRecordFromRule(args: {
     appCategoryId: rule.appCategoryId,
     wallet: rule.wallet,
     note: note ?? null,
-    tagNames: tagNames ?? [],
+    tagNames: allTagNames,
     createdId: created.id,
     // Denormalized onto the proposal row so the Telegram delivery layer can
     // render the "Regla: ..." notification line without a second query to

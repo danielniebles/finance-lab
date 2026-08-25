@@ -148,6 +148,24 @@ describe("createCounterpartyRule", () => {
       data: expect.objectContaining({ wallet: "Bancolombia", walletId: null }),
     });
   });
+
+  it("connects/creates normalized tags without a `set` (nothing to clear yet)", async () => {
+    dbMock.counterpartyRule.create.mockResolvedValue({ id: "rule-1" });
+
+    await createCounterpartyRule({
+      matchType: "MERCHANT",
+      matchValue: "Fruver",
+      appCategoryId: "cat-1",
+      wallet: "Efectivo",
+      tagNames: [" Fruver ", "fruver"],
+    });
+
+    expect(dbMock.counterpartyRule.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tags: { connectOrCreate: [{ where: { name: "fruver" }, create: { name: "fruver" } }] },
+      }),
+    });
+  });
 });
 
 describe("updateCounterpartyRule", () => {
@@ -199,6 +217,25 @@ describe("updateCounterpartyRule", () => {
     expect(dbMock.counterpartyRule.update).toHaveBeenCalledWith({
       where: { id: "rule-1" },
       data: expect.objectContaining({ walletId: "wallet-2", wallet: "Savings" }),
+    });
+  });
+
+  it("replaces tags via `set: []` + connectOrCreate so a shorter list actually drops removed tags", async () => {
+    dbMock.counterpartyRule.update.mockResolvedValue({ id: "rule-1" });
+
+    await updateCounterpartyRule("rule-1", {
+      matchType: "MERCHANT",
+      matchValue: "rappi",
+      appCategoryId: "cat-1",
+      wallet: "W",
+      tagNames: ["uber"],
+    });
+
+    expect(dbMock.counterpartyRule.update).toHaveBeenCalledWith({
+      where: { id: "rule-1" },
+      data: expect.objectContaining({
+        tags: { set: [], connectOrCreate: [{ where: { name: "uber" }, create: { name: "uber" } }] },
+      }),
     });
   });
 });

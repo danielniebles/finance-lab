@@ -53,6 +53,7 @@ describe("getCounterpartyRules", () => {
         matchCount: 3,
         lastMatchedAt: new Date("2026-07-01"),
         createdAt: new Date("2026-06-01"),
+        tags: [{ id: "tag-1", name: "fruver" }],
       },
     ]);
 
@@ -65,10 +66,12 @@ describe("getCounterpartyRules", () => {
         appCategoryName: "Pets",
         wallet: "Investments",
         matchCount: 3,
+        tagNames: ["fruver"],
       }),
     ]);
     // appCategory relation object itself should not leak into the row shape
     expect(rows[0]).not.toHaveProperty("appCategory");
+    expect(rows[0]).not.toHaveProperty("tags");
   });
 
   it("returns an empty array when there are no rules", async () => {
@@ -95,6 +98,7 @@ const ACCOUNT_RULE = {
   matchCount: 3,
   lastMatchedAt: null,
   createdAt: new Date("2026-06-01"),
+  tags: [],
 };
 
 describe("matchCounterpartyRule", () => {

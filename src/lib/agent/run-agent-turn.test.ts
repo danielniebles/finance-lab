@@ -1389,6 +1389,7 @@ function makeRule(overrides?: Partial<CounterpartyRuleRow>): CounterpartyRuleRow
     matchCount: 3,
     lastMatchedAt: null,
     createdAt: new Date("2026-06-01"),
+    tagNames: [],
     ...overrides,
   };
 }

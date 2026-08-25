@@ -74,6 +74,7 @@ model Tag {
   defaultAppCategoryId String?
   defaultAppCategory  AppCategory? @relation(fields: [defaultAppCategoryId], references: [id], onDelete: SetNull)
   transactions        Transaction[]
+  counterpartyRules   CounterpartyRule[]
   createdAt           DateTime     @default(now())
 }
 
@@ -174,6 +175,10 @@ model CounterpartyRule {
   matchCount     Int           @default(0)
   lastMatchedAt  DateTime?
   createdAt      DateTime      @default(now())
+  // Tags applied to every transaction this rule matches/auto-records — on
+  // top of, never in place of, any hashtags extracted from the message
+  // itself (see autoRecordFromRule / resolveAddTransaction).
+  tags           Tag[]
 
   @@index([matchType, matchValue])
 }

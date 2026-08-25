@@ -11,6 +11,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/db", () => ({
   db: {
     pendingProposal: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), update: vi.fn() },
+    appCategory: { findUnique: vi.fn().mockResolvedValue({ name: "Groceries" }) },
   },
 }));
 const executeMock = vi.fn().mockResolvedValue(undefined);

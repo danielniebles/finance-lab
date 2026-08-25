@@ -20,6 +20,9 @@ export type CounterpartyRuleRow = {
   matchCount: number;
   lastMatchedAt: Date | null;
   createdAt: Date;
+  // Tags this rule applies to every transaction it matches/auto-records —
+  // see prisma/schema.prisma's CounterpartyRule.tags comment.
+  tagNames: string[];
 };
 
 /**
@@ -33,7 +36,7 @@ export type CounterpartyRuleRow = {
  */
 export async function getCounterpartyRules(): Promise<CounterpartyRuleRow[]> {
   const rules = await db.counterpartyRule.findMany({
-    include: { appCategory: true },
+    include: { appCategory: true, tags: true },
     orderBy: [{ matchType: "asc" }, { matchValue: "asc" }],
   });
 
@@ -53,6 +56,7 @@ export async function getCounterpartyRules(): Promise<CounterpartyRuleRow[]> {
     matchCount: rule.matchCount,
     lastMatchedAt: rule.lastMatchedAt,
     createdAt: rule.createdAt,
+    tagNames: rule.tags.map((t) => t.name),
   }));
 }
 
@@ -99,7 +103,7 @@ export async function matchCounterpartyRule(
 
     const rule = await db.counterpartyRule.findFirst({
       where: { matchType, matchValue: normalized },
-      include: { appCategory: true },
+      include: { appCategory: true, tags: true },
     });
     if (rule && directionMatches(rule.direction, candidates.direction)) {
       return {
@@ -118,6 +122,7 @@ export async function matchCounterpartyRule(
         matchCount: rule.matchCount,
         lastMatchedAt: rule.lastMatchedAt,
         createdAt: rule.createdAt,
+        tagNames: rule.tags.map((t) => t.name),
       };
     }
   }

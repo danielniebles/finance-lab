@@ -7,6 +7,7 @@
 
 import { after, NextRequest } from "next/server";
 import { db } from "@/lib/db";
+import { saveMessage } from "@/lib/actions/chat";
 import { runAgentTurn } from "@/lib/agent/run-agent-turn";
 import {
   runTurnAndDeliverToTelegram,
@@ -417,6 +418,14 @@ async function handleResolveCallback(
     await sendUndoButtonIfReversible(chatId, proposalId);
     if (result.learnRuleNudge) {
       await sendMessage(chatId, result.learnRuleNudge);
+      // Callback-query approvals never go through runTurnAndDeliverToTelegram
+      // (no agent turn runs here at all), so nothing above persists this to
+      // ChatMessage the way ADR-027 guarantees for a normal text-message
+      // turn. Without this, the nudge is invisible to the model on the next
+      // turn — the model sees the user's "yes" with zero context for what
+      // it's agreeing to. Save it as this turn's assistant record so a
+      // later "yes, remember it" has something to read.
+      await saveMessage("assistant", result.learnRuleNudge, "telegram");
     }
   }
 }
