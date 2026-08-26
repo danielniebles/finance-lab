@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { PROPOSAL_ACTIONS } from "@/lib/agent/actions";
 import { DEFAULT_APPROVE_MESSAGE } from "@/lib/agent/types";
+import { looksLikeRealAccountNumber } from "@/lib/normalize-match-value";
 
 export type ProposalDecision = {
   proposalId: string;
@@ -56,6 +57,14 @@ async function buildLearnRuleNudge(
   const matched = COUNTERPARTY_FIELDS.find(({ param }) => params[param]);
   if (!matched) return undefined;
   const counterparty = params[matched.param] as string;
+  // Mirrors proposals/transactions.ts's lookupRuleFromInput reclassification:
+  // a counterpartyAccount value with no digits at all is a named-recipient
+  // transfer, not a real account number — offer (and later create) a
+  // MERCHANT rule instead, matching what the lookup will actually search on.
+  const matchType =
+    matched.param === "counterpartyAccount" && !looksLikeRealAccountNumber(counterparty)
+      ? "MERCHANT"
+      : matched.matchType;
 
   const appCategoryId = params.appCategoryId as string | undefined;
   const category = appCategoryId
@@ -65,7 +74,7 @@ async function buildLearnRuleNudge(
   const tagNames = (params.tagNames as string[] | undefined) ?? [];
   const tagsPart = tagNames.length > 0 ? ` tagged ${tagNames.map((t) => `#${t}`).join(" ")}` : "";
 
-  return `💡 Want me to remember this? The next ${matched.matchType} match for "${counterparty}" would auto-record as ${category?.name ?? "this category"} → ${wallet ?? "this wallet"}${tagsPart}. Tell me "yes, remember it" if you want to create the rule.`;
+  return `💡 Want me to remember this? The next ${matchType} match for "${counterparty}" would auto-record as ${category?.name ?? "this category"} → ${wallet ?? "this wallet"}${tagsPart}. Tell me "yes, remember it" if you want to create the rule.`;
 }
 
 /**

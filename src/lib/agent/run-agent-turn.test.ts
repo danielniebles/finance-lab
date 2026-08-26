@@ -1448,6 +1448,45 @@ describe("resolveAddTransaction — counterparty-rule auto-record", () => {
     });
   });
 
+  it("reclassifies a name-only counterpartyAccount (no digits) as a merchant candidate", async () => {
+    vi.mocked(matchCounterpartyRule).mockResolvedValue(null);
+    vi.mocked(getCategories).mockResolvedValue([makeCategory()]);
+
+    await resolveAddTransaction({
+      amount: -149_000,
+      counterpartyAccount: "MARIA NELLY CORRAI ES OSORIO",
+      direction: "expense",
+    });
+
+    // Would normalize to "" as an ACCOUNT candidate and never match anything
+    // (see normalize-match-value.ts's looksLikeRealAccountNumber) — must be
+    // tried as MERCHANT instead, never passed through as ACCOUNT.
+    expect(matchCounterpartyRule).toHaveBeenCalledWith({
+      account: undefined,
+      merchant: "MARIA NELLY CORRAI ES OSORIO",
+      sender: undefined,
+      direction: "EXPENSE",
+    });
+  });
+
+  it("keeps a digit-bearing counterpartyAccount as an ACCOUNT candidate, not merchant", async () => {
+    vi.mocked(matchCounterpartyRule).mockResolvedValue(null);
+    vi.mocked(getCategories).mockResolvedValue([makeCategory()]);
+
+    await resolveAddTransaction({
+      amount: -5_000,
+      counterpartyAccount: "617-1234 5678",
+      direction: "expense",
+    });
+
+    expect(matchCounterpartyRule).toHaveBeenCalledWith({
+      account: "617-1234 5678",
+      merchant: undefined,
+      sender: undefined,
+      direction: "EXPENSE",
+    });
+  });
+
   it("falls back to a normal card when there is no rule match", async () => {
     vi.mocked(matchCounterpartyRule).mockResolvedValue(null);
     vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT]);

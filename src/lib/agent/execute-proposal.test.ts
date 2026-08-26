@@ -61,6 +61,26 @@ describe("resolveProposal — learn-from-correction nudge", () => {
     expect(result.learnRuleNudge).toContain("61793614704");
   });
 
+  it("offers a MERCHANT rule, not ACCOUNT, when the counterpartyAccount value has no digits", async () => {
+    vi.mocked(db.pendingProposal.findUnique).mockResolvedValue(
+      makeProposal({
+        params: {
+          amount: -149_000,
+          appCategoryId: "cat-1",
+          wallet: "Bancolombia",
+          hadCounterpartyMatch: false,
+          counterpartyAccount: "MARIA NELLY CORRAI ES OSORIO",
+        },
+      }) as never,
+    );
+
+    const result = await resolveProposal({ proposalId: "prop-1", choiceId: "approve" });
+
+    expect(result.learnRuleNudge).toContain("MERCHANT");
+    expect(result.learnRuleNudge).not.toContain("ACCOUNT");
+    expect(result.learnRuleNudge).toContain("MARIA NELLY CORRAI ES OSORIO");
+  });
+
   it("does not offer a nudge when a rule DID match (hadCounterpartyMatch: true)", async () => {
     vi.mocked(db.pendingProposal.findUnique).mockResolvedValue(
       makeProposal({

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeMatchValue } from "./normalize-match-value";
+import { normalizeMatchValue, looksLikeRealAccountNumber } from "./normalize-match-value";
 
 describe("normalizeMatchValue", () => {
   describe("ACCOUNT — digits only", () => {
@@ -38,5 +38,19 @@ describe("normalizeMatchValue", () => {
       const twice = normalizeMatchValue("MERCHANT", once);
       expect(twice).toBe(once);
     });
+  });
+});
+
+describe("looksLikeRealAccountNumber", () => {
+  it("is true for a plain digit string", () => {
+    expect(looksLikeRealAccountNumber("61793614704")).toBe(true);
+  });
+
+  it("is true when digits are mixed with separators/words", () => {
+    expect(looksLikeRealAccountNumber("cuenta 617-9361 4704")).toBe(true);
+  });
+
+  it("is false for a name-only value with no digits at all", () => {
+    expect(looksLikeRealAccountNumber("MARIA NELLY CORRAI ES OSORIO")).toBe(false);
   });
 });

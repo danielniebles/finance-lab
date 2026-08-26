@@ -12,6 +12,7 @@
 import { getCategories, type CategoryOption } from "@/lib/queries/expenses";
 import { matchCounterpartyRule } from "@/lib/queries/counterparty-rules";
 import { getTagsByNames } from "@/lib/queries/tags";
+import { looksLikeRealAccountNumber } from "@/lib/normalize-match-value";
 import { formatCOP } from "@/lib/format";
 import { blockingProposal, buildResolvedProposal, type ResolvedProposal } from "./shared";
 import type { EditableOption } from "../types";
@@ -122,10 +123,19 @@ async function resolveTags(
  * Returns null immediately if no candidate field is present at all — the
  * common case for a typed-in-chat transaction with no bank-message
  * counterparty to extract.
+ *
+ * A counterpartyAccount value with no digits at all (see
+ * looksLikeRealAccountNumber) is reclassified as a merchant candidate
+ * instead of dropped or matched as-is — otherwise a name-only "account"
+ * (a named-recipient transfer with no real account number) could never
+ * match ANY rule, ACCOUNT-typed or otherwise.
  */
 async function lookupRuleFromInput(input: Record<string, unknown>, amount: number) {
-  const account = input.counterpartyAccount as string | undefined;
-  const merchant = input.counterpartyMerchant as string | undefined;
+  const rawAccount = input.counterpartyAccount as string | undefined;
+  const account = rawAccount && looksLikeRealAccountNumber(rawAccount) ? rawAccount : undefined;
+  const merchant =
+    (input.counterpartyMerchant as string | undefined) ??
+    (rawAccount && !looksLikeRealAccountNumber(rawAccount) ? rawAccount : undefined);
   const sender = input.counterpartySender as string | undefined;
   if (!account && !merchant && !sender) return null;
 

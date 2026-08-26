@@ -25,3 +25,22 @@ export function normalizeMatchValue(matchType: RuleMatchType, raw: string): stri
   }
   return raw.trim().toUpperCase();
 }
+
+/**
+ * True when a raw "counterpartyAccount" extraction actually contains an
+ * account number. Colombian bank transfer notifications often identify the
+ * destination by the recipient's full name only ("Cuenta MARIA NELLY...",
+ * no digits anywhere) — the model still extracts that into
+ * counterpartyAccount because the message literally said "cuenta". Such a
+ * value normalizes to "" via normalizeMatchValue("ACCOUNT", ...) above, and
+ * matchCounterpartyRule explicitly skips empty normalized values — so an
+ * ACCOUNT-typed rule built from it, or a lookup keyed on it, can NEVER
+ * match anything. Callers translating raw extraction into match candidates
+ * (proposals/transactions.ts's lookupRuleFromInput, execute-proposal.ts's
+ * learn-rule nudge) must reclassify a name-only "account" as a MERCHANT
+ * candidate instead — confirmed 2026-08-25 investigating why a "remember
+ * this merchant" rule never fired for exactly this kind of transfer.
+ */
+export function looksLikeRealAccountNumber(raw: string): boolean {
+  return /\d/.test(raw);
+}
