@@ -13,7 +13,7 @@ export default async function RulesPage() {
   ]);
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="mx-auto max-w-3xl space-y-6">
       <h1 className="text-2xl font-semibold">Counterparty Rules</h1>
       <p className="text-sm text-muted-foreground">
         Map known accounts, merchants, and senders to a category and wallet so matching bank

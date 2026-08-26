@@ -1,9 +1,11 @@
-// Component test for the Phase 2 counterparty-rules settings page list/form.
+// Component test for the counterparty-rules settings page list/form.
 // Covers: rendering the list with rules, creating a new rule (asserts the
-// server action is called with the right shape), editing a rule, deleting a
-// rule, and the recurring-gates-expectedAmount conditional visibility.
+// server action is called with the right shape), editing a rule via the
+// tap-to-open dialog, and deleting a rule via the dialog's confirm-delete
+// step (no more hover-reveal icons or window.confirm — mirrors
+// category-list.tsx's CategoryEditDialog / tag-list.tsx's TagEditDialog).
 
-import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RuleList, type CounterpartyRuleRowData } from "./rule-list";
@@ -49,15 +51,8 @@ function makeRule(overrides: Partial<CounterpartyRuleRowData> = {}): Counterpart
   };
 }
 
-const originalConfirm = window.confirm;
-
 beforeEach(() => {
   vi.resetAllMocks();
-  window.confirm = vi.fn(() => true);
-});
-
-afterAll(() => {
-  window.confirm = originalConfirm;
 });
 
 describe("RuleList — rendering", () => {
@@ -88,6 +83,14 @@ describe("RuleList — rendering", () => {
     render(<RuleList rules={[]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     expect(screen.getByText("No rules yet. Add one below.")).toBeInTheDocument();
+  });
+
+  it("does not render hover-reveal edit/delete icon buttons on the row", () => {
+    render(<RuleList rules={[makeRule()]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
+
+    // The whole row is the "Edit rule" affordance itself — there must be no
+    // separate "Delete rule" icon button sitting outside the dialog anymore.
+    expect(screen.queryByRole("button", { name: "Delete rule" })).not.toBeInTheDocument();
   });
 });
 
@@ -160,6 +163,16 @@ describe("RuleList — create", () => {
 });
 
 describe("RuleList — edit", () => {
+  it("tapping the row opens an edit dialog pre-filled with the rule's values", async () => {
+    const user = userEvent.setup();
+    render(<RuleList rules={[makeRule()]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
+
+    await user.click(screen.getByRole("button", { name: "Edit rule" }));
+
+    expect(screen.getByRole("dialog", { name: "Edit rule" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("61793614704")).toBeInTheDocument();
+  });
+
   it("editing a rule calls updateCounterpartyRule with the updated shape", async () => {
     const user = userEvent.setup();
     render(<RuleList rules={[makeRule()]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
@@ -208,13 +221,32 @@ describe("RuleList — edit", () => {
 });
 
 describe("RuleList — delete", () => {
-  it("delete confirms then calls deleteCounterpartyRule", async () => {
+  it("delete requires a confirm step inside the dialog before calling deleteCounterpartyRule", async () => {
     const user = userEvent.setup();
     render(<RuleList rules={[makeRule()]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
-    await user.click(screen.getByRole("button", { name: "Delete rule" }));
+    await user.click(screen.getByRole("button", { name: "Edit rule" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
 
-    expect(window.confirm).toHaveBeenCalled();
+    // Confirm step shown, nothing deleted yet.
+    expect(screen.getByText(/Delete this rule for/)).toBeInTheDocument();
+    expect(deleteCounterpartyRuleMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+
     expect(deleteCounterpartyRuleMock).toHaveBeenCalledWith("rule-1");
+  });
+
+  it("cancelling the confirm step does not delete", async () => {
+    const user = userEvent.setup();
+    render(<RuleList rules={[makeRule()]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
+
+    await user.click(screen.getByRole("button", { name: "Edit rule" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(deleteCounterpartyRuleMock).not.toHaveBeenCalled();
+    // Back to the edit form.
+    expect(screen.getByDisplayValue("61793614704")).toBeInTheDocument();
   });
 });

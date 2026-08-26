@@ -17,7 +17,7 @@ export default async function MappingsPage() {
   ]);
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="mx-auto max-w-2xl space-y-6">
       <h1 className="text-2xl font-semibold">Category Mappings</h1>
       <p className="text-sm text-muted-foreground">
         Map each MoneyLover category to one of your app categories. Unmapped categories are excluded from analysis.

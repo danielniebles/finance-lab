@@ -16,8 +16,16 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { Pencil, Trash2, Plus, Check, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Plus, Check, X } from "lucide-react";
 import { WalletSelect } from "@/components/shared/wallet-select";
+import { cn } from "@/lib/utils";
 
 export type CounterpartyRuleRowData = {
   id: string;
@@ -322,18 +330,37 @@ function buildPayload(values: RuleFormValues, walletOptions: WalletOption[]) {
   };
 }
 
-function RuleRow({
+// Click-to-open edit dialog (full form + a confirm-delete step) — mirrors
+// category-list.tsx's CategoryEditDialog and tag-list.tsx's TagEditDialog.
+// Replaces the previous inline-edit-in-row state and hover-reveal edit/
+// delete icons, which never showed on touch devices (no hover state) —
+// every other settings list in this app already uses "tap the row to edit".
+function RuleEditDialog({
   rule,
   categories,
   walletOptions,
+  open,
+  onClose,
 }: {
   rule: CounterpartyRuleRowData;
   categories: CategoryOption[];
   walletOptions: WalletOption[];
+  open: boolean;
+  onClose: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
   const [values, setValues] = useState<RuleFormValues>(() => defaultFormValues(rule));
   const [pending, startTransition] = useTransition();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  // Reset whenever the dialog (re)opens.
+  const [lastOpen, setLastOpen] = useState(open);
+  if (open !== lastOpen) {
+    setLastOpen(open);
+    if (open) {
+      setValues(defaultFormValues(rule));
+      setConfirmingDelete(false);
+    }
+  }
 
   function handlePatch(patch: Partial<RuleFormValues>) {
     setValues((v) => ({ ...v, ...patch }));
@@ -343,13 +370,15 @@ function RuleRow({
     e.preventDefault();
     startTransition(async () => {
       await updateCounterpartyRule(rule.id, buildPayload(values, walletOptions));
-      setEditing(false);
+      onClose();
     });
   }
 
   function handleDelete() {
-    if (!confirm(`Delete this rule for "${rule.matchValue}"?`)) return;
-    startTransition(() => deleteCounterpartyRule(rule.id));
+    startTransition(async () => {
+      await deleteCounterpartyRule(rule.id);
+      onClose();
+    });
   }
 
   // A rule whose walletId hasn't been backfilled yet has "" here — mirror
@@ -358,80 +387,132 @@ function RuleRow({
   // would resolve an empty `wallet` name for it).
   const saveDisabled = pending || values.walletId === "";
 
-  if (editing) {
-    return (
-      <form onSubmit={handleSave} className="flex items-start justify-between gap-3 px-4 py-3 border-b border-border last:border-0">
-        <RuleFormFields values={values} categories={categories} walletOptions={walletOptions} onChange={handlePatch} />
-        <div className="flex gap-1 shrink-0 pt-1">
-          <Button type="submit" size="icon" className="size-7" disabled={saveDisabled} aria-label="Save rule">
-            <Check className="size-3.5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            aria-label="Cancel editing"
-            onClick={() => {
-              setValues(defaultFormValues(rule));
-              setEditing(false);
-            }}
-          >
-            <X className="size-3.5" />
-          </Button>
-        </div>
-      </form>
-    );
-  }
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{confirmingDelete ? "Delete rule?" : "Edit rule"}</DialogTitle>
+        </DialogHeader>
+        {confirmingDelete ? (
+          <div className="space-y-4">
+            <p className="text-sm text-destructive">
+              Delete this rule for &quot;{rule.matchValue}&quot;? Future matching transactions will no
+              longer be routed automatically.
+            </p>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)} autoFocus>
+                Cancel
+              </Button>
+              <Button type="button" variant="destructive" disabled={pending} onClick={handleDelete}>
+                Confirm delete
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <form onSubmit={handleSave} className="space-y-4">
+            <RuleFormFields
+              values={values}
+              categories={categories}
+              walletOptions={walletOptions}
+              onChange={handlePatch}
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="destructive"
+                className="sm:mr-auto"
+                disabled={pending}
+                onClick={() => setConfirmingDelete(true)}
+              >
+                Delete
+              </Button>
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saveDisabled}>
+                Save rule
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FlagBadge({ className, children }: { className: string; children: React.ReactNode }) {
+  return (
+    <span className={cn("inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium", className)}>
+      {children}
+    </span>
+  );
+}
+
+// Six data columns: Type | Match (+ direction) | Category | Wallet | Flags |
+// Activity. Narrower than that on mobile, columns would either overflow the
+// card or squeeze into each other — the RuleList wrapper scrolls
+// horizontally instead, mirroring category-list.tsx's ROW_GRID treatment.
+const ROW_GRID = "grid grid-cols-[6.5rem_1fr_8rem_8rem_9rem_8rem] items-center gap-3 px-4 py-3";
+
+function RuleRow({
+  rule,
+  categories,
+  walletOptions,
+}: {
+  rule: CounterpartyRuleRowData;
+  categories: CategoryOption[];
+  walletOptions: WalletOption[];
+}) {
+  const [editOpen, setEditOpen] = useState(false);
 
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border last:border-0 group/rulerow">
-      <div className="flex items-center gap-3 flex-wrap min-w-0">
+    <>
+      <button
+        type="button"
+        aria-label="Edit rule"
+        onClick={() => setEditOpen(true)}
+        className={cn(
+          ROW_GRID,
+          "w-full text-left border-b border-border last:border-0 transition-colors hover:bg-muted/20"
+        )}
+      >
         <span className="inline-flex w-fit items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
           {MATCH_TYPE_LABELS[rule.matchType]}
         </span>
-        <span className="text-sm font-medium truncate">{rule.matchValue}</span>
-        <span className="text-xs text-muted-foreground">{DIRECTION_LABELS[rule.direction]}</span>
-        <span className="text-muted-foreground text-sm">→</span>
-        <span className="text-sm">{rule.appCategoryName}</span>
-        <span className="text-xs text-muted-foreground">· {rule.wallet}</span>
-        {rule.autoRecord && (
-          <span className="inline-flex w-fit items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">
-            Auto-record
-          </span>
-        )}
-        {rule.recurring && (
-          <span className="inline-flex w-fit items-center rounded-full bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-600 dark:text-violet-400">
-            Recurring
-          </span>
-        )}
-        <span className="text-xs text-muted-foreground">
-          {rule.matchCount} match{rule.matchCount !== 1 ? "es" : ""}
-        </span>
-        <span className="text-xs text-muted-foreground">{formatLastMatched(rule.lastMatchedAt)}</span>
-      </div>
-      <div className="flex gap-1 opacity-0 group-hover/rulerow:opacity-100 transition-opacity shrink-0">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7"
-          aria-label="Edit rule"
-          onClick={() => setEditing(true)}
-        >
-          <Pencil className="size-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 text-destructive hover:text-destructive"
-          aria-label="Delete rule"
-          onClick={handleDelete}
-          disabled={pending}
-        >
-          <Trash2 className="size-4" />
-        </Button>
-      </div>
-    </div>
+
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium">{rule.matchValue}</div>
+          <div className="text-xs text-muted-foreground">{DIRECTION_LABELS[rule.direction]}</div>
+        </div>
+
+        <span className="truncate text-sm">{rule.appCategoryName}</span>
+
+        <span className="truncate text-sm text-muted-foreground">· {rule.wallet}</span>
+
+        <div className="flex flex-wrap gap-1">
+          {rule.autoRecord && (
+            <FlagBadge className="bg-blue-500/10 text-blue-600 dark:text-blue-400">Auto-record</FlagBadge>
+          )}
+          {rule.recurring && (
+            <FlagBadge className="bg-violet-500/10 text-violet-600 dark:text-violet-400">Recurring</FlagBadge>
+          )}
+        </div>
+
+        <div className="text-right text-xs text-muted-foreground">
+          <div>
+            {rule.matchCount} match{rule.matchCount !== 1 ? "es" : ""}
+          </div>
+          <div>{formatLastMatched(rule.lastMatchedAt)}</div>
+        </div>
+      </button>
+      <RuleEditDialog
+        rule={rule}
+        categories={categories}
+        walletOptions={walletOptions}
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+      />
+    </>
   );
 }
 
@@ -496,19 +577,39 @@ export function RuleList({
 
   return (
     <div className="rounded-xl border border-border overflow-hidden">
-      {rules.map((rule) => (
-        <RuleRow key={rule.id} rule={rule} categories={categories} walletOptions={walletOptions} />
-      ))}
+      <div className="overflow-x-auto">
+        <div className="min-w-[48rem]">
+          {rules.length > 0 && (
+            <div
+              className={cn(
+                ROW_GRID,
+                "border-b border-border/60 bg-muted/20 py-2 text-xs text-muted-foreground uppercase tracking-wide"
+              )}
+            >
+              <span>Type</span>
+              <span>Match</span>
+              <span>Category</span>
+              <span>Wallet</span>
+              <span>Flags</span>
+              <span className="text-right">Activity</span>
+            </div>
+          )}
 
-      {rules.length === 0 && !adding && (
-        <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-          No rules yet. Add one below.
+          {rules.map((rule) => (
+            <RuleRow key={rule.id} rule={rule} categories={categories} walletOptions={walletOptions} />
+          ))}
+
+          {rules.length === 0 && !adding && (
+            <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+              No rules yet. Add one below.
+            </div>
+          )}
+
+          {adding && <AddRuleRow categories={categories} walletOptions={walletOptions} onDone={() => setAdding(false)} />}
         </div>
-      )}
+      </div>
 
-      {adding ? (
-        <AddRuleRow categories={categories} walletOptions={walletOptions} onDone={() => setAdding(false)} />
-      ) : (
+      {!adding && (
         <div className="p-4 border-t border-border">
           <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
             <Plus className="size-5" />
