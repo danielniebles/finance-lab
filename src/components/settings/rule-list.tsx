@@ -578,7 +578,7 @@ export function RuleList({
   return (
     <div className="rounded-xl border border-border overflow-hidden">
       <div className="overflow-x-auto">
-        <div className="min-w-[48rem]">
+        <div className="min-w-3xl">
           {rules.length > 0 && (
             <div
               className={cn(
