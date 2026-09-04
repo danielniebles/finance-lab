@@ -138,7 +138,13 @@ import {
   RESOLVER_REGISTRY,
 } from "./proposals";
 import { PROPOSAL_ACTIONS } from "./actions";
-import { deduplicateHistory, collectTextBlocks, isUnbackedProposalClaim } from "./run-agent-turn";
+import {
+  deduplicateHistory,
+  toMessageParams,
+  collectTextBlocks,
+  isUnbackedProposalClaim,
+  stripLearnRuleNudge,
+} from "./run-agent-turn";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -1706,6 +1712,10 @@ describe("resolveComplexProposal", () => {
 
 // ─── deduplicateHistory ───────────────────────────────────────────────────────
 
+const EVENT_CREATED = "⟦event⟧ proposal_created id=p1";
+const EVENT_APPROVED = "⟦event⟧ proposal_approved id=p1";
+const LIVE_MESSAGE = "live message";
+
 describe("deduplicateHistory", () => {
   it("returns the history unchanged when it ends with a single user message", () => {
     const history = [
@@ -1750,6 +1760,102 @@ describe("deduplicateHistory", () => {
     const original = [...history];
     deduplicateHistory(history);
     expect(history).toEqual(original);
+  });
+
+  // Event rows are the system's record of what actually happened, and a run of
+  // them typically sits right before the live user message
+  // (proposal_created → approved → rule_offer → next bank notification).
+  // Collapsing them away would blind the model exactly where it matters.
+  it("preserves event turns while collapsing trailing user messages", () => {
+    const created = { role: "event" as const, content: EVENT_CREATED };
+    const approved = { role: "event" as const, content: EVENT_APPROVED };
+    const live = { role: "user" as const, content: LIVE_MESSAGE };
+    const assistant = { role: "assistant" as const, content: "drafted" };
+
+    const history = [
+      assistant,
+      created,
+      { role: "user" as const, content: "orphan" },
+      approved,
+      live,
+    ];
+
+    expect(deduplicateHistory(history)).toEqual([assistant, created, approved, live]);
+  });
+
+  it("keeps a lone user turn surrounded by events untouched", () => {
+    const history = [
+      { role: "event" as const, content: "⟦event⟧ proposal_dismissed id=p1" },
+      { role: "user" as const, content: LIVE_MESSAGE },
+    ];
+    expect(deduplicateHistory(history)).toEqual(history);
+  });
+});
+
+// ─── toMessageParams ──────────────────────────────────────────────────────────
+// Events are observations given TO the model, so they belong on the user side —
+// "assistant" is precisely the mislabel the event log exists to fix. Merging
+// (rather than emitting consecutive user messages) keeps the transcript
+// strictly alternating.
+
+describe("toMessageParams", () => {
+  it("folds event turns into the following user message", () => {
+    expect(
+      toMessageParams([
+        { role: "assistant", content: "drafted" },
+        { role: "event", content: EVENT_CREATED },
+        { role: "event", content: EVENT_APPROVED },
+        { role: "user", content: "Compra aprobada por $11.199" },
+      ]),
+    ).toEqual([
+      { role: "assistant", content: "drafted" },
+      {
+        role: "user",
+        content:
+          "⟦event⟧ proposal_created id=p1\n\n⟦event⟧ proposal_approved id=p1\n\nCompra aprobada por $11.199",
+      },
+    ]);
+  });
+
+  it("never emits an event turn under the assistant role", () => {
+    const result = toMessageParams([{ role: "event", content: EVENT_CREATED }]);
+    expect(result).toEqual([{ role: "user", content: EVENT_CREATED }]);
+  });
+
+  it("produces a strictly alternating transcript", () => {
+    const result = toMessageParams([
+      { role: "user", content: "a" },
+      { role: "assistant", content: "b" },
+      { role: "event", content: "e1" },
+      { role: "user", content: "c" },
+    ]);
+    expect(result.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+  });
+
+  it("preserves a content-block array when merging (image turns)", () => {
+    const imageBlocks = [
+      { type: "image" as const, source: { type: "base64" as const, media_type: "image/jpeg" as const, data: "xx" } },
+      { type: "text" as const, text: "Extract this." },
+    ];
+
+    const result = toMessageParams([
+      { role: "event", content: EVENT_APPROVED },
+      { role: "user", content: imageBlocks },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toEqual([
+      { type: "text", text: EVENT_APPROVED },
+      ...imageBlocks,
+    ]);
+  });
+
+  it("leaves an event-free history unchanged", () => {
+    const turns = [
+      { role: "user" as const, content: "hi" },
+      { role: "assistant" as const, content: "hello" },
+    ];
+    expect(toMessageParams(turns)).toEqual(turns);
   });
 });
 
@@ -1840,6 +1946,64 @@ describe("isUnbackedProposalClaim", () => {
         0,
       ),
     ).toBe(false);
+  });
+});
+
+// ─── stripLearnRuleNudge ──────────────────────────────────────────────────────
+// Regression guard for the 2026-09-01 production incident: a DRAFTED card (not
+// an approved one) carried a model-paraphrased "💡 Want me to remember this?"
+// offer. execute-proposal.ts is the only legitimate emitter and it fires only
+// after approval — the model had read the system-authored nudge back out of
+// ChatMessage history as its own words.
+
+describe("stripLearnRuleNudge", () => {
+  it("drops a nudge paragraph and keeps the drafted-card text", () => {
+    const text = [
+      "Drafted for your approval — $208,581 at GOOGLE *Workspace_lila → Bills & Utilities, card *8169.",
+      "💡 Want me to remember this? I can create a rule for GOOGLE *Workspace_lila so future charges are auto-routed to Bills & Utilities → card *8169.",
+    ].join("\n\n");
+
+    expect(stripLearnRuleNudge(text)).toBe(
+      "Drafted for your approval — $208,581 at GOOGLE *Workspace_lila → Bills & Utilities, card *8169.",
+    );
+  });
+
+  it("cuts only the offer sentence when it shares a paragraph with real content", () => {
+    const text =
+      "Drafted for your approval — $11.199 at UBER*RIDES. 💡 Want me to remember this? I can create a rule.";
+
+    expect(stripLearnRuleNudge(text)).toBe(
+      "Drafted for your approval — $11.199 at UBER*RIDES.",
+    );
+  });
+
+  it("strips the canonical 'tell me yes, remember it' offer wording", () => {
+    const text =
+      'The next MERCHANT match for "UBER*RIDES" would auto-record as Transport → Debit. Tell me "yes, remember it" if you want to create the rule.';
+
+    expect(stripLearnRuleNudge(text)).toBe(
+      'The next MERCHANT match for "UBER*RIDES" would auto-record as Transport → Debit.',
+    );
+  });
+
+  it("leaves an ordinary reply untouched", () => {
+    const text = "Your savings rate this month is 22%.";
+    expect(stripLearnRuleNudge(text)).toBe(text);
+  });
+
+  it("does not strip the user's own affirmative being acknowledged", () => {
+    const text = 'Got it — creating that rule now, since you said yes, remember it.';
+    expect(stripLearnRuleNudge(text)).toBe(text);
+  });
+
+  it("returns an empty string when the reply was nothing but the nudge", () => {
+    expect(
+      stripLearnRuleNudge("💡 Want me to remember this? I can create a rule for UBER*RIDES."),
+    ).toBe("");
+  });
+
+  it("passes an empty input through unchanged", () => {
+    expect(stripLearnRuleNudge("")).toBe("");
   });
 });
 

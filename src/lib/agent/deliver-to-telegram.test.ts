@@ -31,12 +31,17 @@ vi.mock("@/lib/telegram/api", () => ({
 }));
 
 vi.mock("@/lib/telegram/render", () => ({
-  toTelegramMessage: vi.fn(),
+  toTelegramMessage: vi.fn().mockReturnValue({ text: "card", reply_markup: {} }),
 }));
 
 import { db } from "@/lib/db";
 import { saveMessage } from "@/lib/actions/chat";
-import { runTurnAndDeliverToTelegram, runImageTurnAndDeliverToTelegram } from "./deliver-to-telegram";
+import { EVENT_ROLE } from "./events";
+import {
+  runTurnAndDeliverToTelegram,
+  runImageTurnAndDeliverToTelegram,
+  saveAssistantTurn,
+} from "./deliver-to-telegram";
 
 describe("runTurnAndDeliverToTelegram — typing indicator", () => {
   beforeEach(() => {
@@ -202,5 +207,131 @@ describe("runImageTurnAndDeliverToTelegram", () => {
     await runImageTurnAndDeliverToTelegram(IMAGE);
 
     expect(sendMessageMock).toHaveBeenCalledWith("12345", "Veo 3 transacciones.");
+  });
+});
+
+// ─── Assistant turn persistence (agent event log) ────────────────────────────
+// A proposal used to be recorded by appending "[Proposed: … — awaiting your
+// approval]" into the ASSISTANT text. The model read that back as its own
+// words and learned to imitate it — emitting the prose with no tool call
+// behind it (production 2026-09-02). The record is now an event row: same
+// ADR-027 guarantee that a text-less proposal turn still threads into history,
+// correct authorship.
+
+describe("saveAssistantTurn", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const PROPOSAL = {
+    id: "p1",
+    action: "propose_add_transaction",
+    title: "Add expense: Debit — $11.199",
+  };
+
+  it("never writes proposal prose into the assistant record", async () => {
+    await saveAssistantTurn("Drafted for your approval.", [PROPOSAL], "telegram");
+
+    const assistantWrites = vi
+      .mocked(saveMessage)
+      .mock.calls.filter((call) => call[0] === "assistant");
+    expect(assistantWrites).toEqual([["assistant", "Drafted for your approval.", "telegram"]]);
+    for (const call of vi.mocked(saveMessage).mock.calls) {
+      expect(String(call[1])).not.toContain("[Proposed:");
+    }
+  });
+
+  it("records each proposal as an event row", async () => {
+    await saveAssistantTurn(undefined, [PROPOSAL], "telegram");
+
+    expect(saveMessage).toHaveBeenCalledWith(
+      EVENT_ROLE,
+      expect.stringContaining("proposal_created id=p1 action=propose_add_transaction"),
+      "telegram",
+    );
+  });
+
+  it("still persists a turn whose only output is a proposal (ADR-027)", async () => {
+    await saveAssistantTurn(undefined, [PROPOSAL], "telegram");
+
+    expect(saveMessage).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(saveMessage).mock.calls[0][0]).toBe(EVENT_ROLE);
+  });
+
+  it("records auto-recorded transactions as events too", async () => {
+    await saveAssistantTurn("Recorded.", [], "telegram", [
+      { proposalId: "p9", transactionId: "t9" },
+    ]);
+
+    expect(saveMessage).toHaveBeenCalledWith(
+      EVENT_ROLE,
+      expect.stringContaining("auto_recorded proposal=p9 txn=t9"),
+      "telegram",
+    );
+  });
+
+  it("writes nothing when there is no text, no proposal and no auto-record", async () => {
+    await saveAssistantTurn(undefined, [], "telegram");
+
+    expect(saveMessage).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Event replay ────────────────────────────────────────────────────────────
+
+describe("runTurnAndDeliverToTelegram — event replay", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    runAgentTurnMock.mockResolvedValue({ text: undefined, proposals: [] });
+    process.env.TELEGRAM_ALLOWED_CHAT_ID = "12345";
+  });
+
+  it("passes event rows through to the agent turn with their event role", async () => {
+    vi.mocked(db.chatMessage.findMany).mockResolvedValueOnce([
+      { role: EVENT_ROLE, content: "⟦event⟧ proposal_approved id=p1", createdAt: new Date() },
+    ] as never);
+
+    await runTurnAndDeliverToTelegram("Compra aprobada", { channel: "shortcut" });
+
+    expect(runAgentTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          { role: EVENT_ROLE, content: "⟦event⟧ proposal_approved id=p1" },
+          { role: "user", content: "Compra aprobada" },
+        ],
+      }),
+    );
+  });
+
+  // Replaying the model's own phantom prose back as context is precisely the
+  // defect the event log fixes — the audit row must never re-enter the window.
+  it("never replays an unbacked_claim row into the agent's context", async () => {
+    vi.mocked(db.chatMessage.findMany).mockResolvedValueOnce([
+      {
+        role: EVENT_ROLE,
+        content: '⟦event⟧ unbacked_claim text="Drafted for your approval — $11.199"',
+        createdAt: new Date(),
+      },
+      { role: EVENT_ROLE, content: "⟦event⟧ proposal_approved id=p1", createdAt: new Date() },
+    ] as never);
+
+    await runTurnAndDeliverToTelegram("Compra aprobada", { channel: "shortcut" });
+
+    const { messages } = runAgentTurnMock.mock.calls[0][0];
+    expect(JSON.stringify(messages)).not.toContain("unbacked_claim");
+    expect(messages).toHaveLength(2);
+  });
+
+  it("forces the first tool call for the shortcut channel only", async () => {
+    await runTurnAndDeliverToTelegram("Compra aprobada", { channel: "shortcut" });
+    expect(runAgentTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({ forceInitialToolUse: true }),
+    );
+
+    runAgentTurnMock.mockClear();
+    await runTurnAndDeliverToTelegram("hola", { channel: "telegram" });
+    expect(runAgentTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({ forceInitialToolUse: false }),
+    );
   });
 });

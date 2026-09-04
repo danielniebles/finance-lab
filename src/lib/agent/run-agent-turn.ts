@@ -22,6 +22,7 @@ import { TOOLS } from "./tools";
 import { READ_TOOLS, runReadTool } from "./read-tools";
 import { buildProposalTitle, buildProposalFields } from "./formatting";
 import { resolveComplexProposal } from "./proposals";
+import { logEvent, type ChatRole } from "./events";
 
 const anthropic = new Anthropic();
 
@@ -179,22 +180,70 @@ async function processToolUseBlocks(
   return { toolResults, lastTool };
 }
 
-export function deduplicateHistory<T extends { role: "user" | "assistant" }>(
-  inputMessages: T[],
-): T[] {
-  let history = [...inputMessages];
-  let trailingUsers = 0;
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i].role === "user") trailingUsers++;
-    else break;
+/**
+ * Guards against orphaned consecutive user messages: keeps the most recent
+ * one and drops the earlier ones in the same trailing run.
+ *
+ * Event turns in that run are always preserved — they are the system's record
+ * of what happened (see events.ts), and a run of them typically sits right
+ * before the live user message (proposal_created → approved → rule_offer →
+ * next bank notification). Dropping them would blind the model to reality at
+ * exactly the moment it matters most.
+ */
+export function deduplicateHistory<T extends { role: ChatRole }>(inputMessages: T[]): T[] {
+  const history = [...inputMessages];
+
+  // Walk back over the trailing non-assistant run.
+  let runStart = history.length;
+  while (runStart > 0 && history[runStart - 1].role !== "assistant") runStart--;
+
+  const tail = history.slice(runStart);
+  const userTurns = tail.filter((turn) => turn.role === "user");
+  if (userTurns.length <= 1) return history;
+
+  const liveUserTurn = userTurns[userTurns.length - 1];
+  const kept = tail.filter((turn) => turn.role !== "user" || turn === liveUserTurn);
+  return [...history.slice(0, runStart), ...kept];
+}
+
+/** Joins two message contents, preserving block arrays (e.g. an image turn). */
+function joinContent(
+  left: MessageParam["content"],
+  right: MessageParam["content"],
+): MessageParam["content"] {
+  if (typeof left === "string" && typeof right === "string") {
+    return `${left}\n\n${right}`;
   }
-  if (trailingUsers > 1) {
-    history = [
-      ...history.slice(0, history.length - trailingUsers),
-      history[history.length - 1],
-    ];
+  const toBlocks = (content: MessageParam["content"]) =>
+    typeof content === "string" ? [{ type: "text" as const, text: content }] : content;
+  return [...toBlocks(left), ...toBlocks(right)];
+}
+
+/**
+ * Maps history turns onto the Anthropic message list.
+ *
+ * Event turns are folded into the adjacent user turn rather than sent as
+ * messages of their own: an event is an observation given TO the model, so it
+ * belongs on the user side — `assistant` is precisely the mislabel this whole
+ * mechanism exists to fix. Merging (rather than emitting consecutive user
+ * messages) also keeps the transcript strictly alternating.
+ */
+export function toMessageParams(
+  turns: { role: ChatRole; content: MessageParam["content"] }[],
+): MessageParam[] {
+  const messages: MessageParam[] = [];
+
+  for (const turn of turns) {
+    const role = turn.role === "assistant" ? "assistant" : "user";
+    const previous = messages[messages.length - 1];
+    if (previous && previous.role === role && role === "user") {
+      previous.content = joinContent(previous.content, turn.content);
+      continue;
+    }
+    messages.push({ role, content: turn.content });
   }
-  return history;
+
+  return messages;
 }
 
 // A model turn can end on plain text (stop_reason "end_turn", no tool_use
@@ -242,6 +291,52 @@ export function isUnbackedProposalClaim(text: string, actionsTakenCount: number)
   );
 }
 
+// ─── Learn-rule nudge stripping ──────────────────────────────────────────────
+// execute-proposal.ts's buildLearnRuleNudge is the ONLY legitimate emitter of
+// the "💡 Want me to remember this?" offer, and it fires strictly AFTER the
+// user approves a transaction. Since b664294 that text is persisted with role
+// "assistant" (telegram/route.ts, so a later "yes" has context to read) — and
+// ChatMessage has no provenance column, so the next turn replays it to the
+// model as its OWN words. The model then paraphrases it into the DRAFT reply,
+// before any approval exists. Observed in production 2026-09-01: a drafted
+// card carried "💡 Want me to remember this? I can create a rule for
+// GOOGLE *Workspace_lila…" — wording that is nowhere in buildLearnRuleNudge.
+//
+// Two real consequences, not just noise: the user gets the same offer twice
+// (once pre-approval, once post-approval), and a "yes" to the premature copy
+// would create a CounterpartyRule for a transaction that was never approved
+// (that card was in fact dismissed).
+//
+// prompt.ts now forbids writing the nudge; this strips it as the mechanical
+// backstop. The genuine nudge never flows through here — it is sent directly
+// from the Telegram callback handler — so nothing legitimate is at risk.
+// Matches only the OFFER form, never a user's own "yes, remember it" being
+// quoted back in an acknowledgement.
+const MODEL_NUDGE_RE = /want me to remember this|tell me ["“']?yes,? remember it/i;
+
+/**
+ * Cuts the offer out of one paragraph. Prefers trimming from the start of the
+ * sentence carrying it (usually a "💡 " lead-in) rather than dropping the
+ * whole paragraph, which may also hold the legitimate drafted-card summary.
+ */
+function stripNudgeFromParagraph(paragraph: string): string {
+  const match = MODEL_NUDGE_RE.exec(paragraph);
+  if (!match) return paragraph;
+  const head = paragraph.slice(0, match.index);
+  const cutAt = Math.max(head.lastIndexOf("💡"), head.lastIndexOf("\n"), head.lastIndexOf(". ") + 1);
+  return cutAt > 0 ? paragraph.slice(0, cutAt).trim() : "";
+}
+
+export function stripLearnRuleNudge(text: string): string {
+  if (!text) return text;
+  return text
+    .split(/\n{2,}/)
+    .map(stripNudgeFromParagraph)
+    .filter((paragraph) => paragraph.length > 0)
+    .join("\n\n")
+    .trim();
+}
+
 export function collectTextBlocks(
   blocks: Anthropic.Messages.ContentBlock[],
   onTextDelta?: (delta: string) => void,
@@ -256,15 +351,89 @@ export function collectTextBlocks(
   return text;
 }
 
+// ─── Tool-use loop ───────────────────────────────────────────────────────────
+
+type ToolLoopArgs = {
+  systemPrompt: string;
+  /** Mutated in place as the loop appends assistant/tool_result turns. */
+  messages: MessageParam[];
+  channel: string;
+  proposals: ProposalDescriptor[];
+  autoRecorded: AutoRecordedNotice[];
+  onTextDelta?: (delta: string) => void;
+  /**
+   * Sends `tool_choice: {type:"any"}` on the FIRST model call only, making a
+   * tool call mandatory instead of merely encouraged.
+   *
+   * Why the first call only: forcing it on every iteration makes end_turn
+   * unreachable and the loop never terminates. One forced call is enough —
+   * it removes the specific failure mode where the model answers a machine-
+   * forwarded bank notification with prose alone (see the unbacked-claim
+   * backstop below), while leaving it free to end the turn normally after
+   * whatever tool it picks.
+   *
+   * Only safe for inputs whose turn is definitionally a tool call. A
+   * forwarded bank notification qualifies: prompt.ts already states such a
+   * message is self-contained and must produce exactly one card, with the
+   * category edited on the card rather than asked about. Do NOT set this for
+   * free-form chat, where "thanks" or a follow-up question would be forced
+   * into a spurious tool call.
+   */
+  forceInitialToolUse?: boolean;
+};
+
+async function runToolLoop(args: ToolLoopArgs): Promise<{ text: string; lastTool: string | null }> {
+  const { systemPrompt, messages, channel, proposals, autoRecorded, onTextDelta } = args;
+  let text = "";
+  let lastTool: string | null = null;
+  let iteration = 0;
+
+  while (true) {
+    const forceToolUse = args.forceInitialToolUse === true && iteration === 0;
+    iteration++;
+
+    const res = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 4096,
+      system: systemPrompt,
+      tools: TOOLS,
+      ...(forceToolUse ? { tool_choice: { type: "any" as const } } : {}),
+      messages,
+    });
+
+    if (res.stop_reason === "tool_use") {
+      const { toolResults, lastTool: lt } = await processToolUseBlocks(
+        res.content,
+        channel,
+        proposals,
+        autoRecorded,
+      );
+      lastTool = lt ?? lastTool;
+      messages.push({ role: "assistant", content: res.content });
+      messages.push({ role: "user", content: toolResults });
+      continue;
+    }
+
+    // end_turn — collect text blocks
+    text += collectTextBlocks(res.content, onTextDelta);
+    return { text, lastTool };
+  }
+}
+
 // ─── Channel-agnostic agent turn ─────────────────────────────────────────────
 
+const UNBACKED_CLAIM_MESSAGE =
+  "Something went wrong drafting that — nothing was recorded. Please try again.";
+
 export async function runAgentTurn(args: {
-  messages: { role: "user" | "assistant"; content: MessageParam["content"] }[];
+  messages: { role: ChatRole; content: MessageParam["content"] }[];
   context?: { module?: string; focus?: { month: number; year: number }; entityId?: string; route?: string };
   onTextDelta?: (delta: string) => void;
   channel?: "web" | "telegram";
+  /** See ToolLoopArgs.forceInitialToolUse — set for machine-forwarded input only. */
+  forceInitialToolUse?: boolean;
 }): Promise<AgentTurnResult> {
-  const { messages: inputMessages, context, onTextDelta, channel = "web" } = args;
+  const { messages: inputMessages, context, onTextDelta, channel = "web", forceInitialToolUse } = args;
 
   const now = new Date();
   const systemPrompt = buildSystemPrompt({ now, context });
@@ -277,10 +446,10 @@ export async function runAgentTurn(args: {
   // `.role`, so it's unaffected by the widened content type.
   const history = deduplicateHistory(inputMessages);
 
-  const messages: MessageParam[] = history.map((m) => ({
-    role: m.role as "user" | "assistant",
-    content: m.content,
-  }));
+  // Rebuilt (not reused) per attempt: runToolLoop mutates its array, so a
+  // retry must start from clean history rather than from a transcript that
+  // already contains the failed attempt's phantom assistant turn.
+  const buildMessages = (): MessageParam[] => toMessageParams(history);
 
   const proposals: ProposalDescriptor[] = [];
   const autoRecorded: AutoRecordedNotice[] = [];
@@ -288,32 +457,83 @@ export async function runAgentTurn(args: {
   let lastTool: string | null = null;
 
   try {
-    // Tool-use loop
-    while (true) {
-      const res = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 4096,
-        system: systemPrompt,
-        tools: TOOLS,
-        messages,
+    const attempt = await runToolLoop({
+      systemPrompt,
+      messages: buildMessages(),
+      channel,
+      proposals,
+      autoRecorded,
+      onTextDelta,
+      forceInitialToolUse,
+    });
+    fullText = attempt.text;
+    lastTool = attempt.lastTool;
+
+    // Backstop against a phantom "success" reply (see isUnbackedProposalClaim
+    // above): if the model's final text claims a drafted/proposed action but
+    // this turn produced zero real proposals or auto-records, the claim is
+    // false — nothing was persisted.
+    if (isUnbackedProposalClaim(fullText, proposals.length + autoRecorded.length)) {
+      // Captured before the retry overwrites it — this string is the whole
+      // point of the audit row below, and it exists nowhere else.
+      const phantomText = fullText;
+      console.error("[run-agent-turn] Model claimed a drafted proposal with no backing tool call:", {
+        fullText,
+        historyLength: history.length,
+        lastTool,
       });
 
-      if (res.stop_reason === "tool_use") {
-        const { toolResults, lastTool: lt } = await processToolUseBlocks(
-          res.content,
+      // Retry once with the tool call forced, instead of surfacing a failure
+      // the user often cannot act on: ingested bank notifications arrive from
+      // an iPhone Shortcut, so "please try again" asks for a re-forward the
+      // user has no easy way to perform. Both arrays are empty by definition
+      // here (actionsTakenCount === 0), so reusing them is safe.
+      //
+      // Skipped when streaming (onTextDelta, i.e. the web chat): the phantom
+      // text has already been written to the client, and a second pass would
+      // stream a contradictory reply on top of it. Web keeps today's behavior;
+      // Telegram and ingest — the channels where this actually fires — are
+      // buffered and get the retry.
+      if (!onTextDelta) {
+        const retry = await runToolLoop({
+          systemPrompt,
+          messages: buildMessages(),
           channel,
           proposals,
           autoRecorded,
-        );
-        lastTool = lt ?? lastTool;
-        messages.push({ role: "assistant", content: res.content });
-        messages.push({ role: "user", content: toolResults });
-        continue;
+          forceInitialToolUse: true,
+        });
+        fullText = retry.text;
+        lastTool = retry.lastTool ?? lastTool;
       }
 
-      // end_turn — collect text blocks
-      fullText += collectTextBlocks(res.content, onTextDelta);
-      break;
+      // Still unbacked after the retry (or streaming, where no retry ran):
+      // replace the claim so neither the user nor the persisted ChatMessage
+      // history ever records an action that didn't happen.
+      const recovered = !isUnbackedProposalClaim(
+        fullText,
+        proposals.length + autoRecorded.length,
+      );
+
+      // Persist the anomaly, phantom text included. Vercel Hobby keeps runtime
+      // logs ~1h while detection latency here is hours (the user finds out
+      // when they next open Telegram) — an observability channel that expires
+      // before anyone looks is not observability. The 2026-09-02 phantom text
+      // is unrecoverable for exactly that reason. Never replayed to the model
+      // (see NON_REPLAYED_EVENTS in events.ts).
+      await logEvent(
+        "unbacked_claim",
+        { retried: !onTextDelta, recovered, lastTool, text: phantomText },
+        channel,
+      );
+
+      if (!recovered) {
+        console.error("[run-agent-turn] Unbacked proposal claim survived the forced-tool retry:", {
+          fullText,
+          retried: !onTextDelta,
+        });
+        fullText = UNBACKED_CLAIM_MESSAGE;
+      }
     }
   } catch (err) {
     const errorMsg = "Something went wrong. Please try again.";
@@ -328,19 +548,5 @@ export async function runAgentTurn(args: {
     });
   }
 
-  // Backstop against a phantom "success" reply (see isUnbackedProposalClaim
-  // above): if the model's final text claims a drafted/proposed action but
-  // this turn produced zero real proposals or auto-records, the claim is
-  // false — replace it so neither the user nor the persisted ChatMessage
-  // history ever records an action that didn't happen.
-  if (isUnbackedProposalClaim(fullText, proposals.length + autoRecorded.length)) {
-    console.error("[run-agent-turn] Model claimed a drafted proposal with no backing tool call:", {
-      fullText,
-      historyLength: history.length,
-      lastTool,
-    });
-    fullText = "Something went wrong drafting that — nothing was recorded. Please try again.";
-  }
-
-  return { text: fullText, proposals, autoRecorded };
+  return { text: stripLearnRuleNudge(fullText), proposals, autoRecorded };
 }

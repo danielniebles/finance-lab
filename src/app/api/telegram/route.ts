@@ -7,7 +7,6 @@
 
 import { after, NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { saveMessage } from "@/lib/actions/chat";
 import { runAgentTurn } from "@/lib/agent/run-agent-turn";
 import {
   runTurnAndDeliverToTelegram,
@@ -15,6 +14,7 @@ import {
   saveAssistantTurn,
 } from "@/lib/agent/deliver-to-telegram";
 import { resolveProposal } from "@/lib/agent/execute-proposal";
+import { logEvent } from "@/lib/agent/events";
 import { applyProposalEdit } from "@/lib/agent/apply-proposal-edit";
 import {
   toggleBatchItem,
@@ -414,18 +414,30 @@ async function handleResolveCallback(
   const resolvedText = choiceId === "approve" ? approvedMessageText(result.message) : "❌ Dismissed";
   await editMessageText(chatId, messageId, resolvedText, { reply_markup: undefined });
 
+  // A callback approval/dismissal runs no agent turn at all, so nothing else
+  // records the outcome. Before the event log, that meant history showed a
+  // proposal "awaiting your approval" that was never resolved — the model
+  // could not tell an approved card from a dismissed one, and the 2026-09-01
+  // dismissal left no trace whatsoever.
+  if (result.ok) {
+    await logEvent(
+      choiceId === "approve" ? "proposal_approved" : "proposal_dismissed",
+      { id: proposalId },
+      "telegram",
+    );
+  }
+
   if (choiceId === "approve" && result.ok) {
     await sendUndoButtonIfReversible(chatId, proposalId);
     if (result.learnRuleNudge) {
       await sendMessage(chatId, result.learnRuleNudge);
-      // Callback-query approvals never go through runTurnAndDeliverToTelegram
-      // (no agent turn runs here at all), so nothing above persists this to
-      // ChatMessage the way ADR-027 guarantees for a normal text-message
-      // turn. Without this, the nudge is invisible to the model on the next
-      // turn — the model sees the user's "yes" with zero context for what
-      // it's agreeing to. Save it as this turn's assistant record so a
-      // later "yes, remember it" has something to read.
-      await saveMessage("assistant", result.learnRuleNudge, "telegram");
+      // The nudge text goes to the USER; the model gets the structured offer
+      // as an event. It used to be saved as an "assistant" row so a later
+      // "yes" had context — but the model then read it back as its own words
+      // and started emitting the offer itself at draft time, before any
+      // approval existed (confirmed 2026-09-01). Same context, correct
+      // authorship.
+      await logEvent("rule_offer", { ...result.learnRuleOffer }, "telegram");
     }
   }
 }

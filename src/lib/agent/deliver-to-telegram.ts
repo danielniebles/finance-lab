@@ -17,33 +17,43 @@ import { runAgentTurn } from "@/lib/agent/run-agent-turn";
 import { sendMessage, sendChatAction } from "@/lib/telegram/api";
 import { toTelegramMessage, toTelegramAutoRecordMessage, toTelegramBatchMessage } from "@/lib/telegram/render";
 import { formatCOP } from "@/lib/format";
+import { logEvent, isReplayableEventContent, EVENT_ROLE, type ChatRole } from "@/lib/agent/events";
 import type { AgentTurnResult, AutoRecordedNotice, ProposalDescriptor } from "@/lib/agent/types";
 
-// A turn whose only output is a proposal (no text) was previously dropped from
-// ChatMessage entirely, so the model couldn't see what it had already proposed
-// and re-asked / drifted next turn. Always persist a combined record (ADR-027).
-
-function buildAssistantRecord(
-  text: string | undefined,
-  proposals: Pick<ProposalDescriptor, "title">[],
-): string {
-  const proposalSummary = proposals
-    .map((p) => `[Proposed: ${p.title} — awaiting your approval]`)
-    .join("\n");
-  return [text, proposalSummary].filter(Boolean).join("\n\n");
-}
-
+// A turn whose only output is a proposal (no text) must still land in history,
+// or the model can't see what it already proposed and re-asks / drifts next
+// turn (ADR-027). That used to be done by appending a
+// "[Proposed: … — awaiting your approval]" line into the ASSISTANT text —
+// which the model then read back as its own words and learned to imitate,
+// prose and all, with no tool call behind it. The proposal record is now an
+// event row instead (see events.ts): same guarantee, correct authorship.
+//
 // Exported so the Telegram callback-query path (undo) can persist its own
-// agent turn through the identical combined text+proposal-summary record,
-// without duplicating the history-threading logic (ADR-027).
+// agent turn through the identical logic, without duplicating it.
 export async function saveAssistantTurn(
   text: string | undefined,
-  proposals: Pick<ProposalDescriptor, "title">[],
+  proposals: Pick<ProposalDescriptor, "id" | "action" | "title">[],
   channel: "web" | "telegram" | "shortcut",
+  autoRecorded: AutoRecordedNotice[] = [],
 ): Promise<void> {
-  const assistantRecord = buildAssistantRecord(text, proposals);
-  if (assistantRecord) {
-    await saveMessage("assistant", assistantRecord, channel);
+  if (text) {
+    await saveMessage("assistant", text, channel);
+  }
+
+  for (const proposal of proposals) {
+    await logEvent(
+      "proposal_created",
+      { id: proposal.id, action: proposal.action, title: proposal.title },
+      channel,
+    );
+  }
+
+  for (const notice of autoRecorded) {
+    await logEvent(
+      "auto_recorded",
+      { proposal: notice.proposalId, txn: notice.transactionId },
+      channel,
+    );
   }
 }
 
@@ -53,7 +63,7 @@ export async function saveAssistantTurn(
 // blinding the agent to anything recent once the conversation exceeds 20
 // messages (ADR-029). History rows are always plain strings — only the
 // incoming message (appended by the caller) may carry a content-block array.
-async function loadHistory(): Promise<{ role: "user" | "assistant"; content: string }[]> {
+async function loadHistory(): Promise<{ role: ChatRole; content: string }[]> {
   const historyRows = (
     await db.chatMessage.findMany({
       orderBy: { createdAt: "desc" },
@@ -61,15 +71,19 @@ async function loadHistory(): Promise<{ role: "user" | "assistant"; content: str
     })
   ).reverse();
 
-  return historyRows.map((m) => ({
-    role: m.role as "user" | "assistant",
-    content: m.content,
-  }));
+  return historyRows
+    // `unbacked_claim` rows quote the model's own phantom prose — kept for the
+    // audit trail, never fed back as context (that is the defect, not the fix).
+    .filter((m) => m.role !== EVENT_ROLE || isReplayableEventContent(m.content))
+    .map((m) => ({
+      role: m.role as ChatRole,
+      content: m.content,
+    }));
 }
 
 async function loadHistoryWithIncoming(
   text: string,
-): Promise<{ role: "user" | "assistant"; content: MessageParam["content"] }[]> {
+): Promise<{ role: ChatRole; content: MessageParam["content"] }[]> {
   const history = await loadHistory();
   return [...history, { role: "user" as const, content: text }];
 }
@@ -116,7 +130,7 @@ async function deliverResultToTelegram(
   channel: "web" | "telegram" | "shortcut",
   result: AgentTurnResult,
 ): Promise<void> {
-  await saveAssistantTurn(result.text, result.proposals, channel);
+  await saveAssistantTurn(result.text, result.proposals, channel, result.autoRecorded ?? []);
 
   if (result.text) {
     await sendMessage(chatId, result.text);
@@ -168,10 +182,20 @@ export async function runTurnAndDeliverToTelegram(
 
   // Run agent turn (buffered — no streaming callback). Delivery is always
   // Telegram regardless of entry point, so this is always tagged "telegram".
+  //
+  // forceInitialToolUse is scoped to "shortcut": that channel only ever
+  // carries a machine-forwarded bank notification, which prompt.ts already
+  // defines as self-contained and required to produce exactly one card — so
+  // a text-only reply is never a valid outcome there, and forcing the first
+  // tool call removes the failure mode where the model answers with prose
+  // alone (production 2026-09-02: two UBER*RIDES notifications in a row).
+  // NOT applied to "telegram", where the user types free-form messages and a
+  // question or a plain answer is a legitimate turn.
   const result = await runAgentTurn({
     messages: history,
     context: undefined,
     channel: "telegram",
+    forceInitialToolUse: channel === "shortcut",
   });
 
   await deliverResultToTelegram(chatId, channel, result);

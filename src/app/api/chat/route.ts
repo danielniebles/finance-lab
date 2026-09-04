@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { saveMessage } from "@/lib/actions/chat";
 import { runAgentTurn } from "@/lib/agent/run-agent-turn";
+import { isReplayableEventContent, EVENT_ROLE, type ChatRole } from "@/lib/agent/events";
+import { saveAssistantTurn } from "@/lib/agent/deliver-to-telegram";
 import type { ChatModuleContext } from "@/components/chat/chat-provider";
 
 export async function POST(req: NextRequest) {
@@ -20,10 +22,16 @@ export async function POST(req: NextRequest) {
     db.chatMessage.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
   ]);
 
-  const history = historyRows.reverse().map((m) => ({
-    role: m.role as "user" | "assistant",
-    content: m.content,
-  }));
+  const history = historyRows
+    .reverse()
+    // Event rows are the system's record of what actually happened; they are
+    // replayed as observations, not as the model's own speech (agent/events.ts).
+    // `unbacked_claim` rows quote phantom prose and are never replayed.
+    .filter((m) => m.role !== EVENT_ROLE || isReplayableEventContent(m.content))
+    .map((m) => ({
+      role: m.role as ChatRole,
+      content: m.content,
+    }));
 
   const encoder = new TextEncoder();
 
@@ -59,16 +67,13 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        // Persist a single coherent assistant turn (text + proposal summary),
-        // so a turn that only proposed (no text) still threads into the
-        // shared history the next Telegram/web turn reads back.
-        const proposalSummary = result.proposals
-          .map((p) => `[Proposed: ${p.title} — awaiting your approval]`)
-          .join("\n");
-        const assistantRecord = [result.text, proposalSummary].filter(Boolean).join("\n\n");
-        if (assistantRecord) {
-          await saveMessage("assistant", assistantRecord);
-        }
+        // Persist the assistant text plus an event row per proposal, so a turn
+        // that only proposed (no text) still threads into the shared history
+        // the next Telegram/web turn reads back. Shared with the Telegram path
+        // rather than reimplemented — this route used to build its own
+        // "[Proposed: …]" summary string, a second copy of the same
+        // system-text-as-assistant-speech defect (agent/events.ts).
+        await saveAssistantTurn(result.text, result.proposals, "web", result.autoRecorded ?? []);
 
         controller.close();
       } catch (err) {

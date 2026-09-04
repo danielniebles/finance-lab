@@ -22,6 +22,23 @@ export type ResolveProposalResult = {
    * transaction with no extractable counterparty).
    */
   learnRuleNudge?: string;
+  /**
+   * The same offer in structured form, for the `rule_offer` event row. The
+   * nudge TEXT is for the user; the model reconstructs a
+   * propose_create_counterparty_rule call from these fields on a later "yes"
+   * (see events.ts — it used to read the nudge text back out of history as if
+   * it had written it, which is how it learned to emit the offer itself at
+   * draft time). Always set exactly when `learnRuleNudge` is.
+   */
+  learnRuleOffer?: LearnRuleOffer;
+};
+
+export type LearnRuleOffer = {
+  matchType: string;
+  matchValue: string;
+  category: string;
+  wallet: string;
+  tags: string;
 };
 
 // Mirrors MATCH_PRIORITY in queries/counterparty-rules.ts — same priority
@@ -50,7 +67,7 @@ const COUNTERPARTY_FIELDS = [
 async function buildLearnRuleNudge(
   action: string,
   params: Record<string, unknown>,
-): Promise<string | undefined> {
+): Promise<{ text: string; offer: LearnRuleOffer } | undefined> {
   if (action !== "propose_add_transaction" || params.hadCounterpartyMatch !== false) {
     return undefined;
   }
@@ -70,11 +87,46 @@ async function buildLearnRuleNudge(
   const category = appCategoryId
     ? await db.appCategory.findUnique({ where: { id: appCategoryId }, select: { name: true } })
     : null;
-  const wallet = params.wallet as string | undefined;
-  const tagNames = (params.tagNames as string[] | undefined) ?? [];
+
+  return formatLearnRuleNudge({
+    matchType,
+    counterparty,
+    categoryName: category?.name,
+    wallet: params.wallet as string | undefined,
+    tagNames: (params.tagNames as string[] | undefined) ?? [],
+  });
+}
+
+type LearnRuleNudgeParts = {
+  matchType: string;
+  counterparty: string;
+  categoryName: string | undefined;
+  wallet: string | undefined;
+  tagNames: string[];
+};
+
+/**
+ * Renders the offer twice, for two different readers: prose for the user, and
+ * the structured `offer` for the `rule_offer` event row the model reads on a
+ * later "yes". Split out of buildLearnRuleNudge to keep that function's
+ * complexity within budget.
+ */
+function formatLearnRuleNudge(
+  parts: LearnRuleNudgeParts,
+): { text: string; offer: LearnRuleOffer } {
+  const { matchType, counterparty, categoryName, wallet, tagNames } = parts;
   const tagsPart = tagNames.length > 0 ? ` tagged ${tagNames.map((t) => `#${t}`).join(" ")}` : "";
 
-  return `💡 Want me to remember this? The next ${matchType} match for "${counterparty}" would auto-record as ${category?.name ?? "this category"} → ${wallet ?? "this wallet"}${tagsPart}. Tell me "yes, remember it" if you want to create the rule.`;
+  return {
+    text: `💡 Want me to remember this? The next ${matchType} match for "${counterparty}" would auto-record as ${categoryName ?? "this category"} → ${wallet ?? "this wallet"}${tagsPart}. Tell me "yes, remember it" if you want to create the rule.`,
+    offer: {
+      matchType,
+      matchValue: counterparty,
+      category: categoryName ?? "",
+      wallet: wallet ?? "",
+      tags: tagNames.join(","),
+    },
+  };
 }
 
 /**
@@ -160,10 +212,13 @@ export async function resolveProposal(d: ProposalDecision): Promise<ResolvePropo
     revalidatePath("/installments");
     revalidatePath("/expenses");
 
+    const nudge = await buildLearnRuleNudge(proposal.action, params);
+
     return {
       ok: true,
       message: approveMessage,
-      learnRuleNudge: await buildLearnRuleNudge(proposal.action, params),
+      learnRuleNudge: nudge?.text,
+      learnRuleOffer: nudge?.offer,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
