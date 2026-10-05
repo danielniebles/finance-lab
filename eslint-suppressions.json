@@ -62,11 +62,6 @@
       "count": 1
     }
   },
-  "src/components/trends/trends-dashboard.tsx": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
   "src/components/vaults/entry-form.tsx": {
     "complexity": {
       "count": 1

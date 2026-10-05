@@ -1,121 +1,79 @@
-import { Card, CardHeader, CardTitle, CardAction, CardContent } from "@/components/ui/card";
+import { Meter, StatusChip } from "@/components/ds";
+import { toneForMetricStatus, toneForTier } from "@/lib/health-score-utils";
+import { getHealthScore, type HealthScore, type HealthScoreMetric } from "@/lib/queries/health-score";
+import { TONE_CLASSES } from "@/lib/status";
 import { cn } from "@/lib/utils";
-import { getHealthScore, type HealthScoreMetric, type HealthScoreTier } from "@/lib/queries/health-score";
 
-const tierStyles: Record<HealthScoreTier, { text: string; badge: string }> = {
-  Excellent: {
-    text: "text-success",
-    badge: "border-success/30 bg-success/10 text-success",
-  },
-  Good: {
-    text: "text-blue-600 dark:text-blue-400",
-    badge: "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400",
-  },
-  Fair: {
-    text: "text-warning",
-    badge: "border-warning/30 bg-warning/10 text-warning",
-  },
-  "At Risk": {
-    text: "text-destructive",
-    badge: "border-destructive/30 bg-destructive/10 text-destructive",
-  },
-};
-
-const barColor: Record<HealthScoreMetric["status"], string> = {
-  good: "bg-success",
-  warn: "bg-warning",
-  bad: "bg-destructive",
-  na: "bg-muted-foreground/30",
-};
-
-function MetricRow({ metric }: { metric: HealthScoreMetric }) {
-  const pct = (metric.points / 25) * 100;
+function MetricTile({ metric }: { metric: HealthScoreMetric }) {
+  const tone = toneForMetricStatus(metric.status);
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-36 shrink-0 text-xs text-muted-foreground">{metric.label}</span>
-      <div className="h-1.5 flex-1 rounded-full bg-muted/50">
-        <div
-          className={cn("h-1.5 rounded-full transition-all", barColor[metric.status])}
-          style={{ width: `${pct}%` }}
-        />
+    <div className="flex flex-col gap-2 rounded-xl border border-border/60 bg-background/40 px-4 py-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-sm font-medium">{metric.label}</span>
+        <span className={cn("font-mono text-sm font-semibold", TONE_CLASSES[tone].text)}>{metric.rawValue}</span>
       </div>
-      <span className="w-12 text-right font-mono text-xs tabular-nums text-muted-foreground">
-        {metric.rawValue}
-      </span>
-      <span
-        className={cn(
-          "w-8 text-right font-mono text-xs tabular-nums",
-          metric.status === "na"
-            ? "text-muted-foreground/40"
-            : metric.status === "good"
-            ? "text-success"
-            : metric.status === "warn"
-            ? "text-warning"
-            : "text-destructive"
-        )}
-      >
-        {metric.status === "na" ? "—" : `+${metric.points}`}
+      <Meter
+        value={Math.max(0, metric.value ?? 0)}
+        max={metric.scaleMax}
+        target={metric.targetValue}
+        tone={tone}
+        size="sm"
+        label={`${metric.label}: ${metric.rawValue}, ${metric.target}`}
+      />
+      <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        {metric.target}
+        <span className="font-mono">{metric.status === "na" ? "—" : `${metric.points}/25`}</span>
       </span>
     </div>
   );
 }
 
-export async function HealthScoreCard() {
-  const data = await getHealthScore();
+function Delta({ delta }: { delta: number | null }) {
+  if (delta === null) return null;
+  if (delta === 0) return <span className="text-xs text-muted-foreground">same as previous month</span>;
+  return (
+    <span className={cn("font-mono text-xs", TONE_CLASSES[delta > 0 ? "positive" : "danger"].text)}>
+      {delta > 0 ? "+" : "−"}
+      {Math.abs(delta)} vs previous month
+    </span>
+  );
+}
 
+/** Score of the last complete month, with each metric shown against its target. */
+export async function HealthScoreCard() {
+  return <HealthScoreView data={await getHealthScore()} />;
+}
+
+export function HealthScoreView({ data }: { data: HealthScore | null }) {
   if (!data) {
     return (
-      <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-        No data yet. Import at least one month to see your health score.
+      <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+        Your health score appears once a full month has been logged.
       </div>
     );
   }
 
-  const styles = tierStyles[data.tier];
-
+  const tone = toneForTier(data.tier);
   return (
-    <Card className="border-border/60">
-      <CardHeader className="px-5 py-4 border-b border-border/60">
-        <CardTitle className="text-sm font-semibold">Financial Health</CardTitle>
-        <CardAction>
-          <span className="text-xs text-muted-foreground">{data.monthLabel}</span>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="px-5 py-5">
-        <div className="flex items-start gap-8">
-          <div className="flex flex-col items-center gap-2">
-            <span className={cn("font-mono text-5xl font-bold tabular-nums", styles.text)}>
-              {data.score}
-            </span>
-            <span
-              className={cn(
-                "inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold",
-                styles.badge
-              )}
-            >
-              {data.tier}
-            </span>
-            {data.scoreDelta !== null && data.scoreDelta !== 0 && (
-              <span
-                className={cn(
-                  "text-xs font-mono tabular-nums",
-                  data.scoreDelta > 0 ? "text-success" : "text-destructive"
-                )}
-              >
-                {data.scoreDelta > 0 ? "+" : ""}{data.scoreDelta} vs prev
-              </span>
-            )}
-            {data.scoreDelta === 0 && (
-              <span className="text-xs text-muted-foreground/60">= vs prev</span>
-            )}
-          </div>
-          <div className="flex-1 space-y-3 pt-1">
-            {data.metrics.map((m) => (
-              <MetricRow key={m.label} metric={m} />
-            ))}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <section className="surface-glow grid gap-6 rounded-2xl border border-border/60 bg-card p-5 sm:p-6 lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-center">
+      <div className="flex flex-col gap-2">
+        <h2 className="font-sans text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Financial health · {data.monthLabel}
+        </h2>
+        <p className="flex items-baseline gap-2">
+          <span className={cn("font-mono text-6xl font-semibold leading-none", TONE_CLASSES[tone].text)}>{data.score}</span>
+          <span className="font-mono text-sm text-muted-foreground">/ 100</span>
+        </p>
+        <span className="flex flex-wrap items-center gap-2">
+          <StatusChip tone={tone}>{data.tier}</StatusChip>
+          <Delta delta={data.scoreDelta} />
+        </span>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {data.metrics.map((m) => (
+          <MetricTile key={m.key} metric={m} />
+        ))}
+      </div>
+    </section>
   );
 }

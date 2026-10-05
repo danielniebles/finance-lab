@@ -1,17 +1,28 @@
-import { db } from "@/lib/db";
 import { MONTH_NAMES } from "@/lib/format";
+import { financialMonthYear } from "@/lib/financial-period-utils";
+import {
+  HEALTH_RULES, metricValues, scoreMetric, tierFor, totalScore,
+  type HealthInputs, type HealthScoreTier, type MetricKey, type MetricStatus,
+} from "@/lib/health-score-utils";
 import { getMonthlyAnalysis } from "@/lib/queries/expenses";
 import { getMonthSummary } from "@/lib/queries/installments";
 import { getLoansOverview } from "@/lib/queries/loans";
+import { shiftMonth, type MonthKey } from "@/lib/trend-utils";
 
-export type HealthScoreTier = "Excellent" | "Good" | "Fair" | "At Risk";
+export type { HealthScoreTier } from "@/lib/health-score-utils";
 
 export type HealthScoreMetric = {
+  key: MetricKey;
   label: string;
   points: number;
   maxPoints: 25;
+  /** Metric value in %, null when it can't be computed (e.g. no income). */
+  value: number | null;
   rawValue: string;
-  status: "good" | "warn" | "bad" | "na";
+  status: MetricStatus;
+  target: string;
+  targetValue: number;
+  scaleMax: number;
 };
 
 export type HealthScore = {
@@ -22,147 +33,63 @@ export type HealthScore = {
   scoreDelta: number | null; // vs previous month, null if no prior data
 };
 
-function scorePoints(
-  value: number | null,
-  thresholds: { good: number; warn: number; ok: number; direction: "asc" | "desc" }
-): { points: number; status: HealthScoreMetric["status"] } {
-  if (value === null) return { points: 0, status: "na" };
-  const { good, warn, ok, direction } = thresholds;
-  const passes = (v: number, t: number) => direction === "asc" ? v >= t : v <= t;
-  if (passes(value, good)) return { points: 25, status: "good" };
-  if (passes(value, warn)) return { points: 15, status: "warn" };
-  if (passes(value, ok)) return { points: 5, status: "bad" };
-  return { points: 0, status: "bad" };
+function fmt(value: number | null): string {
+  return value === null ? "—" : `${value.toFixed(1)}%`;
 }
 
-function fmt(value: number | null, suffix = "%"): string {
-  if (value === null) return "—";
-  return `${value.toFixed(1)}${suffix}`;
+async function inputsFor(m: MonthKey, liquidityRatio: number | null): Promise<HealthInputs & { hasData: boolean }> {
+  const [analysis, summary] = await Promise.all([getMonthlyAnalysis(m.month, m.year), getMonthSummary(m.month, m.year)]);
+  return {
+    savingsRate: analysis.savingsRate,
+    variableBurnRate: analysis.variableBurnRate,
+    totalIncome: analysis.totalIncome,
+    totalObligation: summary.totalObligation,
+    liquidityRatio,
+    hasData: analysis.totalIncome > 0 || analysis.totalExpenses > 0,
+  };
 }
 
-// ─── Pure score computation (reusable for delta) ─────────────────────────────
+/**
+ * Health of the last COMPLETE financial month (the one before today's).
+ * Previously it scored the latest FINAL MoneyLover import, which froze on
+ * June once imports stopped. A running month isn't scored: half a month of
+ * income vs spend says little. Liquidity is point-in-time (today) for both
+ * the month and its comparison.
+ */
+export async function getHealthScore(now: Date = new Date()): Promise<HealthScore | null> {
+  const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
+  const current = financialMonthYear(now, startDay);
+  const month = shiftMonth(current, -1);
+  const prev = shiftMonth(current, -2);
 
-type ScoreInputs = {
-  savingsRate: number | null;
-  variableBurnRate: number | null;
-  totalIncome: number;
-  totalObligation: number;
-  liquidityRatio: number | null;
-};
+  const { liquidityRatio } = await getLoansOverview();
+  const [inputs, prevInputs] = await Promise.all([inputsFor(month, liquidityRatio), inputsFor(prev, liquidityRatio)]);
+  if (!inputs.hasData) return null;
 
-function computeNumericScore(inputs: ScoreInputs): number {
-  const burden =
-    inputs.totalIncome > 0
-      ? (inputs.totalObligation / inputs.totalIncome) * 100
-      : null;
-  return (
-    scorePoints(inputs.savingsRate, { good: 20, warn: 10, ok: 0, direction: "asc" }).points +
-    scorePoints(inputs.variableBurnRate, { good: 80, warn: 100, ok: 120, direction: "desc" }).points +
-    scorePoints(burden, { good: 10, warn: 20, ok: 30, direction: "desc" }).points +
-    scorePoints(inputs.liquidityRatio, { good: 70, warn: 50, ok: 30, direction: "asc" }).points
-  );
-}
-
-// ─── Main query ───────────────────────────────────────────────────────────────
-
-export async function getHealthScore(): Promise<HealthScore | null> {
-  // Use only FINAL batches for Health Score baseline (IN_PROGRESS partial months skew metrics)
-  const batches = await db.importBatch.findMany({
-    where: { status: "FINAL" },
-    orderBy: [{ year: "desc" }, { month: "desc" }],
-    take: 2,
-  });
-  if (batches.length === 0) return null;
-  const [batch, prevBatch] = batches;
-
-  const [analysis, monthSummary, loansOverview] = await Promise.all([
-    getMonthlyAnalysis(batch.month, batch.year),
-    getMonthSummary(batch.month, batch.year),
-    getLoansOverview(),
-  ]);
-
-  const savingsScore = scorePoints(analysis.savingsRate, {
-    good: 20, warn: 10, ok: 0, direction: "asc",
-  });
-  const burnScore = scorePoints(analysis.variableBurnRate, {
-    good: 80, warn: 100, ok: 120, direction: "desc",
-  });
-  const burden =
-    analysis.totalIncome > 0
-      ? (monthSummary.totalObligation / analysis.totalIncome) * 100
-      : null;
-  const burdenScore = scorePoints(burden, {
-    good: 10, warn: 20, ok: 30, direction: "desc",
-  });
-  const liquidityScore = scorePoints(loansOverview.liquidityRatio, {
-    good: 70, warn: 50, ok: 30, direction: "asc",
-  });
-
-  const score =
-    savingsScore.points +
-    burnScore.points +
-    burdenScore.points +
-    liquidityScore.points;
-
-  // Delta vs previous month
-  let scoreDelta: number | null = null;
-  if (prevBatch) {
-    const [prevAnalysis, prevMonthSummary] = await Promise.all([
-      getMonthlyAnalysis(prevBatch.month, prevBatch.year),
-      getMonthSummary(prevBatch.month, prevBatch.year),
-    ]);
-    const prevScore = computeNumericScore({
-      savingsRate: prevAnalysis.savingsRate,
-      variableBurnRate: prevAnalysis.variableBurnRate,
-      totalIncome: prevAnalysis.totalIncome,
-      totalObligation: prevMonthSummary.totalObligation,
-      liquidityRatio: loansOverview.liquidityRatio, // point-in-time, same for both
-    });
-    scoreDelta = score - prevScore;
-  }
-
-  const tier: HealthScoreTier =
-    score >= 85 ? "Excellent" :
-    score >= 65 ? "Good" :
-    score >= 45 ? "Fair" :
-    "At Risk";
-
-  const metrics: HealthScoreMetric[] = [
-    {
-      label: "Savings Rate",
-      points: savingsScore.points,
+  const values = metricValues(inputs);
+  const metrics: HealthScoreMetric[] = (Object.keys(HEALTH_RULES) as MetricKey[]).map((key) => {
+    const rule = HEALTH_RULES[key];
+    const { points, status } = scoreMetric(values[key], rule);
+    return {
+      key,
+      label: rule.label,
+      points,
       maxPoints: 25,
-      rawValue: fmt(analysis.savingsRate),
-      status: savingsScore.status,
-    },
-    {
-      label: "Variable Burn Rate",
-      points: burnScore.points,
-      maxPoints: 25,
-      rawValue: fmt(analysis.variableBurnRate),
-      status: burnScore.status,
-    },
-    {
-      label: "Installment Burden",
-      points: burdenScore.points,
-      maxPoints: 25,
-      rawValue: fmt(burden),
-      status: burdenScore.status,
-    },
-    {
-      label: "Liquidity Ratio",
-      points: liquidityScore.points,
-      maxPoints: 25,
-      rawValue: fmt(loansOverview.liquidityRatio),
-      status: liquidityScore.status,
-    },
-  ];
+      value: values[key],
+      rawValue: fmt(values[key]),
+      status,
+      target: rule.target,
+      targetValue: rule.good,
+      scaleMax: rule.scaleMax,
+    };
+  });
+  const score = metrics.reduce((s, m) => s + m.points, 0);
 
   return {
     score,
-    tier,
-    monthLabel: `${MONTH_NAMES[batch.month - 1]} ${batch.year}`,
+    tier: tierFor(score),
+    monthLabel: `${MONTH_NAMES[month.month - 1]} ${month.year}`,
     metrics,
-    scoreDelta,
+    scoreDelta: prevInputs.hasData ? score - totalScore(prevInputs) : null,
   };
 }

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
-import { getFinancialPeriodBounds, financialMonthYear } from "@/lib/financial-period-utils";
+import { getFinancialPeriodBounds } from "@/lib/financial-period-utils";
+import { trendWindow, trimLeadingEmpty, type TrendSlot } from "@/lib/trend-utils";
 
 export type MonthPoint = {
   month: number;
@@ -10,6 +11,8 @@ export type MonthPoint = {
   budget: number;
   net: number; // income - expenses (positive = surplus, negative = deficit)
   savingsRate: number | null;
+  /** The current financial month — still running, so partial. */
+  inProgress: boolean;
 };
 
 export type CategoryTrendRow = {
@@ -29,55 +32,7 @@ const MONTH_NAMES = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-type TrendMonth = { month: number; year: number };
-
-/**
- * The N most recent financial months eligible for trend baselines.
- *
- * A month qualifies if it has a FINAL ImportBatch, OR has standalone MANUAL
- * transactions with no batch at all. IN_PROGRESS-only months are excluded
- * (partial MoneyLover imports corrupt baselines) — but that exclusion is
- * specific to the partial-import concept, which does not apply to bot-captured
- * data: a manual-only month has no "in progress" state, so it always counts.
- * (Design call — see .scratch/transactions-data-layer.md.)
- */
-async function getRecentTrendMonths(n: number): Promise<TrendMonth[]> {
-  const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
-
-  const [batches, manualTransactions] = await Promise.all([
-    db.importBatch.findMany({ select: { month: true, year: true, status: true } }),
-    db.transaction.findMany({ where: { source: "MANUAL" }, select: { date: true } }),
-  ]);
-
-  const finalKeys = new Set(
-    batches.filter((b) => b.status === "FINAL").map((b) => `${b.year}-${b.month}`)
-  );
-  const inProgressKeys = new Set(
-    batches.filter((b) => b.status === "IN_PROGRESS").map((b) => `${b.year}-${b.month}`)
-  );
-
-  const eligible = new Map<string, TrendMonth>();
-  for (const b of batches) {
-    const key = `${b.year}-${b.month}`;
-    if (b.status === "FINAL") eligible.set(key, { month: b.month, year: b.year });
-  }
-  for (const t of manualTransactions) {
-    const { month, year } = financialMonthYear(t.date, startDay);
-    const key = `${year}-${month}`;
-    // A manual-only month (no batch at all) always counts. A month that also
-    // has an IN_PROGRESS batch stays excluded even though it has manual data —
-    // the month's AGGREGATE totals (manual + partial MoneyLover) are still
-    // incomplete, so the whole month stays untrustworthy as a trend baseline.
-    if (inProgressKeys.has(key) && !finalKeys.has(key)) continue;
-    if (!eligible.has(key)) eligible.set(key, { month, year });
-  }
-
-  return [...eligible.values()]
-    .sort((a, b) => b.year - a.year || b.month - a.month)
-    .slice(0, n);
-}
-
-type Period = TrendMonth & { start: Date; end: Date };
+type Period = TrendSlot & { start: Date; end: Date };
 
 type TrendCategory = { id: string; name: string; budgetItems: { amount: number }[] };
 
@@ -119,6 +74,7 @@ function buildMonthPoints(
       budget: totalBudget,
       net: income - expenses,
       savingsRate,
+      inProgress: p.inProgress,
     };
   });
 }
@@ -166,17 +122,15 @@ function buildCategoryTrends(
     });
 }
 
-export async function getTrends(n = 6): Promise<TrendsData> {
-  const months = await getRecentTrendMonths(n);
-  if (months.length === 0) {
-    return { months: [], categoryTrends: [] };
-  }
-
-  // Reverse so oldest → newest (left → right on charts)
-  months.reverse();
-
+/**
+ * Monthly income/spend history for the last `n` complete financial months,
+ * oldest → newest. `includeCurrent` appends the month in progress (flagged
+ * `inProgress`) — the Trends page draws it as a draft; baselines (forecast,
+ * Advisor) leave it out so a half-month never drags averages down.
+ */
+export async function getTrends(n = 6, { includeCurrent = false }: { includeCurrent?: boolean } = {}): Promise<TrendsData> {
   const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
-  const periods: Period[] = months.map((m) => ({
+  const window: Period[] = trendWindow(new Date(), n, startDay, includeCurrent).map((m) => ({
     ...m,
     ...getFinancialPeriodBounds(m.month, m.year, startDay),
   }));
@@ -184,7 +138,7 @@ export async function getTrends(n = 6): Promise<TrendsData> {
   const [allTransactions, appCategories] = await Promise.all([
     db.transaction.findMany({
       // isTransfer excluded — see AppCategory.isTransfer's doc comment.
-      where: { isTransfer: false, OR: periods.map((p) => ({ date: { gte: p.start, lt: p.end } })) },
+      where: { isTransfer: false, date: { gte: window[0].start, lt: window[window.length - 1].end } },
       include: {
         appCategory: true,
         moneyLoverCategory: {
@@ -194,6 +148,9 @@ export async function getTrends(n = 6): Promise<TrendsData> {
     }),
     db.appCategory.findMany({ where: { isTransfer: false }, include: { budgetItems: true } }),
   ]);
+
+  const periods = trimLeadingEmpty(window, (p) => allTransactions.some((t) => t.date >= p.start && t.date < p.end));
+  if (periods.length === 0) return { months: [], categoryTrends: [] };
 
   const totalBudget = appCategories.reduce(
     (s, c) => s + c.budgetItems.reduce((si, i) => si + i.amount, 0),
