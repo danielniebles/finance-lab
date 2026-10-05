@@ -133,3 +133,13 @@ export function toneForSavingsRate(rate: number | null): Tone {
   if (rate >= SAVINGS_RATE_TARGET / 2) return "caution";
   return "danger";
 }
+
+/**
+ * Liquidity = available ÷ (available + lent out), in %. Same thresholds the
+ * Home "Available balance" pill has used: < 30 critical, < 50 low.
+ */
+export function toneForLiquidity(ratio: number): { tone: Tone; label: string } {
+  if (ratio < 30) return { tone: "danger", label: "critical" };
+  if (ratio < 50) return { tone: "caution", label: "low" };
+  return { tone: "positive", label: "healthy" };
+}

@@ -1,18 +1,13 @@
 import Link from "next/link";
 import { Money, StatusChip } from "@/components/ds";
 import type { AccountWithWallets } from "@/lib/queries/wallets";
-import type { Tone } from "@/lib/status";
+import { toneForLiquidity } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { Panel } from "./panel";
 import { walletHref } from "./wallets-strip";
 
-// Liquidity = available ÷ (available + lent out). Same thresholds the old
-// Accounts card pill used.
-export function liquidityTone(ratio: number): { tone: Tone; label: string } {
-  if (ratio < 30) return { tone: "danger", label: "critical" };
-  if (ratio < 50) return { tone: "caution", label: "low" };
-  return { tone: "positive", label: "healthy" };
-}
+// Kept as an export for existing callers/tests; the rule lives in lib/status.
+export const liquidityTone = toneForLiquidity;
 
 type Slice = { id: string; name: string; balance: number; color: string };
 

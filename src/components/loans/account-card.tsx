@@ -10,6 +10,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { TONE_CLASSES } from "@/lib/status";
 import { formatCOP } from "@/lib/format";
 import { deleteAccount, deleteEntry } from "@/lib/actions/loans";
 import { AccountForm } from "./account-form";
@@ -21,9 +22,9 @@ import { MASK } from "./lib/constants";
 
 function AccountTypeBadge({ type }: { type: string }) {
   const map: Record<string, string> = {
-    BANK:    "bg-blue-500/10 text-blue-400",
-    DIGITAL: "bg-violet-500/10 text-violet-400",
-    PENSION: "bg-amber-500/10 text-amber-400",
+    BANK:    TONE_CLASSES.info.soft,
+    DIGITAL: TONE_CLASSES.neutral.soft,
+    PENSION: TONE_CLASSES.caution.soft,
   };
   const label: Record<string, string> = { BANK: "Bank", DIGITAL: "Digital", PENSION: "AFP" };
   return (
@@ -35,15 +36,15 @@ function AccountTypeBadge({ type }: { type: string }) {
 
 function EntryTypeBadge({ type }: { type: string }) {
   return type === "INITIAL" ? (
-    <span className="rounded-full bg-blue-500/10 text-blue-400 px-1.5 py-0.5 text-xs font-medium w-fit">Opening</span>
+    <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium w-fit", TONE_CLASSES.info.soft)}>Opening</span>
   ) : (
-    <span className="rounded-full bg-violet-500/10 text-violet-400 px-1.5 py-0.5 text-xs font-medium w-fit">Adjustment</span>
+    <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium w-fit", TONE_CLASSES.neutral.soft)}>Adjustment</span>
   );
 }
 
 function VaultBadge() {
   return (
-    <span className="rounded-full bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 text-xs font-medium w-fit">
+    <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium w-fit", TONE_CLASSES.positive.soft)}>
       Vault
     </span>
   );
