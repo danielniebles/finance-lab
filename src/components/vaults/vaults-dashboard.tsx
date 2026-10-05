@@ -3,17 +3,9 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselPrevious,
-  CarouselNext,
-} from "@/components/ui/carousel";
-import { formatCOP } from "@/lib/format";
-import { cn } from "@/lib/utils";
-import { VaultTile } from "./vault-tile";
-import { VaultDueBanner } from "./vault-due-banner";
+import { nextDueByVault } from "@/lib/vault-display";
+import { VaultCarousel } from "./vault-carousel";
+import { VaultsSummary } from "./vaults-summary";
 import { VaultForm } from "./vault-form";
 import { EntryForm } from "./entry-form";
 import { VaultLedger } from "./vault-ledger";
@@ -22,38 +14,6 @@ import type { VaultWithMetrics, VaultObligations } from "@/lib/queries/vaults";
 import type { getRecurringExpenses } from "@/lib/queries/recurring";
 import type { AccountWithWallets } from "@/lib/queries/wallets";
 import type { CategoryOption } from "@/lib/queries/expenses";
-
-// ─── StatInline — mirrors installments-dashboard pattern ─────────────────────
-
-function StatInline({
-  label,
-  value,
-  sub,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  highlight?: "good" | "bad" | "neutral";
-}) {
-  const valueColor =
-    highlight === "good"
-      ? "text-success"
-      : highlight === "bad"
-      ? "text-destructive"
-      : "text-foreground";
-  return (
-    <div className="flex flex-col gap-0.5 min-w-0">
-      <span className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <span className={cn("font-mono text-base sm:text-xl font-semibold", valueColor)}>
-        {value}
-      </span>
-      {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
-    </div>
-  );
-}
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -103,6 +63,8 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
     open: false,
     vault: null,
   });
+
+  const nextDue = nextDueByVault(recurringData.items);
 
   function openAddDialog() {
     setVaultFormMode("create");
@@ -155,45 +117,8 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
         </Button>
       </div>
 
-      {/* Due banner */}
-      <VaultDueBanner obligations={obligations} />
-
-      {/* Summary band */}
-      {vaults.length > 0 && (
-        <section
-          aria-labelledby="vaults-summary-heading"
-          className="rounded-xl ring-1 ring-foreground/10 bg-card overflow-hidden"
-        >
-          <h2 id="vaults-summary-heading" className="sr-only">
-            Vault summary
-          </h2>
-          <div className="grid grid-cols-1 divide-y divide-border bg-muted/30 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-            <div className="px-4 py-3 sm:px-6 sm:py-4">
-              <StatInline
-                label="Total required"
-                value={formatCOP(obligations.totalRequired)}
-                sub="this month"
-              />
-            </div>
-            <div className="px-4 py-3 sm:px-6 sm:py-4">
-              <StatInline
-                label="Still needed"
-                value={formatCOP(obligations.totalStillNeeded)}
-                highlight={obligations.totalStillNeeded > 0 ? "bad" : "good"}
-              />
-            </div>
-            <div className="px-4 py-3 sm:px-6 sm:py-4">
-              <StatInline
-                label="Mandatory gap"
-                value={formatCOP(obligations.mandatoryStillNeeded)}
-                highlight={
-                  obligations.mandatoryStillNeeded > 0 ? "bad" : "good"
-                }
-              />
-            </div>
-          </div>
-        </section>
-      )}
+      {/* This month: one summary (replaces the due banner + stat band) */}
+      {vaults.length > 0 && <VaultsSummary obligations={obligations} />}
 
       {/* Vault grid / empty state */}
       {vaults.length === 0 ? (
@@ -213,39 +138,13 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
           </Button>
         </div>
       ) : (
-        <section aria-label="Vault tiles">
-          {/* Carousel at every breakpoint — with 5-6+ vaults a wrapping grid
-              grows the page tall fast; scrolling one row horizontally keeps
-              the section a fixed height. basis widens per breakpoint so more
-              tiles are visible at once on larger screens. */}
-          <Carousel opts={{ align: "start" }}>
-            <CarouselContent>
-              {vaults.map((v) => (
-                // py-1: the tile's ring-1 border needs room to render —
-                // horizontal carousels get pl-4 from CarouselItem by default
-                // but no vertical padding, so the viewport's overflow-hidden
-                // otherwise clips the ring flush at the top/bottom edge.
-                <CarouselItem
-                  key={v.id}
-                  className="basis-[85%] py-1 sm:basis-1/2 lg:basis-1/3 xl:basis-1/4"
-                >
-                  <VaultTile
-                    vault={v}
-                    onContribute={() => openEntryDialog(v.id, "contribute")}
-                    onEdit={() => openEditDialog(v.id)}
-                    onHistory={() => openLedger(v.id)}
-                  />
-                </CarouselItem>
-              ))}
-            </CarouselContent>
-            {/* Positioned inside the carousel bounds (not the default
-                off-edge -left-12/-right-12) so they don't get clipped by
-                the page's own padding; disabled:hidden drops the button
-                once there's no next/prev slide left to reach. */}
-            <CarouselPrevious className="left-2 disabled:hidden" />
-            <CarouselNext className="right-2 disabled:hidden" />
-          </Carousel>
-        </section>
+        <VaultCarousel
+          vaults={vaults}
+          nextDue={nextDue}
+          onContribute={(id) => openEntryDialog(id, "contribute")}
+          onEdit={openEditDialog}
+          onHistory={openLedger}
+        />
       )}
 
       {/* Recurring expenses list */}

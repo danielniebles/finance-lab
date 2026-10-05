@@ -1,322 +1,167 @@
 "use client";
 
-import { ArrowLeftRight, History, Pencil } from "lucide-react";
+import { ArrowLeftRight, History, Pencil, PiggyBank, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatCOP } from "@/lib/format";
+import { Meter, Money, StatusChip } from "@/components/ds";
+import { TONE_CLASSES, toneForVaultStatus } from "@/lib/status";
+import { stillNeededThisMonth, type NextDue } from "@/lib/vault-display";
 import { cn } from "@/lib/utils";
 import type { VaultWithMetrics } from "@/lib/queries/vaults";
-import type { VaultStatus } from "@/lib/vault-utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function statusClasses(status: VaultStatus): string {
-  switch (status) {
-    case "Met":
-      return "text-success bg-success/10";
-    case "On track":
-      return "text-success/70 bg-success/10";
-    case "Behind":
-      return "text-warning bg-warning/10";
-    case "Overdue":
-      return "text-destructive bg-destructive/10";
-    case "Open":
-      return "text-muted-foreground bg-muted";
-    case "Underfunded":
-      return "text-warning bg-warning/10";
-  }
+function goalLabel(vault: VaultWithMetrics): string {
+  if (vault.goalType === "RECURRING") return "Sinking fund";
+  if (vault.goalType === "OPEN_ENDED") return "Open goal";
+  if (vault.status === "Met") return "Goal met";
+  if (vault.status === "Overdue") return "Overdue";
+  return vault.monthsLeft > 0 ? `Goal · ${vault.monthsLeft} mo left` : "Deadline passed";
 }
 
-function ringColor(status: VaultStatus): string {
-  switch (status) {
-    case "Met":
-      return "oklch(0.762 0.157 164)";
-    case "On track":
-    case "Open":
-      return "oklch(0.72 0.18 155)";
-    case "Behind":
-    case "Underfunded":
-      return "oklch(0.8 0.15 80)";
-    case "Overdue":
-      return "oklch(0.6 0.22 25)";
-  }
+function shortDate(d: Date): string {
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
 }
 
-function requiredThisMonthColor(status: VaultStatus, stillNeeded: number): string {
-  if (stillNeeded <= 0) return "text-success";
-  switch (status) {
-    case "Overdue":
-      return "text-destructive";
-    case "Behind":
-      return "text-warning";
-    default:
-      return "text-foreground";
-  }
+// ─── Body variants ────────────────────────────────────────────────────────────
+
+/** RECURRING: the set-aside for this month is the number that matters. */
+function SetAsideBody({ vault }: { vault: VaultWithMetrics }) {
+  const needed = stillNeededThisMonth(vault);
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs text-muted-foreground">Set aside this month</span>
+      <Money
+        value={needed}
+        tone={needed <= 0 ? "positive" : toneForVaultStatus(vault.status)}
+        className="text-2xl font-semibold"
+      />
+    </div>
+  );
 }
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+/** Goals: balance toward the target, with a meter. */
+function GoalBody({ vault }: { vault: VaultWithMetrics }) {
+  const pct = vault.progressPct;
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <Money value={vault.balance} className="text-2xl font-semibold" />
+        {vault.targetAmount !== null && (
+          <span className="text-xs text-muted-foreground">
+            of <Money value={vault.targetAmount} />
+          </span>
+        )}
+      </div>
+      {pct !== null && (
+        <>
+          <Meter
+            label={`${vault.name} progress toward goal`}
+            value={pct}
+            max={100}
+            tone={toneForVaultStatus(vault.status)}
+          />
+          <span className="text-xs text-muted-foreground">{Math.round(pct)}% of goal saved</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Footer line: balance or this month's need, plus the next bill it funds. */
+function FactsRow({ vault, nextDue }: { vault: VaultWithMetrics; nextDue?: NextDue }) {
+  const needed = stillNeededThisMonth(vault);
+  const showNeeded = vault.goalType === "FIXED_DEADLINE" && needed > 0 && vault.status !== "Met";
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+      {showNeeded ? (
+        <span>
+          Needed this month{" "}
+          <Money value={needed} tone={toneForVaultStatus(vault.status)} className="font-semibold" />
+        </span>
+      ) : (
+        <span>
+          Balance <Money value={vault.balance} className="text-foreground" />
+        </span>
+      )}
+      {nextDue && (
+        <span className="truncate">
+          Next: {nextDue.name} · {shortDate(nextDue.date)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 type Props = {
   vault: VaultWithMetrics;
+  nextDue?: NextDue;
   onContribute: () => void;
   onEdit: () => void;
   onHistory: () => void;
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
-export function VaultTile({
-  vault,
-  onContribute,
-  onEdit,
-  onHistory,
-}: Props) {
-  const {
-    name,
-    kind,
-    goalType,
-    status,
-    balance,
-    targetAmount,
-    requiredThisMonth,
-    contributedThisMonth,
-    monthsLeft,
-    progressPct,
-    color,
-  } = vault;
-
-  const circumference = 163.36; // 2 * Math.PI * 26
-  const pct = progressPct ?? 0;
-  const dashOffset = circumference * (1 - Math.min(pct, 100) / 100);
-  const isRecurring = goalType === "RECURRING";
-  // How much is still missing to cover this month's target — not the flat
-  // target itself, so a vault already fully contributed to this month reads
-  // as $0 rather than repeating a number you've already met.
-  // RECURRING's requiredThisMonth is already netted against the vault's
-  // current balance (which includes contributedThisMonth), so subtracting
-  // contributedThisMonth again here would double-count it.
-  const stillNeededThisMonth = isRecurring
-    ? requiredThisMonth
-    : Math.max(0, requiredThisMonth - contributedThisMonth);
-
-  const isMet = status === "Met";
-  const isOverdue = status === "Overdue";
-  const isOpen = goalType === "OPEN_ENDED";
+export function VaultTile({ vault, nextDue, onContribute, onEdit, onHistory }: Props) {
+  const { name, kind, status, goalType } = vault;
+  const mandatory = kind === "MANDATORY";
+  const Icon = mandatory ? ShieldCheck : PiggyBank;
+  const urgent = status === "Overdue" || (mandatory && stillNeededThisMonth(vault) > 0);
 
   return (
     <article
-      role="article"
       aria-label={name}
-      className="h-full rounded-xl ring-1 ring-foreground/10 bg-card overflow-hidden flex flex-col"
+      className={cn(
+        "flex h-full flex-col gap-4 rounded-2xl border bg-card p-4",
+        urgent ? "border-destructive/40" : "border-border/60",
+      )}
     >
-      {/* Header zone — color accent strip */}
-      <div
-        className="px-4 pt-4 pb-3 border-b-4"
-        style={{ borderBottomColor: color ?? "transparent" }}
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex flex-col gap-1 min-w-0">
-            <span className="font-heading text-sm font-semibold truncate text-foreground">
-              {name}
-            </span>
-            {/* Kind chip */}
-            <span
-              className={cn(
-                "self-start text-[10px] font-semibold uppercase tracking-wider rounded-full px-1.5 py-0.5",
-                kind === "MANDATORY"
-                  ? "bg-destructive/10 text-destructive"
-                  : "bg-muted text-muted-foreground",
-              )}
-            >
-              {kind === "MANDATORY" ? "Mandatory" : "Leisure"}
-            </span>
-          </div>
-          {/* Status badge */}
+      <header className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-3">
           <span
-            role="status"
-            aria-label={`Vault status: ${status}`}
             className={cn(
-              "shrink-0 text-[10px] font-semibold uppercase tracking-wider rounded-full px-1.5 py-0.5",
-              statusClasses(status),
+              "flex size-9 shrink-0 items-center justify-center rounded-lg",
+              TONE_CLASSES[mandatory ? "danger" : "info"].soft,
             )}
           >
-            {status}
+            <Icon className="size-4" aria-hidden />
+          </span>
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="flex min-w-0 items-center gap-1.5">
+              {vault.color && (
+                <span
+                  aria-hidden
+                  className="size-2 shrink-0 rounded-full"
+                  // Vault color is user data (picked in the vault form), not a theme color.
+                  style={{ backgroundColor: vault.color }}
+                />
+              )}
+              <span className="truncate font-heading text-sm font-semibold">{name}</span>
+            </span>
+            <span className={cn("text-xs", mandatory ? "text-destructive" : "text-muted-foreground")}>
+              {mandatory ? "Mandatory" : "Leisure"} · {goalLabel(vault)}
+            </span>
           </span>
         </div>
-      </div>
+        <StatusChip tone={toneForVaultStatus(status)}>{status}</StatusChip>
+      </header>
 
-      {/* Body zone */}
-      <div className="px-4 py-4 flex items-center gap-4 flex-1">
-        {isRecurring ? (
-          /* RECURRING: no ring, show set-aside + balance */
-          <div className="flex flex-col gap-2 flex-1 min-w-0">
-            <div>
-              <p className="font-heading text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Set-aside this month
-              </p>
-              <p
-                className={cn(
-                  "font-mono text-lg font-semibold tabular-nums",
-                  stillNeededThisMonth <= 0 ? "text-success" : status === "Underfunded" ? "text-warning" : "text-foreground",
-                )}
-                aria-label={`Set-aside this month: ${formatCOP(stillNeededThisMonth)}`}
-              >
-                {formatCOP(stillNeededThisMonth)}
-              </p>
-            </div>
-            <div>
-              <p className="font-heading text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Balance
-              </p>
-              <p className="font-mono text-sm font-semibold text-foreground tabular-nums">
-                {formatCOP(balance)}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* Progress ring */}
-            <div className="shrink-0">
-              <svg
-                width="64"
-                height="64"
-                viewBox="0 0 64 64"
-                role="img"
-                aria-label={
-                  progressPct !== null
-                    ? `${progressPct.toFixed(0)}% saved toward goal`
-                    : "Open-ended vault"
-                }
-              >
-                {/* Track */}
-                <circle
-                  cx="32"
-                  cy="32"
-                  r="26"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="6"
-                  className="text-foreground/10"
-                  strokeLinecap="round"
-                />
-                {/* Fill */}
-                <circle
-                  cx="32"
-                  cy="32"
-                  r="26"
-                  fill="none"
-                  stroke={ringColor(status)}
-                  strokeWidth="6"
-                  strokeLinecap="round"
-                  strokeDasharray={String(circumference)}
-                  strokeDashoffset={String(dashOffset)}
-                  transform="rotate(-90 32 32)"
-                />
-                {/* Center label */}
-                <text
-                  x="32"
-                  y="32"
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  className="font-mono fill-foreground"
-                  fontSize="11"
-                  fontWeight="600"
-                >
-                  {progressPct !== null ? `${Math.round(pct)}%` : "—"}
-                </text>
-              </svg>
-            </div>
+      <div className="flex-1">{goalType === "RECURRING" ? <SetAsideBody vault={vault} /> : <GoalBody vault={vault} />}</div>
 
-            {/* Metric column */}
-            <div className="flex flex-col gap-2 flex-1 min-w-0">
-              <div>
-                <p className="font-heading text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Balance
-                </p>
-                <p className="font-mono text-lg font-semibold text-foreground tabular-nums">
-                  {formatCOP(balance)}
-                </p>
-                {targetAmount !== null && (
-                  <p className="font-mono text-xs text-muted-foreground tabular-nums">
-                    of {formatCOP(targetAmount)}
-                  </p>
-                )}
-              </div>
+      <FactsRow vault={vault} nextDue={nextDue} />
 
-              {/* Required this month — FIXED_DEADLINE only */}
-              {goalType === "FIXED_DEADLINE" && requiredThisMonth > 0 && !isMet && (
-                <div>
-                  <p className="font-heading text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Needed this month
-                  </p>
-                  <p
-                    className={cn(
-                      "font-mono text-sm font-semibold tabular-nums",
-                      requiredThisMonthColor(status, stillNeededThisMonth),
-                    )}
-                    aria-label={`Needed this month: ${formatCOP(stillNeededThisMonth)}`}
-                  >
-                    {formatCOP(stillNeededThisMonth)}
-                  </p>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Footer zone */}
-      <div className="px-4 pb-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t border-border/60 pt-3">
-        {/* Left: status indicator */}
-        <p className="font-mono text-xs text-muted-foreground tabular-nums">
-          {isRecurring ? (
-            "Sinking fund"
-          ) : isMet ? (
-            <span className="text-success">Goal met</span>
-          ) : isOverdue ? (
-            <span className="text-destructive">Overdue</span>
-          ) : isOpen ? (
-            "Open goal"
-          ) : monthsLeft > 0 ? (
-            `${monthsLeft} mo left`
-          ) : (
-            "Deadline passed"
-          )}
-        </p>
-
-        {/* Right: action buttons — all icon-only so this row can never wrap
-            regardless of card width or the status text's length (fixed
-            28px per button vs. text metrics that vary with font/content).
-            Add/Withdraw merged into one button since they open the same
-            modal, which has its own direction toggle inside. */}
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            aria-label={`View history for ${name}`}
-            onClick={onHistory}
-          >
-            <History className="size-4" aria-hidden="true" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            aria-label={`Add or withdraw funds for ${name}`}
-            onClick={onContribute}
-          >
-            <ArrowLeftRight className="size-4" aria-hidden="true" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            aria-label={`Edit ${name}`}
-            onClick={onEdit}
-          >
-            <Pencil className="size-4" aria-hidden="true" />
-          </Button>
-        </div>
+      <div className="flex items-center gap-2">
+        <Button className="h-9 flex-1" onClick={onContribute} aria-label={`Fund or withdraw from ${name}`}>
+          <ArrowLeftRight className="size-4" aria-hidden />
+          Fund
+        </Button>
+        <Button variant="outline" size="icon" className="size-9" aria-label={`View history for ${name}`} onClick={onHistory}>
+          <History className="size-4" aria-hidden />
+        </Button>
+        <Button variant="outline" size="icon" className="size-9" aria-label={`Edit ${name}`} onClick={onEdit}>
+          <Pencil className="size-4" aria-hidden />
+        </Button>
       </div>
     </article>
   );
