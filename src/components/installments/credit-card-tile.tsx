@@ -1,78 +1,72 @@
 "use client";
 
-import { formatCOP } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { Money, StatusChip } from "@/components/ds";
 import { MASK } from "@/components/loans/lib/constants";
+import type { DueLabel } from "@/lib/installment-display";
 import type { CreditCardSummary } from "@/lib/queries/installments";
+import { cn } from "@/lib/utils";
 
 type Props = {
   card: CreditCardSummary;
+  /** Due/paid chip for the viewed month (null = nothing due on this card). */
+  status: DueLabel | null;
   masked?: boolean;
   selected?: boolean;
   onCardClick?: () => void;
 };
 
-export function CreditCardTile({ card, masked, selected, onCardClick }: Props) {
+// Click a card to filter the page to it; click again to clear (unchanged).
+export function CreditCardTile({ card, status, masked, selected, onCardClick }: Props) {
   const hasInstallments = card.installmentCount > 0;
 
   return (
-    <div
-      role="article"
-      aria-label={`Credit card: ${card.name}`}
+    <button
+      type="button"
+      aria-pressed={selected === true}
+      aria-label={`Credit card ${card.name}${selected ? ", selected" : ""}`}
       onClick={onCardClick}
       className={cn(
-        "min-w-72 w-72 h-full shrink-0 rounded-xl border border-border bg-card overflow-hidden transition-opacity",
-        onCardClick && "cursor-pointer",
-        selected === true && "ring-2 ring-primary/70",
+        "flex h-full w-72 shrink-0 flex-col gap-3.5 rounded-2xl border bg-card p-4 text-left transition-[opacity,border-color]",
+        selected === true ? "border-primary/70" : "border-border/60 hover:border-border",
         selected === false && "opacity-60",
       )}
     >
-      <div className="p-4 flex flex-col gap-3 h-full">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span
-              className="size-3 rounded-full shrink-0"
-              style={{ backgroundColor: card.color ?? "#888" }}
-            />
-            <span className="font-medium text-sm truncate">{card.name}</span>
-          </div>
-          <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium whitespace-nowrap shrink-0">
-            Credit Card
+      <span className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-2">
+          <span
+            aria-hidden
+            className="size-2.5 shrink-0 rounded-full"
+            // Card colour is user data (picked in Manage cards), not a theme colour.
+            style={{ backgroundColor: card.color ?? "var(--muted-foreground)" }}
+          />
+          <span className="truncate text-sm font-semibold">{card.name}</span>
+        </span>
+        {status && <StatusChip tone={status.tone}>{status.label}</StatusChip>}
+      </span>
+
+      {hasInstallments ? (
+        <>
+          <span className="flex items-baseline justify-between gap-2">
+            <span className="text-xs text-muted-foreground">This month</span>
+            {masked ? (
+              <span className="font-mono text-lg font-semibold">{MASK}</span>
+            ) : (
+              <Money value={card.monthlyObligation} className="text-lg font-semibold" />
+            )}
           </span>
-        </div>
-
-        {/* Amounts */}
-        <div className="flex-1 space-y-1">
-          {hasInstallments ? (
-            <>
-              <p className="font-mono text-lg font-semibold text-destructive">
-                {masked ? MASK : formatCOP(card.outstandingDebt)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {card.installmentCount} installment{card.installmentCount !== 1 ? "s" : ""}
-              </p>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">No installments</p>
-          )}
-        </div>
-
-        {/* Monthly obligation + due day */}
-        {hasInstallments && (
-          <div className="space-y-0.5">
-            <p className="font-mono text-sm text-foreground">
-              This month:{" "}
-              <span className="font-semibold">
-                {masked ? MASK : formatCOP(card.monthlyObligation)}
-              </span>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {card.paymentDueDay != null ? `Due: ${card.paymentDueDay}th` : "Due: —"}
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
+          <span className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+            <span>
+              {card.installmentCount} installment{card.installmentCount !== 1 ? "s" : ""}
+            </span>
+            <span>
+              Owed{" "}
+              {masked ? <span className="font-mono text-foreground">{MASK}</span> : <Money value={card.outstandingDebt} className="text-foreground" />}
+            </span>
+          </span>
+        </>
+      ) : (
+        <span className="text-sm text-muted-foreground">No installments</span>
+      )}
+    </button>
   );
 }

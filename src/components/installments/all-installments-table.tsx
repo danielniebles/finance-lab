@@ -1,17 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Meter, Money, StatusChip } from "@/components/ds";
+import { sortInstallments } from "@/lib/installment-display";
+import { cn } from "@/lib/utils";
 import { InstallmentActions } from "./installment-actions";
 import { InstallmentForm } from "./installment-form";
-import { formatCOP } from "@/lib/format";
 import type { InstallmentRow } from "@/lib/queries/installments";
 
 type FormData = {
@@ -24,131 +18,71 @@ type Props = {
   installments: InstallmentRow[];
 } & Partial<FormData>;
 
-function InstallmentTableRow({
-  inst,
-  formCards,
-  formDebtors,
-  formAccounts,
-}: { inst: InstallmentRow } & FormData) {
-  const [open, setOpen] = useState(false);
+const ROW_GRID =
+  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-[minmax(160px,1.6fr)_repeat(2,minmax(96px,1fr))_minmax(120px,1.1fr)_minmax(96px,1fr)]";
+const HEAD = "font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground";
 
-  return (
-    <>
-      <TableRow
-        className="border-border cursor-pointer transition-colors hover:bg-muted/40 signal:odd:bg-foreground/[3%]"
-        onClick={() => setOpen(true)}
-      >
-        <TableCell className="px-4">
-          <div className="font-medium">{inst.description}</div>
-          {inst.notes && (
-            <div className="text-xs text-muted-foreground">{inst.notes}</div>
-          )}
-        </TableCell>
-        <TableCell className="px-4">
-          {inst.cardName ? (
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <span
-                className="size-2 rounded-full shrink-0"
-                style={{ backgroundColor: inst.cardColor ?? undefined }}
-              />
-              {inst.cardName}
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground/50">—</span>
-          )}
-        </TableCell>
-        <TableCell className="px-4 text-right font-mono text-sm">
-          {formatCOP(inst.totalAmount)}
-        </TableCell>
-        <TableCell className="px-4 text-right font-mono text-sm text-muted-foreground">
-          {formatCOP(inst.monthlyAmount)}
-          {inst.monthlyInterestRate != null && (
-            <span className="ml-1 text-muted-foreground/50 text-xs">+int</span>
-          )}
-        </TableCell>
-        <TableCell className="px-4 text-right font-mono text-sm text-muted-foreground hidden md:table-cell">
-          {inst.monthlyInterestRate != null
-            ? `${inst.monthlyInterestRate.toFixed(2)}% m.v.`
-            : "—"}
-        </TableCell>
-        <TableCell className="px-4">
-          <div className="flex justify-center">
-            <ProgressBar paid={inst.installmentsPaid} total={inst.numInstallments} />
-          </div>
-        </TableCell>
-        <TableCell className="px-4 text-right font-mono text-xs text-muted-foreground hidden md:table-cell whitespace-nowrap">
-          {inst.endDate.toLocaleDateString("es-CO", {
-            month: "short",
-            year: "2-digit",
-          })}
-        </TableCell>
-        <TableCell className="px-4 text-right font-mono text-sm">
-          {inst.remaining > 0 ? formatCOP(inst.remaining) : "—"}
-        </TableCell>
-        <TableCell className="px-4">
-          <div className="flex justify-center">
-            <StatusBadge status={inst.status} />
-          </div>
-        </TableCell>
-      </TableRow>
-      <InstallmentForm
-        open={open}
-        onClose={() => setOpen(false)}
-        editing={inst}
-        cards={formCards}
-        debtors={formDebtors}
-        accounts={formAccounts}
-      />
-    </>
-  );
+function endsLabel(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" }).replace(" ", " '");
 }
 
-function InstallmentMobileRow({
-  inst,
-  formCards,
-  formDebtors,
-  formAccounts,
-}: { inst: InstallmentRow } & FormData) {
+// One row per installment, same layout at every width (no separate mobile
+// markup): name / card dot · rate · ends · Total · Monthly · progress ·
+// Remaining. On phones Total and Monthly drop out and progress wraps under
+// the name. Clicking opens the edit form, as before.
+function InstallmentRowItem({ inst, formCards, formDebtors, formAccounts }: { inst: InstallmentRow } & FormData) {
   const [open, setOpen] = useState(false);
+  const finished = inst.status === "Finished";
+  const pct = inst.numInstallments > 0 ? (inst.installmentsPaid / inst.numInstallments) * 100 : 0;
+  const meta = [
+    inst.monthlyInterestRate != null ? `${inst.monthlyInterestRate.toFixed(2)}% m.v.` : null,
+    `ends ${endsLabel(inst.endDate)}`,
+  ].filter(Boolean);
 
   return (
-    <>
+    <li className="border-t border-border/40 first:border-t-0">
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full flex-col gap-1.5 border-b border-border px-4 py-3 text-left transition-colors hover:bg-muted/40 last:border-0"
+        className={cn(ROW_GRID, "w-full text-left text-sm transition-colors hover:bg-muted/30", finished && "opacity-60")}
       >
-        <div className="flex items-center justify-between gap-2">
-          <span className="min-w-0 truncate font-medium">{inst.description}</span>
-          <StatusBadge status={inst.status} />
-        </div>
-
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-muted-foreground">
-            Total <span className="font-mono text-foreground">{formatCOP(inst.totalAmount)}</span>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="truncate font-medium">{inst.description}</span>
+          <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            {inst.cardName ? (
+              <>
+                <span
+                  aria-hidden
+                  className="size-2 shrink-0 rounded-full"
+                  // Card colour is user data.
+                  style={{ backgroundColor: inst.cardColor ?? "var(--muted-foreground)" }}
+                />
+                <span className="shrink-0">{inst.cardName}</span>
+              </>
+            ) : (
+              <span className="shrink-0">No card</span>
+            )}
+            <span className="truncate">· {meta.join(" · ")}</span>
           </span>
-          <span className="font-mono text-sm font-semibold">
-            {inst.remaining > 0 ? formatCOP(inst.remaining) : "—"}
+        </span>
+        <Money value={inst.totalAmount} className="text-right max-sm:hidden" />
+        <span className="text-right text-muted-foreground max-sm:hidden">
+          <Money value={inst.monthlyAmount} />
+          {inst.monthlyInterestRate != null && <span className="ml-1 text-xs">+int</span>}
+        </span>
+        <span className="flex items-center gap-2 max-sm:order-last max-sm:col-span-2">
+          <Meter label={`${inst.description} payments made`} value={pct} max={100} tone={finished ? "positive" : "info"} size="sm" />
+          <span className="w-10 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
+            {inst.installmentsPaid}/{inst.numInstallments}
           </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-          {inst.cardName && (
-            <span className="inline-flex items-center gap-1">
-              <span
-                className="size-2 rounded-full shrink-0"
-                style={{ backgroundColor: inst.cardColor ?? undefined }}
-              />
-              {inst.cardName}
-            </span>
-          )}
-          <span>
-            {formatCOP(inst.monthlyAmount)}/mo
-            {inst.monthlyInterestRate != null && ` +int (${inst.monthlyInterestRate.toFixed(2)}% m.v.)`}
+        </span>
+        <span className="flex flex-col items-end gap-0.5 text-right">
+          {finished ? <StatusChip tone="positive">Finished</StatusChip> : <Money value={inst.remaining} className="font-semibold" />}
+          {/* Phones drop the Total column, so show the total under Remaining. */}
+          <span className="text-xs text-muted-foreground sm:hidden">
+            of <Money value={inst.totalAmount} />
           </span>
-        </div>
-
-        <ProgressBar paid={inst.installmentsPaid} total={inst.numInstallments} />
+        </span>
       </button>
       <InstallmentForm
         open={open}
@@ -158,41 +92,7 @@ function InstallmentMobileRow({
         debtors={formDebtors}
         accounts={formAccounts}
       />
-    </>
-  );
-}
-
-function StatusBadge({ status }: { status: "Active" | "Finished" }) {
-  if (status === "Finished") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
-        <span className="hidden size-1.5 rounded-full bg-current signal:inline-block" />
-        Finished
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
-      <span className="hidden size-1.5 rounded-full bg-current signal:inline-block" />
-      Active
-    </span>
-  );
-}
-
-function ProgressBar({ paid, total }: { paid: number; total: number }) {
-  const pct = total > 0 ? Math.min(100, (paid / total) * 100) : 0;
-  return (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 w-20 rounded-full bg-muted overflow-hidden">
-        <div
-          className="h-full rounded-full bg-primary transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="font-mono text-xs text-muted-foreground">
-        {paid}/{total}
-      </span>
-    </div>
+    </li>
   );
 }
 
@@ -212,8 +112,8 @@ export function AllInstallmentsTable({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          All installments
+        <h2 className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          All installments · {installments.filter((i) => i.status === "Active").length} active
         </h2>
         <div className="flex items-center gap-3">
           {finishedCount > 0 && (
@@ -245,12 +145,17 @@ export function AllInstallmentsTable({
           </button>
         </p>
       ) : (
-        <div className="rounded-xl border border-border overflow-hidden">
-          {/* Mobile: stacked rows — a 9-column table (even with hidden
-              sm/md cells) still forces horizontal scroll below sm. */}
-          <div className="sm:hidden">
-            {visible.map((inst) => (
-              <InstallmentMobileRow
+        <div className="overflow-hidden rounded-2xl border border-border/60 bg-card">
+          <div className={cn(ROW_GRID, "bg-muted/40 py-2.5 max-sm:hidden")}>
+            <span className={HEAD}>Item</span>
+            <span className={cn(HEAD, "text-right")}>Total</span>
+            <span className={cn(HEAD, "text-right")}>Monthly</span>
+            <span className={HEAD}>Progress</span>
+            <span className={cn(HEAD, "text-right")}>Remaining</span>
+          </div>
+          <ul className="border-t border-border/40">
+            {sortInstallments(visible).map((inst) => (
+              <InstallmentRowItem
                 key={inst.id}
                 inst={inst}
                 formCards={formCards}
@@ -258,34 +163,7 @@ export function AllInstallmentsTable({
                 formAccounts={formAccounts}
               />
             ))}
-          </div>
-
-          <Table className="hidden sm:table">
-            <TableHeader>
-              <TableRow className="bg-muted/30 hover:bg-muted/30 border-border">
-                <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground">Item</TableHead>
-                <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground">Card</TableHead>
-                <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Total</TableHead>
-                <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Monthly</TableHead>
-                <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground hidden md:table-cell">Rate</TableHead>
-                <TableHead className="px-4 text-center text-xs uppercase tracking-wider text-muted-foreground">Progress</TableHead>
-                <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground hidden md:table-cell">Ends</TableHead>
-                <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Remaining</TableHead>
-                <TableHead className="px-4 text-center text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visible.map((inst) => (
-                <InstallmentTableRow
-                  key={inst.id}
-                  inst={inst}
-                  formCards={formCards}
-                  formDebtors={formDebtors}
-                  formAccounts={formAccounts}
-                />
-              ))}
-            </TableBody>
-          </Table>
+          </ul>
         </div>
       )}
     </div>

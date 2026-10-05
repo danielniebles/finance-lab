@@ -1,18 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { ChevronDown } from "lucide-react";
+import { Money, StatusChip } from "@/components/ds";
 import { PayButton } from "./pay-button";
 import { PayAllButton } from "./pay-all-button";
-import { formatCOP } from "@/lib/format";
+import { dueLabel, splitDues } from "@/lib/installment-display";
 import { cn } from "@/lib/utils";
 import type { WalletOption } from "@/components/shared/wallet-select";
 import type { CategoryOption } from "@/lib/queries/expenses";
@@ -21,225 +14,189 @@ import type { DueThisMonth } from "@/lib/queries/installments";
 type Props = {
   dueThisMonth: DueThisMonth[];
   totalObligation: number;
+  /** cardId → payment due day, for each row's due chip. */
+  cardDueDays: Map<string, number | null>;
+  month: number;
+  year: number;
   walletOptions: WalletOption[];
   categories: CategoryOption[];
 };
+
+function rowKey(d: DueThisMonth) {
+  return `${d.installment.id}-${d.installmentNum}`;
+}
 
 function SelectionToolbar({
   selectedItems,
   walletOptions,
   categories,
   onClear,
-  className,
 }: {
   selectedItems: DueThisMonth[];
   walletOptions: WalletOption[];
   categories: CategoryOption[];
   onClear: () => void;
-  className?: string;
 }) {
+  const total = selectedItems.reduce((s, d) => s + d.amount, 0);
   return (
-    <div className={cn("border-t border-border/60 bg-muted/20 px-4 py-2 items-center justify-between", className)}>
-      <button
-        onClick={onClear}
-        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        Clear selection
-      </button>
-      <PayAllButton
-        items={selectedItems}
-        walletOptions={walletOptions}
-        categories={categories}
-        onPaid={onClear}
-      />
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-muted/30 px-4 py-2.5">
+      <span className="flex items-center gap-3 text-xs text-muted-foreground">
+        {selectedItems.length} selected · <Money value={total} className="font-semibold text-foreground" />
+        <button onClick={onClear} className="hover:text-foreground">
+          Clear
+        </button>
+      </span>
+      <PayAllButton items={selectedItems} walletOptions={walletOptions} categories={categories} onPaid={onClear} />
     </div>
   );
 }
 
-function DueThisMonthDesktopRow({
+function DueName({ due, paid }: { due: DueThisMonth; paid: boolean }) {
+  return (
+    <span className="flex min-w-0 flex-1 flex-col gap-0.5 max-sm:basis-full">
+      <span className={cn("truncate text-sm font-medium", paid && "text-muted-foreground")}>{due.installment.description}</span>
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {due.installment.cardColor && (
+          <span
+            aria-hidden
+            className="size-2 shrink-0 rounded-full"
+            // Card colour is user data.
+            style={{ backgroundColor: due.installment.cardColor }}
+          />
+        )}
+        {due.installment.cardName ?? "No card"} · {due.installmentNum} of {due.installment.numInstallments}
+      </span>
+    </span>
+  );
+}
+
+// One row: [select] name / card · k of n … due chip · amount · pay.
+// Same layout at every width; on phones the chip and amount wrap under the
+// name. Clicking an unpaid row toggles it into the "pay selected" set.
+function DueRow({
   due,
+  dueDay,
+  month,
+  year,
   isSelected,
   onToggle,
 }: {
   due: DueThisMonth;
+  dueDay: number | null;
+  month: number;
+  year: number;
   isSelected: boolean;
   onToggle: () => void;
 }) {
+  const paid = due.payment !== null;
+  const chip = paid ? null : dueLabel(dueDay, month, year);
   return (
-    <TableRow
-      onClick={onToggle}
+    <li
+      onClick={paid ? undefined : onToggle}
       className={cn(
-        "border-border cursor-pointer select-none transition-colors",
-        isSelected
-          ? "bg-primary/8 ring-1 ring-inset ring-primary/20 hover:bg-primary/10"
-          : "hover:bg-muted/30 signal:odd:bg-foreground/[3%]"
+        "flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/40 px-4 py-3 transition-colors first:border-t-0 sm:flex-nowrap",
+        !paid && "cursor-pointer select-none",
+        isSelected ? "bg-primary/10" : !paid && "hover:bg-muted/30",
       )}
     >
-      <TableCell className="px-4 font-medium">{due.installment.description}</TableCell>
-      <TableCell className="px-4 text-muted-foreground font-mono text-xs">
-        {due.installmentNum} of {due.installment.numInstallments}
-      </TableCell>
-      <TableCell className="px-4 text-right font-mono">{formatCOP(due.amount)}</TableCell>
-      <TableCell className="px-4 text-right" onClick={(e) => e.stopPropagation()}>
+      <DueName due={due} paid={paid} />
+      {chip && <StatusChip tone={chip.tone}>{chip.label}</StatusChip>}
+      <Money value={due.amount} className={cn("ml-auto text-right text-sm sm:ml-0 sm:w-28", paid && "text-muted-foreground")} />
+      <span onClick={(e) => e.stopPropagation()} className="shrink-0">
         <PayButton
           installmentId={due.installment.id}
           installmentNum={due.installmentNum}
           paymentId={due.payment?.id ?? null}
           paidAt={due.payment?.paidAt ?? null}
         />
-      </TableCell>
-    </TableRow>
-  );
-}
-
-function DueThisMonthMobileRow({
-  due,
-  isSelected,
-  onToggle,
-}: {
-  due: DueThisMonth;
-  isSelected: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <div
-      onClick={onToggle}
-      className={cn(
-        "flex flex-col gap-1.5 border-b border-border px-4 py-3 cursor-pointer select-none transition-colors last:border-0",
-        isSelected ? "bg-primary/8 ring-1 ring-inset ring-primary/20" : "hover:bg-muted/30"
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate font-medium">{due.installment.description}</span>
-        <span className="shrink-0 font-mono text-sm">{formatCOP(due.amount)}</span>
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-xs text-muted-foreground">
-          {due.installmentNum} of {due.installment.numInstallments}
-        </span>
-        <div onClick={(e) => e.stopPropagation()}>
-          <PayButton
-            installmentId={due.installment.id}
-            installmentNum={due.installmentNum}
-            paymentId={due.payment?.id ?? null}
-            paidAt={due.payment?.paidAt ?? null}
-          />
-        </div>
-      </div>
-    </div>
+      </span>
+    </li>
   );
 }
 
 export function DueThisMonthTable({
   dueThisMonth,
   totalObligation,
+  cardDueDays,
+  month,
+  year,
   walletOptions,
   categories,
 }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showPaid, setShowPaid] = useState(false);
+  const { toPay, paid } = splitDues(dueThisMonth);
+  const paidTotal = paid.reduce((s, d) => s + d.amount, 0);
 
-  function rowKey(d: DueThisMonth) {
-    return `${d.installment.id}-${d.installmentNum}`;
-  }
-
-  // Already-paid rows can't be selected for "pay all" — their slot is already
+  // Paid rows can't be selected for "pay all" — their slot is already
   // recorded, so a bulk-pay would insert a duplicate InstallmentPayment.
-  // Unpaying is still available per-row via PayButton.
   function toggleRow(due: DueThisMonth) {
     if (due.payment !== null) return;
     const key = rowKey(due);
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) { next.delete(key); } else { next.add(key); }
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   }
 
   const selectedItems = dueThisMonth.filter((d) => selected.has(rowKey(d)));
-  const selectedTotal = selectedItems.reduce((s, d) => s + d.amount, 0);
-
-  const paidCount = dueThisMonth.filter((d) => d.payment !== null).length;
+  const renderRow = (d: DueThisMonth) => (
+    <DueRow
+      key={rowKey(d)}
+      due={d}
+      dueDay={d.installment.cardId ? cardDueDays.get(d.installment.cardId) ?? null : null}
+      month={month}
+      year={year}
+      isSelected={selected.has(rowKey(d))}
+      onToggle={() => toggleRow(d)}
+    />
+  );
 
   return (
-    <div className="rounded-xl border border-border overflow-hidden">
-      {/* Mobile: stacked rows — 4 columns (incl. a text pay button) don't fit
-          375px without horizontal scroll. */}
-      <div className="sm:hidden">
-        {dueThisMonth.map((due) => {
-          const key = rowKey(due);
-          return (
-            <DueThisMonthMobileRow
-              key={key}
-              due={due}
-              isSelected={selected.has(key)}
-              onToggle={() => toggleRow(due)}
-            />
-          );
-        })}
-        <div className="flex items-center justify-between border-t border-border bg-muted/30 px-4 py-2.5">
-          <span className="text-xs font-medium text-muted-foreground">
-            {selected.size > 0 ? `${selected.size} selected` : `${paidCount} of ${dueThisMonth.length} paid`}
-          </span>
-          <span className="font-mono text-sm font-semibold">
-            {selected.size > 0 ? formatCOP(selectedTotal) : formatCOP(totalObligation)}
-          </span>
-        </div>
-        {selected.size > 0 && (
-          <SelectionToolbar
-            selectedItems={selectedItems}
-            walletOptions={walletOptions}
-            categories={categories}
-            onClear={() => setSelected(new Set())}
-            className="flex"
-          />
-        )}
-      </div>
+    <div className="overflow-hidden rounded-2xl border border-border/60 bg-card">
+      {toPay.length > 0 ? (
+        <ul>{toPay.map(renderRow)}</ul>
+      ) : (
+        <p className="px-4 py-5 text-sm text-muted-foreground">Everything due this month is paid.</p>
+      )}
 
-      <Table className="hidden sm:table">
-        <TableHeader>
-          <TableRow className="bg-muted/30 hover:bg-muted/30 border-border">
-            <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground">Item</TableHead>
-            <TableHead className="px-4 text-xs uppercase tracking-wider text-muted-foreground">Installment</TableHead>
-            <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Amount</TableHead>
-            <TableHead className="px-4 text-right text-xs uppercase tracking-wider text-muted-foreground">Status</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {dueThisMonth.map((due) => {
-            const key = rowKey(due);
-            return (
-              <DueThisMonthDesktopRow
-                key={key}
-                due={due}
-                isSelected={selected.has(key)}
-                onToggle={() => toggleRow(due)}
-              />
-            );
-          })}
-        </TableBody>
-        <TableFooter className="border-border">
-          <TableRow className="border-border">
-            <TableCell colSpan={2} className="px-4 text-xs font-medium text-muted-foreground">
-              {selected.size > 0
-                ? `${selected.size} selected`
-                : `${paidCount} of ${dueThisMonth.length} paid`}
-            </TableCell>
-            <TableCell className="px-4 text-right font-mono font-semibold">
-              {selected.size > 0 ? formatCOP(selectedTotal) : formatCOP(totalObligation)}
-            </TableCell>
-            <TableCell />
-          </TableRow>
-        </TableFooter>
-      </Table>
-      {selected.size > 0 && (
+      {selectedItems.length > 0 && (
         <SelectionToolbar
           selectedItems={selectedItems}
           walletOptions={walletOptions}
           categories={categories}
           onClear={() => setSelected(new Set())}
-          className="hidden sm:flex"
         />
       )}
+
+      {paid.length > 0 && (
+        <>
+          <button
+            type="button"
+            aria-expanded={showPaid}
+            onClick={() => setShowPaid((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 border-t border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <span>Paid this month · {paid.length}</span>
+            <span className="flex items-center gap-2">
+              <Money value={paidTotal} tone="positive" />
+              <ChevronDown className={cn("size-4 transition-transform", showPaid && "rotate-180")} aria-hidden />
+            </span>
+          </button>
+          {showPaid && <ul className="border-t border-border/40">{paid.map(renderRow)}</ul>}
+        </>
+      )}
+
+      <div className="flex items-center justify-between border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
+        <span>
+          {paid.length} of {dueThisMonth.length} paid
+        </span>
+        <span>
+          Month total <Money value={totalObligation} className="font-semibold text-foreground" />
+        </span>
+      </div>
     </div>
   );
 }

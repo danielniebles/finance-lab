@@ -2,11 +2,13 @@
 
 import { useState, useMemo } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { formatCOP } from "@/lib/format";
+import { SectionHeader } from "@/components/ds";
+import { cardStatus, nextCardDue } from "@/lib/installment-display";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 import { MonthNav } from "./month-nav";
+import { InstallmentsSummary } from "./installments-summary";
 import { DueThisMonthTable } from "./due-this-month-table";
 import { AllInstallmentsTable } from "./all-installments-table";
 import { CreditCardTile } from "./credit-card-tile";
@@ -15,36 +17,6 @@ import { computeMonthSummary } from "@/lib/installment-utils";
 import type { InstallmentRow, MonthSummary, CreditCardSummary } from "@/lib/queries/installments";
 import type { WalletOption } from "@/components/shared/wallet-select";
 import type { CategoryOption } from "@/lib/queries/expenses";
-
-// ─── StatInline ───────────────────────────────────────────────────────────────
-
-function StatInline({
-  label,
-  value,
-  sub,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  highlight?: "good" | "bad" | "neutral";
-}) {
-  const valueColor =
-    highlight === "good"
-      ? "text-success"
-      : highlight === "bad"
-      ? "text-destructive"
-      : "text-foreground";
-  return (
-    <div className="flex flex-col gap-0.5 min-w-0">
-      <span className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <span className={`font-mono text-base sm:text-xl font-semibold ${valueColor}`}>{value}</span>
-      {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
-    </div>
-  );
-}
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
@@ -102,7 +74,7 @@ export function InstallmentsDashboard({
   );
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -124,114 +96,68 @@ export function InstallmentsDashboard({
         </div>
       </div>
 
-      {/* Credit Overview — unified container */}
-      <section
-        aria-labelledby="credit-overview-heading"
-        className="rounded-xl ring-1 ring-foreground/10 bg-card overflow-hidden"
-      >
-        {/* Top band — Credit Cards */}
-        <div className="px-6 pt-5 pb-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2
-              id="credit-overview-heading"
-              className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            >
-              Credit Cards
-            </h2>
+      <InstallmentsSummary
+        summary={activeSummary}
+        nextDue={nextCardDue(cards, activeSummary.dueThisMonth)}
+        month={month}
+        year={year}
+        masked={privacyMode}
+      />
+
+      {/* Credit cards — click one to filter the whole page to it */}
+      <section className="flex flex-col gap-3">
+        <SectionHeader
+          title="Credit cards"
+          trailing={
             <Button variant="outline" size="sm" onClick={() => setCardManagerOpen(true)}>
               Manage cards
             </Button>
-          </div>
-          {cards.length > 0 && (
-            <Carousel opts={{ align: "start" }}>
-              <CarouselContent>
-                {cards.map((c) => (
-                  // py-1: the selected tile's ring-2 needs room to render —
-                  // horizontal carousels get pl-4 from CarouselItem by default
-                  // but no vertical padding, so the viewport's overflow-hidden
-                  // otherwise clips the ring flush at the top/bottom edge
-                  // (same fix as vaults-dashboard.tsx's VaultTile carousel).
-                  <CarouselItem key={c.id} className="basis-auto py-1">
-                    <CreditCardTile
-                      card={c}
-                      masked={privacyMode}
-                      selected={selectedCardId === null ? undefined : selectedCardId === c.id}
-                      onCardClick={() => handleCardClick(c.id)}
-                    />
-                  </CarouselItem>
-                ))}
-              </CarouselContent>
-            </Carousel>
-          )}
-          {cards.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No credit cards yet. Add one via{" "}
-              <button
-                onClick={() => setCardManagerOpen(true)}
-                className="underline underline-offset-2 hover:text-foreground transition-colors"
-              >
-                Manage cards
-              </button>
-              .
-            </p>
-          )}
-        </div>
-
-        {/* Divider */}
-        <div className="border-t border-border" aria-hidden />
-
-
-        {/* Bottom band — KPI stats */}
-        <div className="grid grid-cols-2 divide-x divide-y divide-border bg-muted/30 sm:grid-cols-5 sm:divide-y-0">
-          <div className="px-4 py-3 sm:px-6 sm:py-4">
-            <StatInline
-              label="Total obligation"
-              value={formatCOP(activeSummary.totalObligation)}
-              sub="due this month"
-            />
-          </div>
-          <div className="px-4 py-3 sm:px-6 sm:py-4">
-            <StatInline
-              label="Paid so far"
-              value={formatCOP(activeSummary.totalPaid)}
-              highlight={activeSummary.totalPaid > 0 ? "good" : "neutral"}
-            />
-          </div>
-          <div className="px-4 py-3 sm:px-6 sm:py-4">
-            <StatInline
-              label="Still due"
-              value={formatCOP(activeSummary.totalDue)}
-              highlight={activeSummary.totalDue > 0 ? "bad" : "good"}
-            />
-          </div>
-          <div className="px-4 py-3 sm:px-6 sm:py-4">
-            <StatInline
-              label="Active installments"
-              value={String(activeSummary.activeCount)}
-            />
-          </div>
-          <div className="px-4 py-3 sm:px-6 sm:py-4 col-span-2 sm:col-span-1">
-            <StatInline
-              label="Total debt"
-              value={formatCOP(activeSummary.totalRemainingDebt)}
-              sub="all remaining balances"
-              highlight={activeSummary.totalRemainingDebt > 0 ? "bad" : "good"}
-            />
-          </div>
-        </div>
+          }
+        />
+        {cards.length > 0 ? (
+          <Carousel opts={{ align: "start" }}>
+            <CarouselContent>
+              {cards.map((c) => (
+                // py-1: room for the selected tile's border — the viewport's
+                // overflow-hidden otherwise clips it at the top/bottom edge.
+                <CarouselItem key={c.id} className="basis-auto py-1">
+                  <CreditCardTile
+                    card={c}
+                    status={cardStatus(c, summary.dueThisMonth, month, year)}
+                    masked={privacyMode}
+                    selected={selectedCardId === null ? undefined : selectedCardId === c.id}
+                    onCardClick={() => handleCardClick(c.id)}
+                  />
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+          </Carousel>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No credit cards yet. Add one via{" "}
+            <button
+              onClick={() => setCardManagerOpen(true)}
+              className="underline underline-offset-2 transition-colors hover:text-foreground"
+            >
+              Manage cards
+            </button>
+            .
+          </p>
+        )}
       </section>
 
-      {/* Due this month */}
-      <section className="space-y-3">
-        <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Payments due this month
-        </h2>
+      {/* Due this month — unpaid first, paid folded away */}
+      <section className="flex flex-col gap-3">
+        <SectionHeader title={`To pay this month · ${activeSummary.dueThisMonth.filter((d) => d.payment === null).length}`} />
         {activeSummary.dueThisMonth.length === 0 ? (
           <p className="text-sm text-muted-foreground">No installments due this month.</p>
         ) : (
           <DueThisMonthTable
             dueThisMonth={activeSummary.dueThisMonth}
             totalObligation={activeSummary.totalObligation}
+            cardDueDays={new Map(cards.map((c) => [c.id, c.paymentDueDay]))}
+            month={month}
+            year={year}
             walletOptions={walletOptions}
             categories={categories}
           />
