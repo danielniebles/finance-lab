@@ -16,11 +16,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BudgetProgressBar } from "./budget-progress-bar";
+import { Meter, Money, SectionHeader, StatusChip } from "@/components/ds";
+import { categoryStatus, groupCategories, isEmptyCategory, meterTone } from "@/lib/category-status";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { CategorySeverity, CategoryBudgetType } from "@/lib/queries/expenses";
+import type { CategoryStatusRow } from "@/lib/category-status";
 import type { TagOption } from "@/lib/queries/tags";
 
 // Falls back to the transaction's tags when there's no note — a bare "—"
@@ -31,17 +31,7 @@ function noteOrTagsLabel(note: string | null, tags: TagOption[]): string {
   return "—";
 }
 
-type CategoryRow = {
-  id: string;
-  name: string;
-  budgetType: CategoryBudgetType;
-  spent: number;
-  budget: number;
-  control: number;
-  percentUsed: number | null;
-  note: string | null;
-  severity: CategorySeverity;
-};
+type CategoryRow = CategoryStatusRow;
 
 type Props = {
   categoryBreakdown: CategoryRow[];
@@ -86,6 +76,10 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year, titleSu
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Grouped Fixed / Variable list with subtotals. Rows with no budget and no
+// spend are hidden behind a toggle. One responsive grid row per category
+// (no separate mobile markup): on narrow screens Budget/Left drop out and
+// the meter + status wrap under the name.
 function CategoryBreakdownCard({
   categoryBreakdown,
   titleSuffix,
@@ -95,89 +89,112 @@ function CategoryBreakdownCard({
   titleSuffix?: string;
   onRowClick: (row: CategoryRow) => void;
 }) {
-  return (
-    <Card className="overflow-hidden border-border/60">
-      <CardHeader className="px-5 py-4 border-b border-border/60">
-        <CardTitle className="text-sm font-semibold">
-          Spend by Category{titleSuffix ? ` — ${titleSuffix}` : ""}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        {/* Mobile: stacked rows — avoids the horizontal scroll a 7-column table forces. */}
-        <div className="sm:hidden">
-          {categoryBreakdown.map((row) => (
-            <CategoryMobileRow key={row.id} row={row} onClick={() => onRowClick(row)} />
-          ))}
-        </div>
+  const [showEmpty, setShowEmpty] = useState(false);
+  const emptyCount = categoryBreakdown.filter(isEmptyCategory).length;
+  const visible = showEmpty ? categoryBreakdown : categoryBreakdown.filter((r) => !isEmptyCategory(r));
+  const { fixed, variable } = groupCategories(visible);
 
-        <div className="hidden sm:block overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-border/60 hover:bg-transparent">
-                <TableHead className="pl-5 text-xs uppercase tracking-wide text-muted-foreground">Category</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">Type</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Actual</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Budget</TableHead>
-                <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">Control</TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-muted-foreground w-36">Progress</TableHead>
-                <TableHead className="pr-5 text-xs uppercase tracking-wide text-muted-foreground">Severity</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {categoryBreakdown.map((row) => (
-                <TableRow
-                  key={row.id}
-                  className={cn(
-                    "border-border/40 transition-colors cursor-pointer signal:odd:bg-foreground/[3%]",
-                    rowBg(row.severity)
-                  )}
-                  onClick={() => onRowClick(row)}
-                >
-                  <TableCell className="pl-5 font-medium">{row.name}</TableCell>
-                  <TableCell>
-                    <TypePill type={row.budgetType} />
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {formatCOP(row.spent)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm tabular-nums text-muted-foreground">
-                    {formatCOP(row.budget)}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      "text-right font-mono text-sm tabular-nums",
-                      row.control < 0 ? "text-destructive" : "text-success"
-                    )}
-                  >
-                    {formatCOP(row.control)}
-                  </TableCell>
-                  <TableCell>
-                    {row.percentUsed !== null ? (
-                      <div className="flex items-center gap-2">
-                        <BudgetProgressBar percent={row.percentUsed} className="flex-1" />
-                        <span className="font-mono text-xs tabular-nums text-muted-foreground w-9 text-right shrink-0">
-                          {row.percentUsed.toFixed(0)}%
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="pr-5">
-                    <div className="flex items-center gap-2">
-                      <SeverityBadge severity={row.severity} />
-                      {row.note && (
-                        <span className="text-xs text-muted-foreground">{row.note}</span>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+  return (
+    <section aria-label="Spending by category" className="flex flex-col gap-3">
+      <SectionHeader
+        title={`By category${titleSuffix ? ` · ${titleSuffix}` : ""}`}
+        trailing={<span className="text-xs text-muted-foreground max-sm:hidden">Click a category to see its transactions</span>}
+      />
+      <div className="overflow-hidden rounded-2xl border border-border/60 bg-card">
+        <div className={cn(ROW_GRID, "bg-muted/40 py-2.5 max-sm:hidden")}>
+          <span className={HEAD}>Category</span>
+          <span className={cn(HEAD, "text-right")}>Spent</span>
+          <span className={cn(HEAD, "text-right")}>Budget</span>
+          <span className={cn(HEAD, "text-right")}>Left</span>
+          <span className={HEAD}>Used</span>
+          <span className={HEAD}>Status</span>
         </div>
-      </CardContent>
-    </Card>
+        <CategoryGroup title="Fixed" rows={fixed} onRowClick={onRowClick} />
+        <CategoryGroup title="Variable" rows={variable} onRowClick={onRowClick} />
+        {emptyCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowEmpty((v) => !v)}
+            className="w-full border-t border-border/60 px-5 py-3 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {showEmpty
+              ? "Hide empty categories"
+              : `Show ${emptyCount} empty ${emptyCount === 1 ? "category" : "categories"} (no budget, nothing spent)`}
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const ROW_GRID =
+  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-5 py-3 sm:grid-cols-[minmax(140px,1.4fr)_repeat(3,minmax(96px,1fr))_minmax(110px,1fr)_120px]";
+const HEAD = "font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground";
+
+function CategoryGroup({
+  title,
+  rows,
+  onRowClick,
+}: {
+  title: string;
+  rows: CategoryRow[];
+  onRowClick: (row: CategoryRow) => void;
+}) {
+  if (rows.length === 0) return null;
+  const spent = rows.reduce((s, r) => s + r.spent, 0);
+  const budget = rows.reduce((s, r) => s + r.budget, 0);
+  const left = budget - spent;
+  return (
+    <>
+      <div className={cn(ROW_GRID, "border-t border-border/60 bg-muted/20 py-2.5")}>
+        <span className="text-sm font-semibold">{title}</span>
+        <Money value={spent} tone={left < 0 ? "danger" : undefined} className="text-right text-sm font-semibold" />
+        <Money value={budget} className="text-right text-sm text-muted-foreground max-sm:hidden" />
+        <Money value={left} tone={left < 0 ? "danger" : undefined} className="text-right text-sm text-muted-foreground max-sm:hidden" />
+      </div>
+      <ul>
+        {rows.map((row) => (
+          <CategoryRowItem key={row.id} row={row} onClick={() => onRowClick(row)} />
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function CategoryRowItem({ row, onClick }: { row: CategoryRow; onClick: () => void }) {
+  const status = categoryStatus(row);
+  const noBudget = row.budget === 0;
+  return (
+    <li className="border-t border-border/40">
+      <button type="button" onClick={onClick} className={cn(ROW_GRID, "w-full text-left text-sm transition-colors hover:bg-muted/30")}>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-medium">{row.name}</span>
+          {row.budgetType === "MIXED" && <span className="shrink-0 text-xs text-muted-foreground">Mixed</span>}
+        </span>
+        <Money value={row.spent} className={cn("text-right", row.spent === 0 && "text-muted-foreground")} />
+        <span className="text-right text-muted-foreground max-sm:hidden">
+          {noBudget ? "—" : <Money value={row.budget} />}
+        </span>
+        <span className="text-right max-sm:hidden">
+          <Money value={row.control} tone={row.control < 0 ? "danger" : undefined} />
+        </span>
+        <span className="flex items-center gap-2 max-sm:col-span-1">
+          <Meter
+            label={`${row.name} budget used`}
+            value={noBudget ? (row.spent > 0 ? 1 : 0) : row.percentUsed ?? 0}
+            max={noBudget ? 1 : 100}
+            tone={meterTone(row)}
+            size="sm"
+          />
+          <span className="w-9 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
+            {row.percentUsed !== null ? `${row.percentUsed.toFixed(0)}%` : "—"}
+          </span>
+        </span>
+        <span className="max-sm:justify-self-end">
+          <StatusChip tone={status.tone}>{status.label}</StatusChip>
+        </span>
+      </button>
+    </li>
   );
 }
 
@@ -263,49 +280,6 @@ function CategoryTransactionsDialog({
   );
 }
 
-function CategoryMobileRow({ row, onClick }: { row: CategoryRow; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex w-full flex-col gap-1.5 border-b border-border/40 px-4 py-3 text-left transition-colors last:border-0",
-        rowBg(row.severity)
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate font-medium text-sm">{row.name}</span>
-        <SeverityBadge severity={row.severity} />
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-sm tabular-nums">{formatCOP(row.spent)}</span>
-        <span
-          className={cn(
-            "font-mono text-xs tabular-nums",
-            row.control < 0 ? "text-destructive" : "text-success"
-          )}
-        >
-          {row.control >= 0 ? "+" : ""}
-          {formatCOP(row.control)}
-        </span>
-      </div>
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <TypePill type={row.budgetType} />
-        <span className="truncate">of {formatCOP(row.budget)}</span>
-        {row.note && <span className="truncate">· {row.note}</span>}
-      </div>
-      {row.percentUsed !== null && (
-        <div className="flex items-center gap-2">
-          <BudgetProgressBar percent={row.percentUsed} className="flex-1" />
-          <span className="w-8 shrink-0 text-right font-mono text-[10px] tabular-nums text-muted-foreground">
-            {row.percentUsed.toFixed(0)}%
-          </span>
-        </div>
-      )}
-    </button>
-  );
-}
-
 function CategoryTransactionMobileRow({ transaction }: { transaction: CategoryTransaction }) {
   return (
     <div className="flex w-full flex-col gap-1 border-b border-border/40 px-4 py-2.5 last:border-0">
@@ -329,54 +303,4 @@ function CategoryTransactionMobileRow({ transaction }: { transaction: CategoryTr
       </div>
     </div>
   );
-}
-
-function TypePill({ type }: { type: string }) {
-  const styles: Record<string, string> = {
-    FIXED:    "border-border/60 bg-muted text-muted-foreground",
-    VARIABLE: "border-border/60 bg-muted text-muted-foreground",
-    MIXED:    "border-amber-500/25 bg-amber-500/8 text-amber-600 dark:text-amber-400",
-  };
-  const labels: Record<string, string> = {
-    FIXED: "Fixed", VARIABLE: "Variable", MIXED: "Mixed",
-  };
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-        styles[type] ?? styles.VARIABLE
-      )}
-    >
-      {labels[type] ?? type}
-    </span>
-  );
-}
-
-export function SeverityBadge({ severity }: { severity: CategorySeverity }) {
-  const styles: Record<CategorySeverity, string> = {
-    OK:        "border-success/25 bg-success/10 text-success",
-    Issue:     "border-warning/25 bg-warning/10 text-warning",
-    Critical:  "border-destructive/25 bg-destructive/10 text-destructive",
-    Unplanned: "border-unplanned/25 bg-unplanned/10 text-unplanned",
-  };
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
-        styles[severity]
-      )}
-    >
-      <span className="hidden size-1.5 rounded-full bg-current signal:inline-block" />
-      {severity}
-    </span>
-  );
-}
-
-function rowBg(severity: CategorySeverity) {
-  switch (severity) {
-    case "Critical":  return "bg-destructive/5 hover:bg-destructive/8";
-    case "Issue":     return "bg-warning/5 hover:bg-warning/8";
-    case "Unplanned": return "bg-warning/5 hover:bg-warning/8";
-    default:          return "hover:bg-muted/30";
-  }
 }

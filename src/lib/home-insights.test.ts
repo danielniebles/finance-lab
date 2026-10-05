@@ -19,9 +19,9 @@ function cat(overrides: Partial<InsightCategory>): InsightCategory {
 const october: InsightCategory[] = [
   cat({ name: "Travel", spent: 4_874_498, severity: "Unplanned" }),
   cat({ name: "Personal Care", spent: 500_000, severity: "Unplanned" }),
-  cat({ name: "Health & Fitness", budget: 1_131_000, severity: "Issue", note: "Unpaid", budgetType: "FIXED" }),
-  cat({ name: "Family", budget: 1_000_000, severity: "Issue", note: "Unpaid", budgetType: "FIXED" }),
-  cat({ name: "Phone Bill", budget: 60_000, severity: "Issue", note: "Unpaid", budgetType: "FIXED" }),
+  cat({ name: "Health & Fitness", budget: 1_131_000, severity: "Pending", note: "Not paid yet", budgetType: "FIXED" }),
+  cat({ name: "Family", budget: 1_000_000, severity: "Pending", note: "Not paid yet", budgetType: "FIXED" }),
+  cat({ name: "Phone Bill", budget: 60_000, severity: "Pending", note: "Not paid yet", budgetType: "FIXED" }),
   cat({ name: "Bills & Utilities", spent: 3_482_800, budget: 4_336_800, percentUsed: 80, budgetType: "FIXED", note: "Lower than expected" }),
   cat({ name: "Credit Cards", spent: 913_359, budget: 1_500_000, percentUsed: 61 }),
 ];
@@ -61,9 +61,9 @@ describe("buildHomeInsights", () => {
 });
 
 describe("isPendingFixed", () => {
-  it("only matches budgeted fixed categories with nothing spent", () => {
-    expect(isPendingFixed(cat({ budgetType: "FIXED", budget: 10 }))).toBe(true);
-    expect(isPendingFixed(cat({ budgetType: "FIXED", budget: 10, spent: 1 }))).toBe(false);
-    expect(isPendingFixed(cat({ budgetType: "VARIABLE", budget: 10 }))).toBe(false);
+  it("only matches categories classified as Pending", () => {
+    expect(isPendingFixed(cat({ budgetType: "FIXED", budget: 10, severity: "Pending" }))).toBe(true);
+    // A past month's unpaid bill is an Issue, not pending.
+    expect(isPendingFixed(cat({ budgetType: "FIXED", budget: 10, severity: "Issue", note: "Unpaid" }))).toBe(false);
   });
 });

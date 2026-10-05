@@ -35,9 +35,9 @@ export type HomeInsight = {
 
 export const MAX_INSIGHTS = 3;
 
-/** A fixed category with nothing spent yet is pending, not a problem. */
+/** A fixed bill not paid yet while the month is running — pending, not a problem. */
 export function isPendingFixed(c: InsightCategory): boolean {
-  return c.budgetType === "FIXED" && c.spent === 0 && c.budget > 0;
+  return c.severity === "Pending";
 }
 
 function unplannedInsights(categories: InsightCategory[]): HomeInsight[] {

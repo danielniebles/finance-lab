@@ -114,7 +114,7 @@ The `getMonthlyAnalysis()` query returns:
 - **Fixed/Variable subtotals** — actual, budget, control for each group
 - **Variable Burn Rate** — `variableActual / variableBudget * 100` (alert if > 100%)
 - **Savings** — Real (Salary − Actual), Ideal (Salary − Budget), Gap, Unplanned spend
-- **Category severity** — OK / Issue / Critical / Unplanned with progress bars in table
+- **Category severity** — OK / Pending / Issue / Critical / Unplanned (Pending = fixed bill not paid yet while the month is open, ADR-048)
 
 ## Milestones
 

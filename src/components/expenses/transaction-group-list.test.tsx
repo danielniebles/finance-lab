@@ -51,7 +51,8 @@ beforeEach(() => {
 });
 
 function dateColumnPresent(container: HTMLElement): boolean {
-  return container.querySelector(".w-11") !== null;
+  // The date column is the fixed-width w-14 span rendered only outside day mode.
+  return container.querySelector(".w-14") !== null;
 }
 
 describe("TransactionGroupList — redundant-column suppression", () => {

@@ -58,7 +58,10 @@ export async function getAvailableMonths(): Promise<AvailableMonth[]> {
 
 export type CategoryBudgetType = "FIXED" | "VARIABLE" | "MIXED";
 
-export type CategorySeverity = "OK" | "Issue" | "Critical" | "Unplanned";
+// "Pending" = a FIXED bill with nothing paid yet while its month is still
+// running — expected mid-month, not a problem. Once the period has ended an
+// unpaid fixed bill becomes "Issue" (ADR-048).
+export type CategorySeverity = "OK" | "Pending" | "Issue" | "Critical" | "Unplanned";
 
 type CategoryClassification = {
   severity: CategorySeverity;
@@ -123,7 +126,8 @@ export async function getCategories(): Promise<CategoryOption[]> {
 // ─── Single source of truth for category health classification ────────────────
 //
 // FIXED categories: severity is note-driven (amount deviation or unpaid flag)
-//   spent = 0          → Issue  + "Unpaid"              (flag for review)
+//   spent = 0          → Pending + "Not paid yet" while the period is open
+//                        Issue   + "Unpaid"       once the period has ended
 //   spent = budget     → OK     + no note               (as expected)
 //   spent < budget     → OK     + "Lower than expected" (informational)
 //   spent > budget     → Issue  + "Higher than expected"(informational)
@@ -139,9 +143,14 @@ function classifyCategory(
   spent: number,
   budget: number,
   percentUsed: number | null,
+  periodOpen: boolean,
 ): CategoryClassification {
   if (budgetType === "FIXED") {
-    if (spent === 0)      return { severity: "Issue", note: "Unpaid" };
+    if (spent === 0) {
+      return periodOpen
+        ? { severity: "Pending", note: "Not paid yet" }
+        : { severity: "Issue", note: "Unpaid" };
+    }
     if (spent === budget) return { severity: "OK",    note: null };
     if (spent < budget)   return { severity: "OK",    note: "Lower than expected" };
     /* spent > budget */  return { severity: "Issue", note: "Higher than expected" };
@@ -196,6 +205,7 @@ type AnalysisAppCategory = {
 function buildCategoryBreakdown(
   appCategories: AnalysisAppCategory[],
   spendByCategory: Record<string, number>,
+  periodOpen: boolean,
 ) {
   return appCategories.map((cat) => {
     const spent = spendByCategory[cat.id] ?? 0;
@@ -208,7 +218,7 @@ function buildCategoryBreakdown(
 
     const control = budget - spent;
     const percentUsed = budget > 0 ? (spent / budget) * 100 : null;
-    const { severity, note } = classifyCategory(budgetType, spent, budget, percentUsed);
+    const { severity, note } = classifyCategory(budgetType, spent, budget, percentUsed, periodOpen);
 
     return {
       id: cat.id,
@@ -258,10 +268,11 @@ function computeTopOffenders(categoryBreakdown: BreakdownRow[]) {
     Critical: 0,
     Unplanned: 1,
     Issue: 2,
+    Pending: 98,
     OK: 99,
   };
   return [...categoryBreakdown]
-    .filter((c) => c.severity !== "OK")
+    .filter((c) => c.severity !== "OK" && c.severity !== "Pending")
     .sort((a, b) => {
       const diff = severityOrder[a.severity] - severityOrder[b.severity];
       if (diff !== 0) return diff;
@@ -300,7 +311,10 @@ export async function getMonthlyAnalysis(month: number, year: number, walletId?:
     .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
   const { spendByCategory, uncategorizedCount } = buildSpendByCategory(transactions);
-  const categoryBreakdown = buildCategoryBreakdown(appCategories, spendByCategory);
+  // The period is "open" until its exclusive end bound passes; unpaid fixed
+  // bills are Pending until then.
+  const periodOpen = new Date() < end;
+  const categoryBreakdown = buildCategoryBreakdown(appCategories, spendByCategory, periodOpen);
 
   // Fixed / Variable subtotals (budget from item-level aggregation, actual from category grouping)
   const fixedOnlyCats = categoryBreakdown.filter((c) => c.budgetType === "FIXED");

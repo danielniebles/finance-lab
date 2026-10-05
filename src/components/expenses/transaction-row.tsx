@@ -192,6 +192,9 @@ function TransactionDefaultRow({
     item.categoryIcon,
     item.categoryColor
   );
+  // Grouped by category, every row in the group shares the heading's
+  // category, so the chip would just repeat it.
+  const showCategory = groupBy !== "category";
 
   return (
     <button
@@ -199,69 +202,60 @@ function TransactionDefaultRow({
       onClick={onEdit}
       aria-label={rowAriaLabel(item)}
       className={cn(
-        "flex w-full flex-col gap-1.5 px-4 py-2.5 border-b border-border/40 last:border-0",
-        "sm:flex-row sm:items-center sm:gap-3 sm:py-2",
+        "flex w-full items-center px-4 py-2.5 border-b border-border/40 last:border-0",
         "text-left cursor-pointer transition-colors",
         "hover:bg-muted hover:text-foreground dark:hover:bg-muted/50",
         "active:bg-muted/70",
         "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
       )}
     >
-      {/* Icon chip + category + amount — the whole row on desktop (note grows
-          to fill the middle); on mobile this is just the top line, with the
-          note demoted to its own line below since it doesn't fit here. */}
+      {/* [icon] note / (category chip · tags) … amount. One layout for every
+          width: the note leads (it's what identifies the transaction) and the
+          category + tags sit under it, so nothing has to move to a second
+          line on mobile. Expenses read in the foreground colour and only
+          income is tinted — a ledger of red rows made everything look like a
+          warning. */}
       <div className="flex w-full min-w-0 items-center gap-3">
         {groupBy !== "day" && (
           <span className="text-xs tabular-nums text-muted-foreground w-14 shrink-0 whitespace-nowrap">
             {formatRowDate(item.date)}
           </span>
         )}
-        <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-full", iconWrap)}>
-          <CategoryIcon className="size-5" />
+        <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", iconWrap)}>
+          <CategoryIcon className="size-4.5" />
         </span>
-        {item.categoryName && (
-          <span
-            className={cn(
-              "inline-flex w-fit shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-              badge
-            )}
-          >
-            {item.categoryName}
-          </span>
-        )}
-        {/* Tags — inline in the main row (same spot the old "manual" source
-            label used to sit), not a wrapping line of their own: a separate
-            line under every tagged row pushed row height up and shifted the
-            amount down. Few tags per transaction in practice, so this fits
-            without crowding the note/amount. */}
-        {item.tags.length > 0 && (
-          <div className="flex shrink-0 items-center gap-1">
-            {item.tags.map((t) => (
-              <span
-                key={t.id}
-                className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
-              >
-                #{t.name}
-              </span>
-            ))}
-          </div>
-        )}
-        <span className="hidden sm:block text-sm truncate flex-1 min-w-0">{item.note || "—"}</span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate text-sm font-medium">{item.note || "—"}</span>
+          {((showCategory && item.categoryName) || item.tags.length > 0) && (
+            <span className="flex min-w-0 items-center gap-1.5">
+              {showCategory && item.categoryName && (
+                <span
+                  className={cn(
+                    "inline-flex w-fit shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+                    badge
+                  )}
+                >
+                  {item.categoryName}
+                </span>
+              )}
+              {item.tags.map((t) => (
+                <span key={t.id} className="shrink-0 text-xs text-muted-foreground">
+                  #{t.name}
+                </span>
+              ))}
+            </span>
+          )}
+        </span>
         <span
           className={cn(
             "ml-auto font-mono text-sm tabular-nums shrink-0 sm:min-w-24 sm:text-right",
-            item.amount < 0 ? "text-destructive" : "text-success"
+            item.amount < 0 ? "text-foreground" : "text-success"
           )}
         >
           {item.amount < 0 ? "-" : "+"}
           {formatCOP(Math.abs(item.amount))}
         </span>
       </div>
-
-      {/* Description — own line on mobile only (shown inline above on sm+). */}
-      <p className="truncate pl-12 text-sm text-muted-foreground sm:hidden">
-        {item.note || "—"}
-      </p>
     </button>
   );
 }

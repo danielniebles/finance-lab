@@ -79,6 +79,8 @@ export function toneForCategorySeverity(severity: CategorySeverity): Tone {
   switch (severity) {
     case "OK":
       return "positive";
+    case "Pending":
+      return "info";
     case "Issue":
       return "caution";
     case "Critical":

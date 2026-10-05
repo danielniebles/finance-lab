@@ -447,3 +447,11 @@ Both legs also get `Transaction.isTransfer: true` and share a `Transaction.trans
 **Why variable only:** fixed costs are front-loaded (rent lands in the first days), so extrapolating them linearly would wildly overstate the month; they stay on budget.
 
 **Unchanged:** the result shape (`pacingMode`, `spentSoFar`, `projectedVariableSpend`, `daysElapsed`, `daysInMonth`) — `spentSoFar` is now variable spend specifically. The Overview `ForecastPanel` shows "Day N of M · $X variable spend so far" in pacing mode.
+
+---
+
+## ADR-048 — Unpaid fixed bills are "Pending" while the month is running
+
+**Context:** `classifyCategory` flagged every FIXED category with $0 spent as `Issue` + "Unpaid". Fixed bills (rent, gym, phone, family support) are paid at different points during the month, so on day 10 five of them showed as issues, filling "Top Issues" with bills that simply weren't due yet.
+
+**Decision:** `CategorySeverity` gains `"Pending"`. While the financial period is still open (`now < end` of `getFinancialPeriodBounds`), a FIXED category with $0 spent is `Pending` + "Not paid yet". Once the period has ended it becomes `Issue` + "Unpaid" as before, so a bill that was genuinely missed is still flagged for past months. `Pending` is excluded from `topOffenders`, maps to the `info` tone in `lib/status.ts`, and drives the Home/Analysis "N fixed bills not paid yet" card (`lib/home-insights.ts`).
