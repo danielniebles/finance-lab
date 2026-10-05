@@ -24,28 +24,6 @@ export function Panel({
   );
 }
 
-/** Two-to-four up grid of small labeled readings separated by hairlines. */
-export function ReadingGrid({
-  items,
-  className,
-}: {
-  items: { label: string; value: React.ReactNode }[];
-  className?: string;
-}) {
-  return (
-    <dl
-      className={cn(
-        "grid gap-px overflow-hidden rounded-xl border border-border/60 bg-border/60",
-        items.length === 4 ? "grid-cols-2" : "grid-cols-3",
-        className,
-      )}
-    >
-      {items.map((item) => (
-        <div key={item.label} className="flex flex-col gap-1 bg-background px-3.5 py-3">
-          <dt className="text-xs text-muted-foreground">{item.label}</dt>
-          <dd className="font-mono text-sm font-semibold tabular-nums">{item.value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
+// ReadingGrid moved to the design system (components/ds) so every page
+// wraps long COP amounts the same way.
+export { ReadingGrid } from "@/components/ds";

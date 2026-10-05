@@ -6,3 +6,4 @@ export { Meter } from "./meter";
 export { StatCard } from "./stat-card";
 export { SectionHeader } from "./section-header";
 export { ListRow } from "./list-row";
+export { ReadingGrid, type Reading } from "./reading-grid";

@@ -64,7 +64,6 @@ export function ObligationsPanel({
         }
       />
       <ReadingGrid
-        className="grid-cols-2"
         items={[
           { label: "Installments still due", value: <Money value={totalDue} tone={totalDue > 0 ? "caution" : undefined} /> },
           { label: `Owed to you · ${activeDebtors}`, value: <Money value={inLoans} /> },
