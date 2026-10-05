@@ -136,7 +136,7 @@ No new module — a query + agent surfacing.
 - Uses trend history to predict a **likely landing range** per variable category (recency-weighted mean ± 1 std dev over last 6 import batches) and a **projected month-end savings rate** from the predicted variable total + fixed budget + trailing income average.
 - Early warning: "trending toward 9% savings, not the 20% you expected."
 - The `ForecastPanel` server component shows the projected savings rate, vs-target/vs-last-month deltas, and the top overspend drivers. A thin-data state renders when fewer than MIN_MONTHS (3) months of history exist.
-- Mid-month pacing (reading partial-month actuals to compute spend-so-far) is deferred — see backlog.
+- Mid-month pacing: for the financial period in progress, variable spend logged so far is extrapolated and blended with the historical prediction (weight = share of the period elapsed), and that blend drives the projected savings rate (ADR-047).
 
 Solves **pain #2** (land lower than expected) with no change to the monthly import habit.
 

@@ -435,3 +435,15 @@ Both legs also get `Transaction.isTransfer: true` and share a `Transaction.trans
 **Analysis exclusion:** `isTransfer: true` transactions are excluded from every income/expense/budget rollup — `getMonthlyAnalysis` (both the transaction `where` and the `appCategory` fetch), the ledger's `getTransactionList` `monthTotalIncome`/`monthTotalExpense` (the raw list itself still shows them), and `trends.ts`'s multi-month chart. A wallet-to-wallet transfer is neither real income nor real spending — without this, moving money between wallets would inflate Income and Expenses by the same amount (net-zero on Savings Rate, but visibly wrong on the KPI cards) and could spuriously flag as "Unplanned" spend in Top Offenders since the transfer categories carry no budget.
 
 **Why not a real linked-entity/relation:** A dedicated join model (mirroring `VaultEntry.transactionId`, ADR-045) was considered, but a transfer's two sides are symmetric (unlike a vault entry's one-directional "this transaction funded that vault"), so a plain shared string correlation key is simpler than a self-referential FK pair and avoids Prisma's awkward one-to-one self-relation modeling. `From wallet` reuses the existing single-wallet form field (`values.walletId`, the same one Expense/Income already default from `?walletId=`) rather than a separate `fromWalletId` — no new "which wallet is this dialog scoped to" concept needed.
+
+---
+
+## ADR-047 — Forecast pacing reads the period's logged transactions, not an IN_PROGRESS import
+
+**Context:** ADR-024 gated pacing mode on an `IN_PROGRESS` `ImportBatch` for the target month. MoneyLover import is now deprecated — transactions are logged directly (manual entry, Advisor, Telegram) — so that batch never exists and pacing never ran. Its output (`projectedVariableSpend`) was also never fed into `projectedSavingsRate`, so even when it ran the forecast ignored it.
+
+**Decision:** `getForecast()` enters pacing mode when today falls inside the target financial period (`periodProgress()` over `getFinancialPeriodBounds()`). Spend so far is `getMonthlyAnalysis().variableActual` — date-range based, transfers excluded, so every transaction source counts. `blendPacedVariable()` mixes the linear extrapolation with the historical prediction using a weight equal to the share of the period elapsed (day 3/30 → 10% pace; day 27/30 → 90%), floored at what's already spent, replacing ADR-024's fixed 60/40 split. The blended variable total now drives `projectedSavingsRate` (and so `vsTarget` / `vsLastMonth`). Period length comes from the financial period, not the calendar month, so `FINANCIAL_MONTH_START_DAY` is respected.
+
+**Why variable only:** fixed costs are front-loaded (rent lands in the first days), so extrapolating them linearly would wildly overstate the month; they stay on budget.
+
+**Unchanged:** the result shape (`pacingMode`, `spentSoFar`, `projectedVariableSpend`, `daysElapsed`, `daysInMonth`) — `spentSoFar` is now variable spend specifically. The Overview `ForecastPanel` shows "Day N of M · $X variable spend so far" in pacing mode.

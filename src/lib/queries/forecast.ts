@@ -1,17 +1,20 @@
-// HISTORICAL projection — reads only past import batches, never current-month actuals.
-// Phase B (getIncomePlan) is not yet shipped; expectedIncome falls back to trailing
-// income average from getTrends. See ADR-019.
-// Pacing mode: when an IN_PROGRESS batch exists for the target month, blends actuals-so-far
-// with historical prediction (ADR-024).
+// HISTORICAL projection from past months (ADR-019), plus pacing mode for the
+// month in progress. Phase B (getIncomePlan) is not yet shipped; expectedIncome
+// falls back to trailing income average from getTrends.
+// Pacing mode: when the target month is the current financial period, blends
+// actuals-so-far (every transaction logged in the period, manual or imported)
+// with the historical prediction (ADR-024, re-sourced by ADR-047).
 
-import { db } from "@/lib/db";
 import { getTrends } from "@/lib/queries/trends";
 import { getMonthlyAnalysis } from "@/lib/queries/expenses";
 import {
   MIN_MONTHS,
+  blendPacedVariable,
+  periodProgress,
   predictCategoryLanding,
   projectSavingsRate,
 } from "@/lib/forecast-utils";
+import { getFinancialPeriodBounds } from "@/lib/financial-period-utils";
 import type { Prediction } from "@/lib/forecast-utils";
 
 export type { Prediction };
@@ -36,9 +39,10 @@ export type ForecastResult = {
   vsLastMonth: number | null;
   drivers: CategoryForecast[];
   dataSufficiency: "ok" | "thin";
-  // Pacing mode fields — only present when an IN_PROGRESS batch exists for the target month
+  // Pacing mode fields — only present when the target month is the period in
+  // progress. When present, projectedSavingsRate already uses projectedVariableSpend.
   pacingMode?: boolean;
-  spentSoFar?: number;
+  spentSoFar?: number; // variable spend logged so far this period
   projectedVariableSpend?: number;
   daysElapsed?: number;
   daysInMonth?: number;
@@ -97,11 +101,37 @@ export async function getForecast(
     return sum + (c.prediction?.expected ?? c.budget);
   }, 0);
 
+  // ── Pacing mode: blend actuals-so-far with historical prediction ─────────────
+  // Previously gated on an IN_PROGRESS ImportBatch, which never exists now that
+  // transactions are logged directly (MoneyLover import is deprecated), and its
+  // output was never fed into the projected rate. Now: if today is inside this
+  // financial period, variable spend so far (getMonthlyAnalysis — date-range
+  // based, transfers excluded, manual + Advisor/Telegram + imported rows) is
+  // blended with the historical prediction and drives the projected rate.
+  // Fixed costs stay on budget: they're front-loaded (rent on day 1), so
+  // extrapolating them linearly would wildly overstate the month. ADR-047.
+  const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
+  const { start, end } = getFinancialPeriodBounds(month, year, startDay);
+  const progress = periodProgress(new Date(), start, end);
+
+  const pacing = progress
+    ? {
+        ...progress,
+        spentSoFar: analysis.variableActual,
+        ...blendPacedVariable({
+          spentSoFar: analysis.variableActual,
+          daysElapsed: progress.daysElapsed,
+          daysInPeriod: progress.daysInPeriod,
+          predicted: predictedVariableTotal,
+        }),
+      }
+    : null;
+
   // ── Projected savings rate ────────────────────────────────────────────────────
   const projectedSavingsRate = projectSavingsRate({
     expectedIncome,
     fixedBudget,
-    predictedVariable: predictedVariableTotal,
+    predictedVariable: pacing ? pacing.blended : predictedVariableTotal,
   });
 
   const savingsRateTarget = 20;
@@ -129,48 +159,7 @@ export async function getForecast(
   const dataSufficiency: "ok" | "thin" =
     trends.months.length < MIN_MONTHS ? "thin" : "ok";
 
-  // ── Pacing mode: blend actuals-so-far with historical prediction ─────────────
-  const inProgressBatch = await db.importBatch.findFirst({
-    where: { month, year, status: "IN_PROGRESS" },
-    include: { transactions: { select: { amount: true } } },
-  });
-
-  if (inProgressBatch) {
-    const now = new Date();
-    const daysElapsed = now.getDate();
-    const daysInMonth = new Date(year, month, 0).getDate();
-
-    // Sum of negative transactions (expenses) in the partial batch
-    const spentSoFar = inProgressBatch.transactions
-      .filter((t) => t.amount < 0)
-      .reduce((s, t) => s + Math.abs(t.amount), 0);
-
-    // Project: spend rate × remaining days
-    const projectedTotal = daysElapsed > 0 ? spentSoFar * (daysInMonth / daysElapsed) : spentSoFar;
-
-    // Blend: 60% pacing projection + 40% historical prediction
-    const projectedVariableSpend = 0.6 * projectedTotal + 0.4 * predictedVariableTotal;
-
-    return {
-      perCategory,
-      predictedVariableTotal,
-      fixedBudget,
-      expectedIncome,
-      projectedSavingsRate,
-      savingsRateTarget,
-      vsTarget,
-      vsLastMonth,
-      drivers,
-      dataSufficiency,
-      pacingMode: true,
-      spentSoFar,
-      projectedVariableSpend,
-      daysElapsed,
-      daysInMonth,
-    };
-  }
-
-  return {
+  const base = {
     perCategory,
     predictedVariableTotal,
     fixedBudget,
@@ -181,5 +170,16 @@ export async function getForecast(
     vsLastMonth,
     drivers,
     dataSufficiency,
+  };
+
+  if (!pacing) return base;
+
+  return {
+    ...base,
+    pacingMode: true,
+    spentSoFar: pacing.spentSoFar,
+    projectedVariableSpend: pacing.blended,
+    daysElapsed: pacing.daysElapsed,
+    daysInMonth: pacing.daysInPeriod,
   };
 }

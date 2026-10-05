@@ -1,11 +1,35 @@
 import { TrendingDown, TrendingUp, Clock } from "lucide-react";
-import { getForecast } from "@/lib/queries/forecast";
+import { getForecast, type ForecastResult } from "@/lib/queries/forecast";
 import { formatCOP } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface ForecastPanelProps {
   month: number;
   year: number;
+}
+
+// Says what the projection is built from: history only, or (for the month in
+// progress) history blended with this month's logged transactions — ADR-047.
+function ForecastBasisNote({ data }: { data: ForecastResult }) {
+  if (!data.pacingMode || data.spentSoFar === undefined) {
+    return (
+      <p className="text-xs text-muted-foreground/50 italic">
+        Projected from history · not a guarantee
+      </p>
+    );
+  }
+  return (
+    <>
+      <p className="text-xs text-muted-foreground/70">
+        Day {data.daysElapsed} of {data.daysInMonth} ·{" "}
+        <span className="font-mono tabular-nums">{formatCOP(data.spentSoFar)}</span> variable
+        spend so far
+      </p>
+      <p className="text-xs text-muted-foreground/50 italic">
+        Blends this month&apos;s transactions with history · not a guarantee
+      </p>
+    </>
+  );
 }
 
 export async function ForecastPanel({ month, year }: ForecastPanelProps) {
@@ -89,9 +113,7 @@ export async function ForecastPanel({ month, year }: ForecastPanelProps) {
             <p className="text-xs text-muted-foreground/70">{vsLastMonthStr}</p>
           )}
 
-          <p className="text-xs text-muted-foreground/50 italic">
-            Projected from history · not a guarantee
-          </p>
+          <ForecastBasisNote data={data} />
         </div>
 
         {/* Divider */}

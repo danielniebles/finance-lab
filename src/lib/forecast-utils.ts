@@ -62,3 +62,43 @@ export function projectSavingsRate(args: {
   if (expectedIncome === 0) return null;
   return ((expectedIncome - (fixedBudget + predictedVariable)) / expectedIncome) * 100;
 }
+
+/**
+ * How far `now` is into the financial period `[start, end)`, in whole days.
+ * Returns null when `now` falls outside the period (a past or future month),
+ * i.e. when there is no "spend so far" to pace against.
+ */
+export function periodProgress(
+  now: Date,
+  start: Date,
+  end: Date,
+): { daysElapsed: number; daysInPeriod: number } | null {
+  if (now < start || now >= end) return null;
+  const DAY = 24 * 60 * 60 * 1000;
+  const daysInPeriod = Math.round((end.getTime() - start.getTime()) / DAY);
+  // Today counts as elapsed: on the period's first day, 1 of N days have passed.
+  const daysElapsed = Math.min(daysInPeriod, Math.floor((now.getTime() - start.getTime()) / DAY) + 1);
+  return { daysElapsed, daysInPeriod };
+}
+
+/**
+ * Blend month-to-date variable spend with the historical prediction.
+ *
+ * `paced` extrapolates spend-so-far linearly to the end of the period. Early
+ * in the month that's noisy (one big purchase on day 2 looks like a disaster),
+ * so the weight on the paced number grows with the share of the period that
+ * has elapsed: day 3/30 → 10% pace / 90% history; day 27/30 → 90% / 10%.
+ * The result never drops below what's already been spent.
+ */
+export function blendPacedVariable(args: {
+  spentSoFar: number;
+  daysElapsed: number;
+  daysInPeriod: number;
+  predicted: number;
+}): { paced: number; blended: number; weight: number } {
+  const { spentSoFar, daysElapsed, daysInPeriod, predicted } = args;
+  const weight = daysInPeriod > 0 ? Math.min(1, Math.max(0, daysElapsed / daysInPeriod)) : 0;
+  const paced = daysElapsed > 0 ? spentSoFar * (daysInPeriod / daysElapsed) : spentSoFar;
+  const blended = Math.max(spentSoFar, weight * paced + (1 - weight) * predicted);
+  return { paced, blended, weight };
+}

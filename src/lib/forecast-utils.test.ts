@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  blendPacedVariable,
+  periodProgress,
   predictCategoryLanding,
   projectSavingsRate,
   MIN_MONTHS,
@@ -99,5 +101,46 @@ describe("projectSavingsRate", () => {
 describe("MIN_MONTHS constant", () => {
   it("is 3", () => {
     expect(MIN_MONTHS).toBe(3);
+  });
+});
+
+describe("periodProgress", () => {
+  const start = new Date(2026, 8, 25); // 25 Sep
+  const end = new Date(2026, 9, 25); // 25 Oct (exclusive) → 30-day period
+
+  it("returns null outside the period", () => {
+    expect(periodProgress(new Date(2026, 8, 24, 23), start, end)).toBeNull();
+    expect(periodProgress(end, start, end)).toBeNull();
+  });
+
+  it("counts today as elapsed", () => {
+    expect(periodProgress(new Date(2026, 8, 25, 9), start, end)).toEqual({
+      daysElapsed: 1,
+      daysInPeriod: 30,
+    });
+    expect(periodProgress(new Date(2026, 9, 5, 18), start, end)).toEqual({
+      daysElapsed: 11,
+      daysInPeriod: 30,
+    });
+  });
+});
+
+describe("blendPacedVariable", () => {
+  it("leans on history early in the period", () => {
+    const r = blendPacedVariable({ spentSoFar: 1_000_000, daysElapsed: 3, daysInPeriod: 30, predicted: 5_000_000 });
+    expect(r.paced).toBe(10_000_000);
+    expect(r.weight).toBeCloseTo(0.1);
+    expect(r.blended).toBeCloseTo(0.1 * 10_000_000 + 0.9 * 5_000_000);
+  });
+
+  it("leans on actuals late in the period", () => {
+    const r = blendPacedVariable({ spentSoFar: 4_500_000, daysElapsed: 27, daysInPeriod: 30, predicted: 3_000_000 });
+    expect(r.weight).toBeCloseTo(0.9);
+    expect(r.blended).toBeCloseTo(0.9 * 5_000_000 + 0.1 * 3_000_000);
+  });
+
+  it("never projects less than what is already spent", () => {
+    const r = blendPacedVariable({ spentSoFar: 6_000_000, daysElapsed: 29, daysInPeriod: 30, predicted: 1_000_000 });
+    expect(r.blended).toBeGreaterThanOrEqual(6_000_000);
   });
 });
