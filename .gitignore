@@ -53,3 +53,6 @@ next-env.d.ts
 .handoff/
 .scratch/
 .serena/
+
+# Claude desktop app copies of files sent in chat (screenshots etc.)
+/Claude outputs/

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
 import { getMonthlyAnalysis } from "@/lib/queries/expenses";
 import { getAllInstallments, getMonthSummary, type DueThisMonth } from "@/lib/queries/installments";
 import { getLoansOverview } from "@/lib/queries/loans";
@@ -223,28 +222,20 @@ function ObligationsCard({
 
 // ─── Main dashboard ───────────────────────────────────────────────────────────
 
-export async function OverviewDashboard() {
-  const batch = await db.importBatch.findFirst({
-    orderBy: [{ year: "desc" }, { month: "desc" }],
-  });
-
-  if (!batch) {
-    return (
-      <div className="rounded-md border border-dashed p-12 text-center text-muted-foreground">
-        No data yet. Import a month from the Expenses page to get started.
-      </div>
-    );
-  }
-
+// Calculations always use the current financial month (passed in by the
+// page from financialMonthYear(today)). This used to read the latest
+// ImportBatch, which froze the dashboard on the last MoneyLover import once
+// transactions started being logged directly in the app.
+export async function OverviewDashboard({ month, year }: { month: number; year: number }) {
   const allInstallments = await getAllInstallments();
 
   const [analysis, monthSummary, loans] = await Promise.all([
-    getMonthlyAnalysis(batch.month, batch.year),
-    getMonthSummary(batch.month, batch.year, allInstallments),
+    getMonthlyAnalysis(month, year),
+    getMonthSummary(month, year, allInstallments),
     getLoansOverview(),
   ]);
 
-  const monthLabel = `${MONTH_NAMES[batch.month - 1]} ${batch.year}`;
+  const monthLabel = `${MONTH_NAMES[month - 1]} ${year}`;
   const burnTone =
     analysis.variableBurnRate === null ? "neutral" :
     analysis.variableBurnRate <= 80  ? "good" :
@@ -266,7 +257,7 @@ export async function OverviewDashboard() {
       <p className="text-sm text-muted-foreground">
         Showing{" "}
         <span className="font-medium text-foreground">{monthLabel}</span>
-        {" "}— last imported month
+        {" "}— current month
       </p>
 
       {/* KPI strip — Income/Expenses (long COP values) are paired with their

@@ -39,7 +39,8 @@ const navItems = [
 const settingsItems = [
   { title: "Categories", href: "/settings/categories" },
   { title: "Tags", href: "/settings/tags" },
-  { title: "Mappings", href: "/settings/mappings" },
+  // Legacy: only maps categories of historical MoneyLover imports (import is deprecated).
+  { title: "Legacy mappings", href: "/settings/mappings" },
   { title: "Rules", href: "/settings/rules" },
 ];
 

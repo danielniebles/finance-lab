@@ -70,6 +70,14 @@ src/
         └── expenses.ts           # getMonthlyAnalysis(), getImportBatches()
 ```
 
+## UI rules (design system)
+
+- Read `DESIGN.md` before building UI; §7 maps it to code.
+- Colors only via theme tokens (`bg-card`, `text-success`, `bg-meter-track` …). No raw Tailwind palette classes, hex or `oklch()` in components. New tokens go in **all four** theme blocks in `globals.css` (`theme-tokens.test.ts` enforces it).
+- Status colors only through `src/lib/status.ts` (`toneFor…` → `Tone`) and the `src/components/ds` components.
+- Peso amounts render with `<Money>` from `@/components/ds`.
+- Dev reference page: `/settings/design-system`.
+
 ## Data model summary
 
 **Module 1 — Expenses**
@@ -86,7 +94,11 @@ src/
 **Module 3 — Loans**
 - `SavingsAccount`, `AccountEntry`, `Transfer`, `Debtor`, `Loan`, `LoanPayment`
 
-## MoneyLover import format
+## MoneyLover import format (deprecated)
+
+Import is retired: transactions are logged directly in the app (manual entry, Advisor, Telegram). The parser, `import.ts` action and `import-form.tsx` are kept and marked `@deprecated` because historical imported data still lives in the DB; `/settings/mappings` ("Legacy mappings") stays so that history remains categorised. Do not build on it, and never derive "the current month" from `ImportBatch` — use `financialMonthYear(new Date(), startDay)`.
+
+Historical format:
 
 XLSX file, sheet name "Transactions". Columns: `Id, Date, Category, Amount, Currency, Wallet, Note, With, Event, Members`.
 - Negative amount = expense, positive = income (Salary)

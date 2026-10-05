@@ -18,13 +18,13 @@ export default async function MappingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-2xl font-semibold">Category Mappings</h1>
+      <h1 className="text-2xl font-semibold">Legacy MoneyLover Mappings</h1>
       <p className="text-sm text-muted-foreground">
-        Map each MoneyLover category to one of your app categories. Unmapped categories are excluded from analysis.
+        MoneyLover import is no longer used. These mappings only affect transactions imported in the past — keep them so that history stays categorised. Unmapped categories are excluded from analysis.
       </p>
       {mlCategories.length === 0 ? (
         <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-          No MoneyLover categories discovered yet. Import a file first.
+          No imported MoneyLover categories in the database.
         </div>
       ) : (
         <MappingList mlCategories={mlCategories} appCategories={appCategories} />

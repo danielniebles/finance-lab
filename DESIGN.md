@@ -264,3 +264,47 @@ Used for severity labels (OK / Issue / Critical / Unplanned), card tags ("Credit
 - **Don't** replicate generic SaaS dashboard patterns: no identical icon-heading-text card grids, no gradient accent cards, no hero metric template (big number + gradient swatch).
 - **Don't** add a fifth surface level. Deep Slate, Slate Surface, Slate Raised, Popover — that is the full elevation vocabulary.
 - **Don't** use light-mode-only assumptions. The design is dark-first; any new component must read correctly in dark mode without adjustments.
+
+---
+
+## 7. Implementation: tokens, tones and `components/ds`
+
+This section maps the rules above to code. Use it when building or migrating a screen.
+
+### Themes
+
+Four theme blocks in `src/app/globals.css`: `:root` (default light), `.dark` (default dark), `.signal` (Signal light), `.dark.signal` (Signal dark). Light/dark comes from the `theme` cookie; the family comes from `THEME_FAMILY`. **Every theme block defines every color token** — `src/app/theme-tokens.test.ts` fails CI if one is missing (only `--radius` may be inherited from `:root`).
+
+To add a token: define it in all four blocks, map it in `@theme inline` as `--color-<name>`, then use it as a Tailwind class (`bg-<name>`, `text-<name>`).
+
+| Token | Use |
+|---|---|
+| `background` / `card` / `muted` / `popover` | The Four Floors (§4) |
+| `success` / `warning` / `destructive` | Positive / caution / danger status |
+| `unplanned` | Spend with no budget (amber in default, indigo in Signal) |
+| `info` | Informational status, neither good nor bad |
+| `meter-track` | Unfilled part of meters and progress bars |
+| `chart-1` … `chart-8` | Data series. Never status colors. |
+
+### Status → color: `lib/status.ts`
+
+Domain states never pick classes themselves. Map the state to a `Tone` (`positive`, `caution`, `danger`, `unplanned`, `info`, `neutral`) with the helpers (`toneForCategorySeverity`, `toneForVaultStatus`, `toneForRecurringStatus`, `toneForBudgetUsed`, `toneForSavingsRate`), and pass the tone to a component. `TONE_CLASSES[tone]` gives `text`, `soft`, `fill` and `color` (a CSS `var()` for SVG/charts) when a component doesn't fit.
+
+### Components (`src/components/ds`)
+
+| Component | Replaces |
+|---|---|
+| `Money` | Ad-hoc `font-mono` + `formatCOP` spans. Handles sign, `compact` ($ 14.4M) and tone. |
+| `StatusChip` | Per-screen `statusClasses()` / `statusPillClasses()` helpers |
+| `Meter` | Inline progress bars; supports a target tick and is a real `role="meter"` |
+| `StatCard` | Overview `KpiCard`, the StatCard spec in §5 |
+| `SectionHeader` | Uppercase section labels + "View …" links |
+| `ListRow` | Icon tile + title/subtitle + trailing rows (vaults, installments, debtors) |
+
+Reference page: `/settings/design-system` (dev only) renders every token and component. Check it in light and dark, and with `THEME_FAMILY=signal`, after any token change.
+
+### Rules
+
+- No raw palette classes (`text-red-500`), hex or `oklch()` in components — use tokens. Exception: user-chosen category colors in `lib/category-style.ts`.
+- Status color only through `lib/status.ts`.
+- Money only through `<Money>`.

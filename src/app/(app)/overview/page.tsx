@@ -25,7 +25,7 @@ export default async function OverviewPage() {
       </Suspense>
       <GoalsCard obligations={obligations} />
       <Suspense fallback={<div className="text-muted-foreground text-sm">Loading…</div>}>
-        <OverviewDashboard />
+        <OverviewDashboard month={month} year={year} />
       </Suspense>
       {/* De-emphasized supporting detail — last on the page (req 7). */}
       <ForecastPanel month={month} year={year} />

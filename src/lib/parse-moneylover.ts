@@ -1,3 +1,10 @@
+/**
+ * @deprecated MoneyLover import is retired — transactions are now logged
+ * directly in the app (manual entry, Advisor, Telegram). Kept, not deleted,
+ * because historical ImportBatch/MoneyLover rows still live in the database
+ * and their category mappings must stay editable. Do not build new features
+ * on this module.
+ */
 import * as XLSX from "xlsx";
 import { financialMonthYear } from "./financial-period-utils";
 
@@ -64,6 +71,7 @@ function dominantFinancialMonth(
   return { month, year };
 }
 
+/** @deprecated MoneyLover import is retired — see the note at the top of this file. */
 export function parseMoneyLoverBuffer(buffer: Buffer, startDay = 1): ParseResult {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];

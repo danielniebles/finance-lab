@@ -24,6 +24,13 @@ type ImportResult = {
   skippedAsDuplicate?: number;
 };
 
+/**
+ * @deprecated MoneyLover import is retired — transactions are now logged
+ * directly in the app (manual entry, Advisor, Telegram). Kept, not deleted,
+ * because historical ImportBatch/MoneyLover rows still live in the database
+ * and their category mappings must stay editable. Do not build new features
+ * on this module.
+ */
 export function ImportForm() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"upload" | "drive">("drive");

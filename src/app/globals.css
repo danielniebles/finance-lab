@@ -22,6 +22,11 @@
   --color-sidebar: var(--sidebar);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-meter-track: var(--meter-track);
+  --color-chart-8: var(--chart-8);
+  --color-chart-7: var(--chart-7);
+  --color-chart-6: var(--chart-6);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -71,6 +76,8 @@
   --destructive: oklch(0.58 0.22 27);
   --success: oklch(0.527 0.154 163);
   --warning: oklch(0.62 0.15 60);
+  --info: oklch(0.55 0.16 245); /* neutral/informational status (e.g. "Paid", "Scheduled") */
+  --meter-track: oklch(0.92 0.005 250); /* unfilled part of progress bars / meters */
   --unplanned: oklch(0.62 0.15 60); /* same as --warning — default theme keeps Unplanned on the warning scale */
   --border: oklch(0.88 0.005 250);
   --input: oklch(0.88 0.005 250);
@@ -80,6 +87,9 @@
   --chart-3: oklch(0.72 0.18 80);
   --chart-4: oklch(0.65 0.22 27);
   --chart-5: oklch(0.62 0.18 300);
+  --chart-6: oklch(0.60 0.17 50);
+  --chart-7: oklch(0.58 0.19 340);
+  --chart-8: oklch(0.62 0.17 130);
   --radius: 0.625rem;
   --sidebar: oklch(0.96 0.004 250);
   --sidebar-foreground: oklch(0.14 0.012 250);
@@ -110,6 +120,8 @@
   --destructive: oklch(0.68 0.22 25);
   --success: oklch(0.762 0.157 164);
   --warning: oklch(0.80 0.15 80);
+  --info: oklch(0.72 0.14 245); /* neutral/informational status (e.g. "Paid", "Scheduled") */
+  --meter-track: oklch(0.22 0.01 250); /* unfilled part of progress bars / meters */
   --unplanned: oklch(0.80 0.15 80); /* same as --warning — default theme keeps Unplanned on the warning scale */
   --border: oklch(0.28 0.01 250 / 70%);
   --input: oklch(0.28 0.01 250 / 80%);
@@ -119,6 +131,9 @@
   --chart-3: oklch(0.78 0.18 80);
   --chart-4: oklch(0.68 0.22 25);
   --chart-5: oklch(0.68 0.18 300);
+  --chart-6: oklch(0.74 0.16 50);
+  --chart-7: oklch(0.70 0.17 340);
+  --chart-8: oklch(0.80 0.17 125);
   --sidebar: oklch(0.14 0.01 250);
   --sidebar-foreground: oklch(0.92 0.006 250);
   --sidebar-primary: oklch(0.72 0.18 155);
@@ -158,6 +173,8 @@
   --destructive: #dc2626;
   --success: #059669;
   --warning: #d97706;
+  --info: #0284c7; /* neutral/informational status (e.g. "Paid", "Scheduled") */
+  --meter-track: #e2e8f0; /* unfilled part of progress bars / meters */
   --unplanned: #4f46e5;
   --border: #e2e8f0;
   --input: #e2e8f0;
@@ -167,6 +184,9 @@
   --chart-3: #d97706;
   --chart-4: #dc2626;
   --chart-5: #4f46e5;
+  --chart-6: #ea580c;
+  --chart-7: #db2777;
+  --chart-8: #65a30d;
   --radius: 0.75rem;
   --sidebar: #f1f5f9;
   --sidebar-foreground: #0f172a;
@@ -196,6 +216,8 @@
   --destructive: #f0555a;
   --success: #3ecf8e;
   --warning: #e8b93d;
+  --info: #38bdf8; /* neutral/informational status (e.g. "Paid", "Scheduled") */
+  --meter-track: #1f252b; /* unfilled part of progress bars / meters */
   --unplanned: #7c86ff;
   --border: #252a30;
   --input: #252a30;
@@ -205,6 +227,9 @@
   --chart-3: #e8b93d;
   --chart-4: #f0555a;
   --chart-5: #7c86ff;
+  --chart-6: #fb923c;
+  --chart-7: #f472b6;
+  --chart-8: #a3e635;
   --radius: 0.75rem;
   --sidebar: #101317;
   --sidebar-foreground: #eef1f3;

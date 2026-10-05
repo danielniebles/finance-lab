@@ -1,5 +1,13 @@
 "use server";
 
+/**
+ * @deprecated MoneyLover import is retired — transactions are now logged
+ * directly in the app (manual entry, Advisor, Telegram). Kept, not deleted,
+ * because historical ImportBatch/MoneyLover rows still live in the database
+ * and their category mappings must stay editable. Do not build new features
+ * on this module.
+ */
+
 import { db } from "@/lib/db";
 import { parseMoneyLoverBuffer, type RawTransaction } from "@/lib/parse-moneylover";
 import { revalidatePath } from "next/cache";
@@ -39,6 +47,7 @@ function partitionDuplicates(
   return { toImport, skipped };
 }
 
+/** @deprecated MoneyLover import is retired — see the note at the top of this file. */
 export async function importBuffer(buffer: Buffer, filename: string, status?: BatchStatus) {
   const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
 
@@ -129,6 +138,7 @@ export async function importBuffer(buffer: Buffer, filename: string, status?: Ba
   };
 }
 
+/** @deprecated MoneyLover import is retired — see the note at the top of this file. */
 export async function importMoneyLoverFile(formData: FormData) {
   const file = formData.get("file") as File | null;
   if (!file) return { error: "No file provided." };
