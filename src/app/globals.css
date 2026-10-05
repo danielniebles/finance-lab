@@ -78,6 +78,7 @@
   --warning: oklch(0.62 0.15 60);
   --info: oklch(0.55 0.16 245); /* neutral/informational status (e.g. "Paid", "Scheduled") */
   --meter-track: oklch(0.92 0.005 250); /* unfilled part of progress bars / meters */
+  --surface-glow: none; /* decorative wash on hero cards; "none" turns it off for a theme */
   --unplanned: oklch(0.62 0.15 60); /* same as --warning — default theme keeps Unplanned on the warning scale */
   --border: oklch(0.88 0.005 250);
   --input: oklch(0.88 0.005 250);
@@ -122,6 +123,7 @@
   --warning: oklch(0.80 0.15 80);
   --info: oklch(0.72 0.14 245); /* neutral/informational status (e.g. "Paid", "Scheduled") */
   --meter-track: oklch(0.22 0.01 250); /* unfilled part of progress bars / meters */
+  --surface-glow: radial-gradient(circle at 100% 0%, oklch(0.72 0.18 155 / 9%), transparent 55%); /* decorative wash on hero cards; "none" turns it off for a theme */
   --unplanned: oklch(0.80 0.15 80); /* same as --warning — default theme keeps Unplanned on the warning scale */
   --border: oklch(0.28 0.01 250 / 70%);
   --input: oklch(0.28 0.01 250 / 80%);
@@ -175,6 +177,7 @@
   --warning: #d97706;
   --info: #0284c7; /* neutral/informational status (e.g. "Paid", "Scheduled") */
   --meter-track: #e2e8f0; /* unfilled part of progress bars / meters */
+  --surface-glow: radial-gradient(circle at 100% 0%, rgb(13 148 136 / 7%), transparent 55%); /* decorative wash on hero cards; "none" turns it off for a theme */
   --unplanned: #4f46e5;
   --border: #e2e8f0;
   --input: #e2e8f0;
@@ -218,6 +221,7 @@
   --warning: #e8b93d;
   --info: #38bdf8; /* neutral/informational status (e.g. "Paid", "Scheduled") */
   --meter-track: #1f252b; /* unfilled part of progress bars / meters */
+  --surface-glow: radial-gradient(circle at 100% 0%, rgb(61 214 196 / 14%), transparent 60%); /* decorative wash on hero cards; "none" turns it off for a theme */
   --unplanned: #7c86ff;
   --border: #252a30;
   --input: #252a30;
@@ -239,6 +243,16 @@
   --sidebar-accent-foreground: #3dd6c4;
   --sidebar-border: #252a30;
   --sidebar-ring: #3dd6c4;
+}
+
+/* ─── Theme-controlled decoration ─────────────────────────────────────────────
+   Gradients are a theme decision, not a component one (DESIGN.md §7): hero
+   cards opt in with .surface-glow and each theme sets --surface-glow
+   (or "none"). */
+@layer utilities {
+  .surface-glow {
+    background-image: var(--surface-glow);
+  }
 }
 
 /* ─── Base ────────────────────────────────────────────────────────────────── */

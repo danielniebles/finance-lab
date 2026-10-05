@@ -97,7 +97,7 @@ Finance Lab is a personal financial instrument. Like a well-calibrated dashboard
 
 The system is dark by default because instruments live in dark rooms: screens at night, monitors under focused desk lights, two-in-the-morning check-ins. High contrast is not optional — it is the point. The background is deep and blue-tinted so that Signal Teal (the confirmation green) reads cleanly against it. Reds and ambers carry their full semantic weight.
 
-This design explicitly rejects the language of consumer fintech: no gradient hero cards, no animated confetti on savings milestones, no "Excellent! 🎉" microcopy. It equally rejects generic SaaS dashboards — no navy-and-gold "professional finance" clichés, no frosted glass panels, no identical 3-column icon grids. It is private infrastructure, built for one user who knows exactly what they're looking at.
+This design explicitly rejects the language of consumer fintech: no loud gradient hero cards (a subtle, theme-controlled glow is allowed — see §7), no animated confetti on savings milestones, no "Excellent! 🎉" microcopy. It equally rejects generic SaaS dashboards — no navy-and-gold "professional finance" clichés, no frosted glass panels, no identical 3-column icon grids. It is private infrastructure, built for one user who knows exactly what they're looking at.
 
 **Key Characteristics:**
 - Dark-first, high-contrast; light mode exists but is secondary
@@ -262,6 +262,7 @@ Used for severity labels (OK / Issue / Critical / Unplanned), card tags ("Credit
 - **Don't** use DM Sans for numbers. This is the Mono Rule. A peso sign in DM Sans is wrong even if it "fits."
 - **Don't** replicate Mint, YNAB, or consumer fintech aesthetics: no green-white-and-teal gradient heroes, no emoji in financial summaries, no confetti on positive milestones.
 - **Don't** replicate generic SaaS dashboard patterns: no identical icon-heading-text card grids, no gradient accent cards, no hero metric template (big number + gradient swatch).
+- **Don't** hard-code a gradient in a component. Decorative washes come only from the theme's `--surface-glow` via the `.surface-glow` class, so each theme decides (default light sets it to `none`).
 - **Don't** add a fifth surface level. Deep Slate, Slate Surface, Slate Raised, Popover — that is the full elevation vocabulary.
 - **Don't** use light-mode-only assumptions. The design is dark-first; any new component must read correctly in dark mode without adjustments.
 
@@ -284,6 +285,7 @@ To add a token: define it in all four blocks, map it in `@theme inline` as `--co
 | `unplanned` | Spend with no budget (amber in default, indigo in Signal) |
 | `info` | Informational status, neither good nor bad |
 | `meter-track` | Unfilled part of meters and progress bars |
+| `surface-glow` | Optional decorative wash for hero cards (`.surface-glow`); a theme sets `none` to opt out |
 | `chart-1` … `chart-8` | Data series. Never status colors. |
 
 ### Status → color: `lib/status.ts`
