@@ -230,7 +230,7 @@ export function RecurringList({ recurringData, recurringVaults }: Props) {
         >
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
             onClick={closePay}
             aria-hidden="true"
           />

@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { createCard, updateCard, deleteCard } from "@/lib/actions/installments";
 import type { CreditCardSummary } from "@/lib/queries/installments";
-import { PRESET_COLORS } from "@/lib/color-presets";
+import { DEFAULT_ENTITY_COLOR, PRESET_COLORS } from "@/lib/color-presets";
+import { ColorDot } from "@/components/ds";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ const EMPTY_FORM: CardFormState = {
   creditLimit: "",
   billingClosingDay: "",
   paymentDueDay: "",
-  color: "#EAB308",
+  color: DEFAULT_ENTITY_COLOR,
 };
 
 function toFormState(card: CreditCardSummary): CardFormState {
@@ -39,7 +40,7 @@ function toFormState(card: CreditCardSummary): CardFormState {
     creditLimit: "",   // creditLimit not exposed in summary — keep empty on edit
     billingClosingDay: "",
     paymentDueDay: card.paymentDueDay != null ? String(card.paymentDueDay) : "",
-    color: card.color ?? "#EAB308",
+    color: card.color ?? DEFAULT_ENTITY_COLOR,
   };
 }
 
@@ -127,10 +128,7 @@ export function CreditCardManager({ open, onClose, cards }: Props) {
           <div className="rounded-lg border border-border divide-y divide-border/60 mb-2">
             {cards.map((card) => (
               <div key={card.id} className="flex items-center gap-3 px-3 py-2.5">
-                <span
-                  className="size-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: card.color ?? "#888" }}
-                />
+                <ColorDot color={card.color} className="size-2.5" />
                 <span className="flex-1 text-sm font-medium truncate">{card.name}</span>
                 <span className="text-xs text-muted-foreground font-mono">
                   {card.installmentCount} cuota{card.installmentCount !== 1 ? "s" : ""}

@@ -19,6 +19,7 @@ import {
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { BatchDescriptor, ProposalDescriptor } from "@/lib/agent/types";
+import { TONE_CLASSES } from "@/lib/status";
 
 // ─── Batch proposal table (ADR-034 — web rendering of a card-screenshot batch) ─
 //
@@ -99,7 +100,7 @@ function BatchRow({ proposalId, item, idx, categoryOptions, disabled, onUpdated 
           {item.vendor}
         </span>
         {item.scratchDetected && (
-          <span className="ml-1 text-amber-600 dark:text-amber-400" title="Detected as scratched out">
+          <span className={cn("ml-1", TONE_CLASSES.caution.text)} title="Detected as scratched out">
             ⚠
           </span>
         )}

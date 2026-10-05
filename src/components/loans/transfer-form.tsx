@@ -13,13 +13,14 @@ import {
 } from "@/components/ui/dialog";
 import { createTransfer } from "@/lib/actions/loans";
 import type { AccountWithBalance } from "@/lib/queries/loans";
+import { ColorDot } from "@/components/ds";
 
 type FormState = { error?: string } | null;
 
 function AccountOption({ account }: { account: AccountWithBalance }) {
   return (
     <span className="flex items-center gap-2">
-      <span className="size-2.5 rounded-full inline-block" style={{ backgroundColor: account.color ?? "#888" }} />
+      <ColorDot color={account.color} className="size-2.5" />
       {account.name}
     </span>
   );

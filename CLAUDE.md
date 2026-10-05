@@ -6,11 +6,13 @@ Personal finance tracking application for a single user. All amounts in COP (Col
 
 ## Stack
 
-- **Framework**: Next.js 15 App Router + TypeScript
+- **Framework**: Next.js 16 App Router + React 19 + TypeScript (read `node_modules/next/dist/docs/` before using an API — see AGENTS.md)
 - **Database**: PostgreSQL (Docker locally) + Prisma ORM
-- **UI**: shadcn/ui (base-nova style) + Tailwind CSS v4
+- **UI**: shadcn/ui (base-nova style) + Tailwind CSS v4 + the app design system (`src/components/ds`, see "UI rules")
+- **Charts**: Recharts 3
+- **Tests**: Vitest (`npx vitest run`); lint gate: `npx eslint src` (complexity 12, cognitive 15, max 120 lines per function; grandfathered hits in `eslint-suppressions.json`)
 - **Fonts**: Sora (headings) · DM Sans (body) · JetBrains Mono (numbers)
-- **Theme**: Dark by default (`dark` class on `<html>`)
+- **Theme**: four theme blocks — default/Signal × light/dark (`theme` cookie + `THEME_FAMILY` env). Dark by default.
 - **Hosting**: Local (Docker Compose) + Vercel (frontend) + Supabase (PostgreSQL)
 
 ## shadcn/ui version notes
@@ -40,43 +42,56 @@ This project uses the **base-nova** style of shadcn which uses `@base-ui/react` 
 ```
 src/
 ├── app/
-│   ├── layout.tsx              # Root layout — fonts + dark class
-│   ├── page.tsx                # Redirects to /expenses
-│   └── (app)/
-│       ├── layout.tsx          # Sidebar shell (SidebarProvider + SidebarInset)
-│       ├── expenses/page.tsx   # Monthly dashboard (import + analysis)
-│       ├── installments/page.tsx  # Installment Tracker
-│       ├── loans/page.tsx         # Loan/Debt Tracker
-│       └── settings/
-│           ├── categories/page.tsx   # AppCategory CRUD
-│           └── mappings/page.tsx     # MoneyLover → AppCategory mappings
+│   ├── page.tsx                  # Redirects to /overview
+│   ├── globals.css               # Theme tokens: :root, .dark, .signal, .dark.signal
+│   └── (app)/                    # Sidebar shell
+│       ├── overview/             # Home: balance, month snapshot, wallets, vaults, obligations, insights
+│       ├── expenses/             # Ledger + Analysis views (?view=ledger|analysis)
+│       ├── installments/         # Credit-card installments
+│       ├── loans/                # Savings & Loans: net worth, accounts, debtors
+│       ├── vaults/               # Sinking funds + recurring expenses
+│       ├── trends/               # Health score, income vs spending, category trends
+│       ├── chat/                 # Advisor (agent)
+│       └── settings/             # categories, rules, tags, mappings (legacy), design-system (dev only)
 ├── components/
-│   ├── app-sidebar.tsx
-│   ├── expenses/
-│   │   ├── import-form.tsx       # XLSX upload (client component)
-│   │   ├── analysis-dashboard.tsx # Server component — full monthly analysis
-│   │   └── period-selector.tsx   # Month/year picker (client, router.push)
-│   └── settings/
-│       ├── category-list.tsx     # CRUD UI for AppCategory
-│       └── mapping-list.tsx      # Map MoneyLover categories to AppCategory
+│   ├── ds/                       # Design system: Money, StatusChip, Meter, StatCard, SectionHeader, ListRow, ReadingGrid, ColorDot
+│   ├── ui/                       # shadcn primitives (don't restyle here)
+│   └── <module>/                 # One folder per screen; big screens split into subfolders (overview/home, expenses/analysis, loans/debtors)
 └── lib/
-    ├── db.ts                     # Prisma singleton
-    ├── format.ts                 # formatCOP(), MONTH_NAMES
-    ├── parse-moneylover.ts       # XLSX parser for MoneyLover exports
-    ├── actions/
-    │   ├── import.ts             # importMoneyLoverFile() server action
-    │   └── categories.ts         # Category + mapping CRUD server actions
-    └── queries/
-        └── expenses.ts           # getMonthlyAnalysis(), getImportBatches()
+    ├── status.ts                 # Domain state → Tone → classes (TONE_CLASSES)
+    ├── *-display.ts / *-utils.ts # Pure, tested display rules per module (vault-display, installment-display, loan-display, trend-utils, health-score-utils, category-status, home-insights …)
+    ├── financial-period-utils.ts # financialMonthYear, getFinancialPeriodBounds
+    ├── queries/                  # Server reads (Prisma)
+    ├── actions/                  # Server Actions
+    └── agent/, telegram/         # Advisor + Telegram capture
 ```
+
+Decisions live in `docs/decisions.md` (ADRs); add one when a data rule changes.
 
 ## UI rules (design system)
 
-- Read `DESIGN.md` before building UI; §7 maps it to code.
-- Colors only via theme tokens (`bg-card`, `text-success`, `bg-meter-track` …). No raw Tailwind palette classes, hex or `oklch()` in components. New tokens go in **all four** theme blocks in `globals.css` (`theme-tokens.test.ts` enforces it).
-- Status colors only through `src/lib/status.ts` (`toneFor…` → `Tone`) and the `src/components/ds` components.
-- Peso amounts render with `<Money>` from `@/components/ds`.
-- Dev reference page: `/settings/design-system`.
+Read `DESIGN.md` before building UI; §7 maps it to code. `/settings/design-system` (dev only) renders every token and component.
+
+**Colours**
+- Only theme tokens (`bg-card`, `text-muted-foreground`, `bg-meter-track`, `bg-chart-3` …). No raw palette classes (`text-red-500`, `bg-black/50`), hex, `rgb()` or `oklch()` in `src/components`, `src/app` or `src/lib`. `src/lib/design-system-guard.test.ts` fails on any hit, with file:line; its allowlist is only for colours that are user data or rendered outside the page.
+- Status colours only through `src/lib/status.ts`: map the domain state to a `Tone` with a `toneFor…` helper, then use `StatusChip` / `Meter` / `Money tone` or `TONE_CLASSES[tone]`. Add a new `toneFor…` helper instead of picking classes in a component.
+- Chart series use `chart-1…8`, never status colours.
+- User-chosen colours (accounts, cards, wallets) render with `<ColorDot color={…}>`. Category hues come from `lib/category-style.ts`.
+- New tokens go in **all four** theme blocks in `globals.css` (`theme-tokens.test.ts` enforces it).
+
+**Components and patterns**
+- Peso amounts: `<Money>` (use `compact` in tight spots). Privacy masking: `MASK` from `components/loans/lib/constants`.
+- Rows of label + amount: `<ReadingGrid>`. It wraps instead of overflowing with long COP values.
+- Cards: `rounded-2xl border border-border/60 bg-card p-5 sm:p-6`; the page's hero card adds `surface-glow`. Section labels: small uppercase `text-muted-foreground`.
+- Lists are responsive grids (one markup, `sm:` columns), not a `<Table>` plus a separate mobile list.
+- Keep display rules (sorting, labels, which chip to show) in a pure `lib/*-display.ts` with tests; components stay presentational.
+- Server components can't call client-only helpers (e.g. `buttonVariants`); use plain classes on `Link`.
+
+**Building or changing a screen**
+1. Check DESIGN.md §7 and an already-migrated screen (Home, Expenses, Vaults, Installments, Loans, Trends).
+2. Build from `components/ds` + tones; no new colour classes.
+3. Check it at 1440px and 390px wide, light and dark, and with `THEME_FAMILY=signal`.
+4. Run `npx tsc --noEmit`, `npx eslint src`, `npx vitest run`.
 
 ## Data model summary
 

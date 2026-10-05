@@ -17,6 +17,7 @@ import type { ProposalEvent } from "./chat-provider";
 import { BatchProposalTable } from "./batch-proposal-table";
 import { DEFAULT_APPROVE_MESSAGE } from "@/lib/agent/types";
 import type { EditableField, ProposalDescriptor } from "@/lib/agent/types";
+import { TONE_CLASSES } from "@/lib/status";
 
 // ─── Param display helpers ────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ function EditableFieldSelect({ proposalId, field, onUpdated }: EditableFieldSele
         </SelectContent>
       </Select>
       {showOtherHint && (
-        <p className="text-amber-600 dark:text-amber-400 text-xs">
+        <p className={cn("text-xs", TONE_CLASSES.caution.text)}>
           Escribe la categoría en el chat.
         </p>
       )}
@@ -136,7 +137,7 @@ function ProposalFieldsDisplay({ proposal }: { proposal: ProposalEvent }) {
                 key={`dd-${i}`}
                 className={cn(
                   "font-mono text-xs break-all",
-                  isWarning ? "text-amber-600 dark:text-amber-400" : "text-foreground",
+                  isWarning ? TONE_CLASSES.caution.text : "text-foreground",
                 )}
               >
                 {f.value}

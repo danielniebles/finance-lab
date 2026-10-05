@@ -1,12 +1,11 @@
 "use client";
 
 import { Trash } from "lucide-react";
-import { Money } from "@/components/ds";
+import { ColorDot, Money } from "@/components/ds";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { deleteLoanPayment } from "@/lib/actions/loans";
 import type { DebtorWithLoans } from "@/lib/queries/loans";
-import { AccountDot } from "./account-dot";
 
 type Payment = {
   id: string;
@@ -29,7 +28,7 @@ function PaymentRow({ p, pending, onDelete }: { p: Payment; pending: boolean; on
     <li className="group/row flex items-center gap-3 px-6 py-2.5 hover:bg-muted/20">
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          <AccountDot color={p.accountColor} />
+          <ColorDot color={p.accountColor} />
           <span className="truncate">
             {date} · {p.accountName}
           </span>

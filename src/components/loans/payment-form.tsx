@@ -14,6 +14,7 @@ import {
 import { recordPayment } from "@/lib/actions/loans";
 import { formatCOP } from "@/lib/format";
 import type { AccountWithBalance, DebtorWithLoans } from "@/lib/queries/loans";
+import { ColorDot } from "@/components/ds";
 
 type FormState = { error?: string } | null;
 type FifoEntry = { loan: DebtorWithLoans["loans"][0]; apply: number };
@@ -72,7 +73,7 @@ function AccountSelectField({
           <span className="text-sm flex items-center gap-2">
             {selected ? (
               <>
-                <span className="size-2 rounded-full" style={{ backgroundColor: selected.color ?? "#888" }} />
+                <ColorDot color={selected.color} />
                 {selected.name}
               </>
             ) : (
@@ -85,7 +86,7 @@ function AccountSelectField({
           {accounts.map((a) => (
             <SelectItem key={a.id} value={a.id}>
               <span className="flex items-center gap-2">
-                <span className="size-2 rounded-full" style={{ backgroundColor: a.color ?? "#888" }} />
+                <ColorDot color={a.color} />
                 {a.name}
               </span>
             </SelectItem>

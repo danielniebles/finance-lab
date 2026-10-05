@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MONTH_NAMES } from "@/lib/format";
+import { StatusChip } from "@/components/ds";
 import { buildExpensesUrl, type ExpensesSearchParams } from "@/lib/build-expenses-url";
 
 function currentFinancialMonth(startDay: number): { month: number; year: number } {
@@ -88,14 +89,9 @@ export function PeriodSelector({
   const hasPrev = availableMonths ? !!prevEntry : true;
   const hasNext = availableMonths ? !!nextEntry : true;
 
-  const selectedEntry = availableMonths?.find(
-    (m) => m.month === selectedMonth && m.year === selectedYear,
-  );
-  // Batch status is set once at import time and never rolls forward, so a
-  // month imported while it was current stays IN_PROGRESS in the DB forever
-  // after — gate the badge on it actually being the current month too, or
-  // stale past months keep showing "in progress".
-  const isInProgress = isCurrentMonth && selectedEntry?.status === "IN_PROGRESS";
+  // The running financial month is always in progress now that transactions
+  // are logged directly (MoneyLover import batch status is legacy, ADR-049).
+  const isInProgress = isCurrentMonth;
 
   return (
     <div className="flex w-full items-center gap-2">
@@ -115,9 +111,7 @@ export function PeriodSelector({
             {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
           </span>
           {isInProgress && (
-            <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
-              in progress
-            </span>
+            <StatusChip tone="info">In progress</StatusChip>
           )}
         </div>
         {startDay > 1 && (

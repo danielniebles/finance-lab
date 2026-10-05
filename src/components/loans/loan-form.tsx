@@ -13,14 +13,10 @@ import {
 import { deleteLoan } from "@/lib/actions/loans";
 import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/lib/queries/loans";
 import { useLoanForm } from "./hooks/use-loan-form";
+import { ColorDot } from "@/components/ds";
 
 function AccountDot({ color }: { color: string | null }) {
-  return (
-    <span
-      className="size-2.5 rounded-full inline-block"
-      style={{ backgroundColor: color ?? "#888" }}
-    />
-  );
+  return <ColorDot color={color} className="size-2.5" />;
 }
 
 function AccountTriggerLabel({ name, color }: { name: string; color: string | null }) {
@@ -36,7 +32,7 @@ function AccountSelectItem({ id, name, color }: { id: string; name: string; colo
   return (
     <SelectItem value={id}>
       <span className="flex items-center gap-2">
-        <span className="size-2 rounded-full" style={{ backgroundColor: color ?? "#888" }} />
+        <ColorDot color={color} />
         {name}
       </span>
     </SelectItem>

@@ -103,11 +103,11 @@ export function ChatMessages({
                         </p>
                       ),
                       code: ({ children }) => (
-                        <code className="font-mono text-xs bg-black/20 rounded px-1 py-0.5">
+                        <code className="font-mono text-xs bg-muted rounded px-1 py-0.5">
                           {children}
                         </code>
                       ),
-                      hr: () => <hr className="my-2 border-white/10" />,
+                      hr: () => <hr className="my-2 border-border/60" />,
                       table: ({ children }) => (
                         <div className="overflow-x-auto my-2">
                           <table className="w-full text-xs border-collapse">

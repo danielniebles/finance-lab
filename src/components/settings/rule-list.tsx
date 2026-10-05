@@ -26,6 +26,7 @@ import {
 import { Plus, Check, X } from "lucide-react";
 import { WalletSelect } from "@/components/shared/wallet-select";
 import { cn } from "@/lib/utils";
+import { TONE_CLASSES } from "@/lib/status";
 
 export type CounterpartyRuleRowData = {
   id: string;
@@ -491,10 +492,10 @@ function RuleRow({
 
         <div className="flex flex-wrap gap-1">
           {rule.autoRecord && (
-            <FlagBadge className="bg-blue-500/10 text-blue-600 dark:text-blue-400">Auto-record</FlagBadge>
+            <FlagBadge className={TONE_CLASSES.info.soft}>Auto-record</FlagBadge>
           )}
           {rule.recurring && (
-            <FlagBadge className="bg-violet-500/10 text-violet-600 dark:text-violet-400">Recurring</FlagBadge>
+            <FlagBadge className={TONE_CLASSES.neutral.soft}>Recurring</FlagBadge>
           )}
         </div>
 

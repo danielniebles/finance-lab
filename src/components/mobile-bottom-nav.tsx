@@ -27,7 +27,7 @@ export function MobileBottomNav() {
     >
       <nav
         aria-label="Primary"
-        className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-white/10 bg-card/70 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.4)] backdrop-blur-xl supports-[backdrop-filter]:bg-card/60"
+        className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-border/60 bg-card/70 p-1.5 shadow-xl backdrop-blur-xl supports-[backdrop-filter]:bg-card/60"
       >
         {items.map((item) => {
           const isActive = pathname.startsWith(item.href);

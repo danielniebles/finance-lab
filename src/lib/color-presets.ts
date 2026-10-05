@@ -8,3 +8,6 @@ export const PRESET_COLORS: { label: string; value: string }[] = [
   { label: "Teal",    value: "#14B8A6" },
   { label: "Red",     value: "#EF4444" },
 ];
+
+/** Colour preselected for a new account or card (user data, stored as hex). */
+export const DEFAULT_ENTITY_COLOR = PRESET_COLORS[0].value;

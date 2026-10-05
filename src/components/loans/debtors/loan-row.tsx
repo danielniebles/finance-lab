@@ -1,14 +1,13 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { Meter, Money, StatusChip } from "@/components/ds";
+import { ColorDot, Meter, Money, StatusChip } from "@/components/ds";
 import { computeLoanMeta, loanChip } from "@/lib/loan-display";
 import { TONE_CLASSES } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/lib/queries/loans";
 import { LoanForm } from "../loan-form";
 import { MASK } from "../lib/constants";
-import { AccountDot } from "./account-dot";
 
 export const LOAN_GRID = "sm:grid sm:grid-cols-[7rem_minmax(0,1fr)_8rem_9.5rem_3rem_5.5rem] sm:items-center sm:gap-x-4";
 
@@ -74,11 +73,11 @@ export function LoanRow({
         )}
       >
         <span className="hidden items-center gap-2 whitespace-nowrap text-xs text-muted-foreground sm:flex">
-          <AccountDot color={loan.accountColor} title={account} />
+          <ColorDot color={loan.accountColor} title={account} />
           {loanDate(loan.date)}
         </span>
         <span className="flex min-w-0 items-center gap-2 text-sm">
-          <AccountDot color={loan.accountColor} className="sm:hidden" />
+          <ColorDot color={loan.accountColor} className="sm:hidden" />
           <span className={cn("truncate", !loan.notes && "text-muted-foreground")}>{masked ? account : loan.notes ?? account}</span>
         </span>
         <Amount value={loan.amount} masked={masked} className="hidden text-right text-xs text-muted-foreground sm:block" />

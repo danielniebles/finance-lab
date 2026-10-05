@@ -17,6 +17,7 @@ import { AccountForm } from "./account-form";
 import { EntryForm } from "./account-entry-form";
 import type { AccountWithBalance } from "@/lib/queries/loans";
 import { MASK } from "./lib/constants";
+import { ColorDot } from "@/components/ds";
 
 // ─── Badge sub-components ─────────────────────────────────────────────────────
 
@@ -186,7 +187,7 @@ function AccountEntryLog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <span className="size-3 rounded-full shrink-0" style={{ backgroundColor: account.color ?? "#888" }} />
+            <ColorDot color={account.color} className="size-3" />
             {account.name} — Entry log
           </DialogTitle>
         </DialogHeader>
@@ -274,7 +275,7 @@ export function AccountCard({ account, masked }: { account: AccountWithBalance; 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="size-3 rounded-full shrink-0" style={{ backgroundColor: account.color ?? "#888" }} />
+                <ColorDot color={account.color} className="size-3" />
                 <span className="font-medium text-sm truncate">{account.name}</span>
               </div>
               <AccountTypeBadge type={account.accountType} />

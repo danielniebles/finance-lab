@@ -14,7 +14,7 @@ import {
 import { createAccount, updateAccount } from "@/lib/actions/loans";
 import { AccountType } from "@/generated/prisma";
 import type { AccountWithBalance } from "@/lib/queries/loans";
-import { PRESET_COLORS } from "@/lib/color-presets";
+import { DEFAULT_ENTITY_COLOR, PRESET_COLORS } from "@/lib/color-presets";
 
 type FormState = { error?: string } | null;
 
@@ -165,7 +165,7 @@ async function saveAccount(
 function initialAccountFormState(editing: AccountWithBalance | null) {
   return {
     accountType: (editing?.accountType as AccountType) ?? AccountType.BANK,
-    color: editing?.color ?? "#EAB308",
+    color: editing?.color ?? DEFAULT_ENTITY_COLOR,
     includeInAvailable: editing?.includeInAvailable ?? true,
     includeInOverviewTotal: editing?.includeInOverviewTotal ?? true,
   };

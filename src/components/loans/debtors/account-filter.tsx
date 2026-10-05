@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ColorDot } from "@/components/ds";
 import { cn } from "@/lib/utils";
 import type { AccountWithBalance, DebtorWithLoans } from "@/lib/queries/loans";
-import { AccountDot } from "./account-dot";
 
 const CHIP = "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors";
 const chipState = (active: boolean) =>
@@ -53,7 +53,7 @@ export function DebtorAccountFilter({
               onClick={() => setSelected(a.id === selected ? null : a.id)}
               className={cn(CHIP, chipState(selected === a.id))}
             >
-              <AccountDot color={a.color} />
+              <ColorDot color={a.color} />
               {a.name}
             </button>
           ))}

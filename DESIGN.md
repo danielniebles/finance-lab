@@ -290,7 +290,7 @@ To add a token: define it in all four blocks, map it in `@theme inline` as `--co
 
 ### Status → color: `lib/status.ts`
 
-Domain states never pick classes themselves. Map the state to a `Tone` (`positive`, `caution`, `danger`, `unplanned`, `info`, `neutral`) with the helpers (`toneForCategorySeverity`, `toneForVaultStatus`, `toneForRecurringStatus`, `toneForBudgetUsed`, `toneForSavingsRate`), and pass the tone to a component. `TONE_CLASSES[tone]` gives `text`, `soft`, `fill` and `color` (a CSS `var()` for SVG/charts) when a component doesn't fit.
+Domain states never pick classes themselves. Map the state to a `Tone` (`positive`, `caution`, `danger`, `unplanned`, `info`, `neutral`) with the helpers (`toneForCategorySeverity`, `toneForVaultStatus`, `toneForRecurringStatus`, `toneForBudgetUsed`, `toneForSavingsRate`, `toneForLiquidity`; health score: `toneForTier` / `toneForMetricStatus` in `lib/health-score-utils.ts`), and pass the tone to a component. `TONE_CLASSES[tone]` gives `text`, `soft`, `fill` and `color` (a CSS `var()` for SVG/charts) when a component doesn't fit.
 
 ### Components (`src/components/ds`)
 
@@ -302,11 +302,13 @@ Domain states never pick classes themselves. Map the state to a `Tone` (`positiv
 | `StatCard` | Overview `KpiCard`, the StatCard spec in §5 |
 | `SectionHeader` | Uppercase section labels + "View …" links |
 | `ListRow` | Icon tile + title/subtitle + trailing rows (vaults, installments, debtors) |
+| `ReadingGrid` | Label + amount readings that wrap instead of overflowing with long COP values |
+| `ColorDot` | Dot in a user-chosen colour (account, card); muted token when there's none |
 
 Reference page: `/settings/design-system` (dev only) renders every token and component. Check it in light and dark, and with `THEME_FAMILY=signal`, after any token change.
 
 ### Rules
 
-- No raw palette classes (`text-red-500`), hex or `oklch()` in components — use tokens. Exception: user-chosen category colors in `lib/category-style.ts`.
+- No raw palette classes (`text-red-500`, `bg-black/50`), hex, `rgb()` or `oklch()` in components, pages or lib — use tokens. Enforced by `src/lib/design-system-guard.test.ts`. Exceptions are user data (category hues in `lib/category-style.ts`, colour presets in `lib/color-presets.ts`) and colours rendered outside the page (app icon, manifest, `themeColor`).
 - Status color only through `lib/status.ts`.
 - Money only through `<Money>`.

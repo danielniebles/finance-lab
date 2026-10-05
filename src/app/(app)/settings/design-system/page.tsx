@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Car, Gift, PiggyBank, Wallet } from "lucide-react";
-import { ListRow, Meter, Money, SectionHeader, StatCard, StatusChip } from "@/components/ds";
+import { PRESET_COLORS } from "@/lib/color-presets";
+import { ColorDot, ListRow, Meter, Money, ReadingGrid, SectionHeader, StatCard, StatusChip } from "@/components/ds";
 import { SAVINGS_RATE_TARGET, TONE_CLASSES, type Tone } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
@@ -159,6 +160,33 @@ export default function DesignSystemPage() {
           <ListRow icon={Wallet} title="Neutral icon tile" subtitle="No status" />
         </div>
       </section>
+
+      <ReadingsAndDots />
     </div>
+  );
+}
+
+function ReadingsAndDots() {
+  return (
+    <>
+      <section className="space-y-4">
+        <SectionHeader title="Reading grid" />
+        <p className="text-xs text-muted-foreground">Label + amount tiles; they wrap instead of overflowing with long COP values.</p>
+        <ReadingGrid
+          items={[
+            { label: "Income", value: <Money value={14_650_000} /> },
+            { label: "Spent", value: <Money value={10_912_345} /> },
+            { label: "Left", value: <Money value={3_737_655} tone="positive" /> },
+          ]}
+        />
+      </section>
+      <section className="space-y-4">
+        <SectionHeader title="Colour dots (user data)" />
+        <div className="flex items-center gap-4 text-sm">
+          <span className="flex items-center gap-2"><ColorDot color={PRESET_COLORS[4].value} /> Account colour</span>
+          <span className="flex items-center gap-2"><ColorDot color={null} /> No colour set</span>
+        </div>
+      </section>
+    </>
   );
 }
