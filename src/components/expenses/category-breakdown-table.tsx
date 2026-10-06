@@ -2,23 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { getCategoryTransactions, type CategoryTransaction } from "@/lib/actions/expenses";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Meter, Money, SectionHeader, StatusChip } from "@/components/ds";
+import { FormDialog, Meter, Money, SectionHeader, StatusChip } from "@/components/ds";
 import { categoryStatus, groupCategories, isEmptyCategory, meterTone } from "@/lib/category-status";
-import { formatCOP } from "@/lib/format";
+import { dateInputValue } from "@/lib/format";
+import { formatDateLabel } from "@/lib/form-format";
 import { cn } from "@/lib/utils";
 import type { CategoryStatusRow } from "@/lib/category-status";
 import type { TagOption } from "@/lib/queries/tags";
@@ -211,96 +198,50 @@ function CategoryTransactionsDialog({
   transactions: CategoryTransaction[];
   isPending: boolean;
 }) {
+  const total = transactions.reduce((s, t) => s + Math.abs(t.amount), 0);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{selectedName}</DialogTitle>
-        </DialogHeader>
-        {isPending ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
-        ) : transactions.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            No transactions this month.
-          </p>
-        ) : (
-          <div className="overflow-auto max-h-[60vh] -mx-4">
-            {/* Mobile: stacked rows — same rationale as the outer breakdown
-                table above (avoids horizontal scroll a 5-column table forces). */}
-            <div className="sm:hidden">
-              {transactions.map((t) => (
-                <CategoryTransactionMobileRow key={t.id} transaction={t} />
-              ))}
-            </div>
-
-            <div className="hidden sm:block overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-border/60 hover:bg-transparent">
-                    <TableHead className="pl-4 text-xs uppercase tracking-wide text-muted-foreground whitespace-nowrap">
-                      Date
-                    </TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Note
-                    </TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Wallet
-                    </TableHead>
-                    <TableHead className="pr-4 text-right text-xs uppercase tracking-wide text-muted-foreground">
-                      Amount
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.map((t) => (
-                    <TableRow key={t.id} className="border-border/40">
-                      <TableCell className="pl-4 text-sm tabular-nums whitespace-nowrap">
-                        {new Date(t.date).toLocaleDateString("es-CO", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-[180px] truncate">
-                        {noteOrTagsLabel(t.note, t.tags)}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{t.wallet}</TableCell>
-                      <TableCell className="pr-4 text-right font-mono text-sm tabular-nums">
-                        {formatCOP(Math.abs(t.amount))}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      size="lg"
+      title={selectedName}
+      description={
+        !isPending && transactions.length > 0 ? (
+          <>
+            {transactions.length} {transactions.length === 1 ? "transaction" : "transactions"} this month ·{" "}
+            <Money value={total} className="text-foreground" />
+          </>
+        ) : undefined
+      }
+    >
+      {isPending ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+      ) : transactions.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">No transactions this month.</p>
+      ) : (
+        <ul className="-mx-5 divide-y divide-border/40">
+          {transactions.map((t) => (
+            <CategoryTransactionRow key={t.id} transaction={t} />
+          ))}
+        </ul>
+      )}
+    </FormDialog>
   );
 }
 
-function CategoryTransactionMobileRow({ transaction }: { transaction: CategoryTransaction }) {
+// One markup for every width: note on top with date · wallet under it on
+// phones; from sm up the date and wallet move into their own columns.
+function CategoryTransactionRow({ transaction: t }: { transaction: CategoryTransaction }) {
+  const date = formatDateLabel(dateInputValue(new Date(t.date)));
   return (
-    <div className="flex w-full flex-col gap-1 border-b border-border/40 px-4 py-2.5 last:border-0">
-      <div className="flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate text-sm font-medium">
-          {noteOrTagsLabel(transaction.note, transaction.tags)}
-        </span>
-        <span className="font-mono text-sm tabular-nums shrink-0">
-          {formatCOP(Math.abs(transaction.amount))}
-        </span>
-      </div>
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span className="tabular-nums">
-          {new Date(transaction.date).toLocaleDateString("es-CO", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          })}
-        </span>
-        <span className="truncate">{transaction.wallet}</span>
-      </div>
-    </div>
+    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0.5 px-5 py-2.5 sm:grid-cols-[6.5rem_minmax(0,1fr)_8rem_auto]">
+      <span className="hidden text-xs text-muted-foreground sm:block">{date}</span>
+      <span className="min-w-0 truncate text-sm">{noteOrTagsLabel(t.note, t.tags)}</span>
+      <span className="hidden truncate text-xs text-muted-foreground sm:block">{t.wallet}</span>
+      <Money value={Math.abs(t.amount)} className="row-span-2 text-right text-sm sm:row-span-1" />
+      <span className="truncate text-xs text-muted-foreground sm:hidden">
+        {date} · {t.wallet}
+      </span>
+    </li>
   );
 }

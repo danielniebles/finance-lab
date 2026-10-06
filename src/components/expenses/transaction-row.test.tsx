@@ -132,15 +132,17 @@ describe("TransactionRow — edit mode", () => {
     );
   });
 
-  it("sends appCategoryId: null (not undefined) when 'Sin categoría' is selected — regression for the dead-clear-affordance bug", async () => {
+  it("sends appCategoryId: null (not undefined) when 'No category' is selected — regression for the dead-clear-affordance bug", async () => {
     const user = userEvent.setup();
     render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} tags={TAGS} />);
 
     await user.click(screen.getByRole("button", { name: EDIT_BUTTON_NAME }));
 
+    // jsdom applies no media queries, so both OptionSelect variants render;
+    // drive the native <select> (the one phones get).
     const dialog = screen.getByRole("dialog");
-    await user.click(within(dialog).getByText("Groceries", { selector: "span" }));
-    await user.click(await screen.findByRole("option", { name: "Sin categoría" }));
+    const categorySelect = dialog.querySelector<HTMLSelectElement>('select[aria-label="Category"]')!;
+    await user.selectOptions(categorySelect, "No category");
 
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
@@ -151,6 +153,18 @@ describe("TransactionRow — edit mode", () => {
     const payload = updateTransactionMock.mock.calls[0][1];
     expect(payload.appCategoryId).toBeNull();
     expect("appCategoryId" in payload).toBe(true);
+  });
+
+  it("switching to Income saves a positive amount", async () => {
+    const user = userEvent.setup();
+    render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} tags={TAGS} />);
+
+    await user.click(screen.getByRole("button", { name: EDIT_BUTTON_NAME }));
+    await user.click(screen.getByRole("radio", { name: "Income" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    const payload = updateTransactionMock.mock.calls[0][1];
+    expect(payload.amount).toBeGreaterThan(0);
   });
 
   it("Escape cancels edit mode back to the default row", async () => {
@@ -201,7 +215,8 @@ describe("TransactionRow — edit mode", () => {
 
     await user.click(screen.getByRole("button", { name: EDIT_BUTTON_NAME }));
 
-    expect(screen.getByLabelText("Amount")).toHaveValue(-99000);
+    expect(screen.getByLabelText("Amount")).toHaveValue("99.000");
+    expect(screen.getByRole("radio", { name: "Expense" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByLabelText(/^Note/)).toHaveValue("Updated note");
   });
 });
@@ -223,10 +238,10 @@ describe("TransactionRow — delete-confirm mode", () => {
 
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Delete transaction?")).toBeInTheDocument();
-    expect(screen.getByText("Delete this transaction?")).toBeInTheDocument();
+    expect(within(dialog).getByText(/will be removed/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
 
-    await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
 
     expect(deleteTransactionMock).toHaveBeenCalledWith("txn-1");
   });
@@ -236,11 +251,11 @@ describe("TransactionRow — delete-confirm mode", () => {
     render(<TransactionRow item={makeItem()} groupBy={GROUP_BY_DAY} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} tags={TAGS} />);
 
     await openDeleteConfirm(user);
-    expect(screen.getByText("Delete this transaction?")).toBeInTheDocument();
+    expect(screen.getByText("Delete transaction?")).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
 
-    expect(screen.queryByText("Delete this transaction?")).not.toBeInTheDocument();
+    expect(screen.queryByText("Delete transaction?")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: EDIT_BUTTON_NAME })).toBeInTheDocument();
     expect(deleteTransactionMock).not.toHaveBeenCalled();
   });

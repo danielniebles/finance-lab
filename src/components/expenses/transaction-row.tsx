@@ -3,39 +3,37 @@
 import { useId, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
+  DateField,
+  Field,
+  FormDialog,
+  FormFooter,
+  MoneyInput,
+  OptionSelect,
+  SegmentedControl,
+  TagInput,
+  type SegmentOption,
+} from "@/components/ds";
 import { formatCOP, dateInputValue } from "@/lib/format";
+import { amountToDigits } from "@/lib/form-format";
 import { cn } from "@/lib/utils";
 import { resolveEffectiveCategoryStyle } from "@/lib/category-style";
 import { updateTransaction, deleteTransaction, setTransactionTags } from "@/lib/actions/transactions";
-import { WalletSelect } from "@/components/shared/wallet-select";
-import { TagsField } from "@/components/shared/tags-field";
+import { categorySelectOptions } from "@/components/shared/category-option";
 import { parseTagNames } from "@/lib/tag-utils";
 import type { LedgerItem, LedgerGroupBy } from "@/lib/queries/transactions";
 import type { CategoryOption } from "@/lib/queries/expenses";
 import type { TagOption } from "@/lib/queries/tags";
 
-const NONE_CATEGORY = "__none__";
-
 type Mode = "default" | "edit" | "delete-confirm";
 
 type RowFormValues = {
+  /** Sign of the amount; a transfer leg keeps the one it has. */
+  kind: "expense" | "income";
+  /** Magnitude as digits (MoneyInput). */
   amount: string;
   date: string;
-  appCategoryId: string;
+  appCategoryId: string | null;
   walletId: string;
   note: string;
   // Comma-separated tag names as typed — parsed into a list at save time
@@ -75,9 +73,10 @@ function rowAriaLabel(item: LedgerItem): string {
 
 function formValuesFromItem(item: LedgerItem, categories: CategoryOption[]): RowFormValues {
   return {
-    amount: String(item.amount),
+    kind: item.amount < 0 ? "expense" : "income",
+    amount: amountToDigits(item.amount),
     date: dateInputValue(item.date),
-    appCategoryId: categories.find((c) => c.name === item.categoryName)?.id ?? NONE_CATEGORY,
+    appCategoryId: categories.find((c) => c.name === item.categoryName)?.id ?? null,
     walletId: item.walletId ?? "",
     note: item.note ?? "",
     tagNames: item.tags.map((t) => t.name).join(", "),
@@ -119,9 +118,9 @@ export function TransactionRow({ item, groupBy, categories, walletOptions, tags 
     startTransition(async () => {
       await Promise.all([
         updateTransaction(item.id, {
-          amount: parseFloat(values.amount),
+          amount: values.kind === "expense" ? -Math.abs(parseFloat(values.amount)) : Math.abs(parseFloat(values.amount)),
           date: new Date(values.date + "T12:00:00"),
-          appCategoryId: values.appCategoryId === NONE_CATEGORY ? null : values.appCategoryId,
+          appCategoryId: values.appCategoryId,
           walletId: values.walletId,
           note: values.note.trim() === "" ? null : values.note,
         }),
@@ -145,35 +144,21 @@ export function TransactionRow({ item, groupBy, categories, walletOptions, tags 
           setMode("edit");
         }}
       />
-      <Dialog open={mode !== "default"} onOpenChange={(open) => !open && cancelToDefault()}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {displayMode === "edit" ? "Edit transaction" : "Delete transaction?"}
-            </DialogTitle>
-          </DialogHeader>
-          {displayMode === "edit" ? (
-            <TransactionEditForm
-              values={values}
-              categories={categories}
-              walletOptions={walletOptions}
-              tags={tags}
-              pending={pending}
-              onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
-              onSubmit={handleSave}
-              onCancel={cancelToDefault}
-              onDeleteRequest={() => setMode("delete-confirm")}
-            />
-          ) : (
-            <TransactionDeleteConfirm
-              isTransfer={item.isTransfer}
-              pending={pending}
-              onConfirm={handleDelete}
-              onCancel={cancelToDefault}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      <TransactionDialog
+        open={mode !== "default"}
+        view={displayMode}
+        item={item}
+        values={values}
+        categories={categories}
+        walletOptions={walletOptions}
+        tags={tags}
+        pending={pending}
+        onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
+        onSubmit={handleSave}
+        onCancel={cancelToDefault}
+        onDeleteRequest={() => setMode("delete-confirm")}
+        onDelete={handleDelete}
+      />
     </>
   );
 }
@@ -260,7 +245,18 @@ function TransactionDefaultRow({
   );
 }
 
-function TransactionEditForm({
+type EditKind = "expense" | "income";
+
+const KIND_OPTIONS: SegmentOption<EditKind>[] = [
+  { value: "expense", label: "Expense" },
+  { value: "income", label: "Income" },
+];
+
+/** Edit + delete-confirm for one ledger row, in the shared FormDialog. */
+function TransactionDialog({
+  open,
+  view,
+  item,
   values,
   categories,
   walletOptions,
@@ -270,7 +266,11 @@ function TransactionEditForm({
   onSubmit,
   onCancel,
   onDeleteRequest,
+  onDelete,
 }: {
+  open: boolean;
+  view: Exclude<Mode, "default">;
+  item: LedgerItem;
   values: RowFormValues;
   categories: CategoryOption[];
   walletOptions: { id: string; name: string }[];
@@ -280,145 +280,123 @@ function TransactionEditForm({
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
   onDeleteRequest: () => void;
+  onDelete: () => void;
 }) {
-  const idPrefix = useId();
-  const selectedCategoryName =
-    categories.find((c) => c.id === values.appCategoryId)?.name ?? "Sin categoría";
-  // A legacy row whose walletId hasn't been backfilled yet has "" here — mirror
-  // AddTransactionRow's canSubmit() guard rather than letting an empty walletId
-  // reach updateTransaction (it would clear the column instead of a no-op).
-  const saveDisabled = pending || values.walletId === "";
-
+  if (view === "delete-confirm") {
+    return (
+      <FormDialog
+        open={open}
+        onOpenChange={(o) => !o && onCancel()}
+        title={item.isTransfer ? "Delete transfer?" : "Delete transaction?"}
+        footer={
+          <FormFooter>
+            <Button type="button" variant="outline" onClick={onCancel} autoFocus>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" disabled={pending} onClick={onDelete}>
+              Delete
+            </Button>
+          </FormFooter>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          {item.isTransfer
+            ? "Both the outgoing and the incoming leg will be removed."
+            : `${item.note?.trim() || item.categoryName || "This transaction"} · ${formatCOP(Math.abs(item.amount))} will be removed.`}
+        </p>
+      </FormDialog>
+    );
+  }
+  // A legacy row whose walletId hasn't been backfilled yet has "" here —
+  // don't let an empty walletId reach updateTransaction (it would clear it).
+  const missing = editMissingHint(values);
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-amount`}>Amount</Label>
-          <Input
-            id={`${idPrefix}-amount`}
-            type="number"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            value={values.amount}
-            onChange={(e) => onChange({ amount: e.target.value })}
-            className="font-mono"
-            autoFocus
-            required
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-date`}>Date</Label>
-          <Input
-            id={`${idPrefix}-date`}
-            type="date"
-            value={values.date}
-            onChange={(e) => onChange({ date: e.target.value })}
-            required
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label>Category</Label>
-          <Select
-            value={values.appCategoryId}
-            onValueChange={(v) => v && onChange({ appCategoryId: v })}
-          >
-            <SelectTrigger className="w-full" aria-label="Category">
-              <span className="text-sm truncate">{selectedCategoryName}</span>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE_CATEGORY}>Sin categoría</SelectItem>
-              {categories.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Wallet</Label>
-          <WalletSelect
-            value={values.walletId}
-            options={walletOptions}
-            onChange={(v) => onChange({ walletId: v })}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-note`}>
-          Note <span className="text-muted-foreground font-normal">(optional)</span>
-        </Label>
-        <Input
-          id={`${idPrefix}-note`}
-          value={values.note}
-          onChange={(e) => onChange({ note: e.target.value })}
-          placeholder="Note"
-        />
-      </div>
-
-      <TagsField
-        idPrefix={idPrefix}
-        value={values.tagNames}
-        tags={tags}
-        onChange={(v) => onChange({ tagNames: v })}
-      />
-
-      <DialogFooter>
-        <Button
-          type="button"
-          variant="destructive"
-          className="sm:mr-auto"
-          disabled={pending}
-          onClick={onDeleteRequest}
-        >
-          Delete
-        </Button>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={saveDisabled}>
-          Save changes
-        </Button>
-      </DialogFooter>
-    </form>
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && onCancel()}
+      title={item.isTransfer ? "Edit transfer leg" : "Edit transaction"}
+      onSubmit={onSubmit}
+      footer={
+        <FormFooter hint={pending ? "" : missing}>
+          <Button type="button" variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive sm:mr-auto" disabled={pending} onClick={onDeleteRequest}>
+            Delete
+          </Button>
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={pending || !!missing}>
+            Save changes
+          </Button>
+        </FormFooter>
+      }
+    >
+      <EditFields item={item} values={values} categories={categories} walletOptions={walletOptions} tags={tags} onChange={onChange} />
+    </FormDialog>
   );
 }
 
-function TransactionDeleteConfirm({
-  isTransfer,
-  pending,
-  onConfirm,
-  onCancel,
+/** Footer hint naming what's missing before an edit can be saved ("" when ready). */
+export function editMissingHint(values: RowFormValues): string {
+  const amount = parseFloat(values.amount);
+  if (Number.isNaN(amount) || amount === 0) return "Add an amount to save.";
+  if (!values.walletId) return "Pick a wallet to save.";
+  return "";
+}
+
+function EditFields({
+  item,
+  values,
+  categories,
+  walletOptions,
+  tags,
+  onChange,
 }: {
-  isTransfer: boolean;
-  pending: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
+  item: LedgerItem;
+  values: RowFormValues;
+  categories: CategoryOption[];
+  walletOptions: { id: string; name: string }[];
+  tags: TagOption[];
+  onChange: (patch: Partial<RowFormValues>) => void;
 }) {
+  const idPrefix = useId();
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-destructive">
-        {isTransfer
-          ? "Delete this transfer? Both the outgoing and incoming legs will be removed."
-          : "Delete this transaction?"}
-      </p>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel} autoFocus>
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          variant="destructive"
-          disabled={pending}
-          onClick={onConfirm}
-        >
-          Confirm delete
-        </Button>
-      </DialogFooter>
-    </div>
+    <>
+      {/* A transfer leg's sign is fixed by which side of the transfer it is. */}
+      {!item.isTransfer && (
+        <SegmentedControl ariaLabel="Transaction type" value={values.kind} onChange={(kind) => onChange({ kind })} options={KIND_OPTIONS} />
+      )}
+      <Field label="Amount" htmlFor={`${idPrefix}-amount`}>
+        <MoneyInput id={`${idPrefix}-amount`} size="lg" value={values.amount} onValueChange={(amount) => onChange({ amount })} autoFocus required />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Category">
+          <OptionSelect
+            ariaLabel="Category"
+            value={values.appCategoryId}
+            onChange={(v) => onChange({ appCategoryId: v })}
+            noneLabel="No category"
+            // Includes the transfer categories: a transfer leg must keep its own.
+            options={categorySelectOptions(categories)}
+          />
+        </Field>
+        <Field label="Wallet">
+          <OptionSelect
+            ariaLabel="Wallet"
+            value={values.walletId || null}
+            onChange={(v) => onChange({ walletId: v ?? "" })}
+            options={walletOptions.map((w) => ({ value: w.id, label: w.name }))}
+          />
+        </Field>
+      </div>
+      <Field label="Date" htmlFor={`${idPrefix}-date`}>
+        <DateField id={`${idPrefix}-date`} value={values.date} onChange={(date) => onChange({ date })} quickPicks={["today", "yesterday"]} required />
+      </Field>
+      <Field label="Note" htmlFor={`${idPrefix}-note`} optional>
+        <Input id={`${idPrefix}-note`} value={values.note} onChange={(e) => onChange({ note: e.target.value })} placeholder="What was it for?" />
+      </Field>
+      <Field label="Tags" htmlFor={`${idPrefix}-tags`} optional>
+        <TagInput id={`${idPrefix}-tags`} value={values.tagNames} existing={tags.map((t) => t.name)} onChange={(tagNames) => onChange({ tagNames })} />
+      </Field>
+    </>
   );
 }
