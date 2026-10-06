@@ -5,7 +5,11 @@ import { AnalysisDashboard } from "@/components/expenses/analysis-dashboard";
 import { PeriodSelector } from "@/components/expenses/period-selector";
 import { ViewTabs } from "@/components/expenses/view-tabs";
 import { TransactionLedgerPage } from "@/components/expenses/transaction-ledger";
-import { getAvailableMonths } from "@/lib/queries/expenses";
+import { getAvailableMonths, getCategories } from "@/lib/queries/expenses";
+import { getTags } from "@/lib/queries/tags";
+import { getWalletBalances } from "@/lib/queries/wallets";
+import { PageHeader } from "@/components/ds";
+import { AddTransactionButton } from "@/components/expenses/add-transaction-button";
 import type { LedgerGroupBy } from "@/lib/queries/transactions";
 
 type Props = {
@@ -48,6 +52,26 @@ function parseGroupFilter(value?: string): "FIXED" | "VARIABLE" | undefined {
   return value === "FIXED" || value === "VARIABLE" ? value : undefined;
 }
 
+/** What the header's Add transaction dialog needs, on both views. */
+async function loadAddTransactionData() {
+  const [categories, tags, walletBalances] = await Promise.all([getCategories(), getTags(), getWalletBalances()]);
+  const walletOptions = walletBalances.accounts.flatMap((account) =>
+    account.wallets.map((wallet) => ({ id: wallet.id, name: wallet.name })),
+  );
+  return { categories, tags, walletOptions };
+}
+
+function ledgerFilters(params: Awaited<Props["searchParams"]>) {
+  return {
+    category: params.category || undefined,
+    wallet: params.wallet || undefined,
+    walletId: params.walletId || undefined,
+    type: parseType(params.type),
+    search: params.search || undefined,
+    tagId: params.tagId || undefined,
+  };
+}
+
 export default async function ExpensesPage({ searchParams }: Props) {
   const params = await searchParams;
   const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
@@ -57,20 +81,33 @@ export default async function ExpensesPage({ searchParams }: Props) {
   const selectedYear = params.year ? parseInt(params.year) : fallback.year;
   const view = params.view === "analysis" ? "analysis" : "ledger";
 
-  const importedMonths = await getAvailableMonths();
+  const [importedMonths, { categories, tags, walletOptions }] = await Promise.all([
+    getAvailableMonths(),
+    loadAddTransactionData(),
+  ]);
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <h1 className="font-heading text-2xl font-semibold">Expenses</h1>
-        <PeriodSelector
-          selectedMonth={selectedMonth}
-          selectedYear={selectedYear}
-          startDay={startDay}
-          availableMonths={importedMonths}
-          currentParams={params}
-        />
-      </div>
+      <PageHeader
+        title="Expenses"
+        controls={
+          <PeriodSelector
+            selectedMonth={selectedMonth}
+            selectedYear={selectedYear}
+            startDay={startDay}
+            availableMonths={importedMonths}
+            currentParams={params}
+          />
+        }
+        action={
+          <AddTransactionButton
+            categories={categories}
+            walletOptions={walletOptions}
+            tags={tags}
+            activeWalletId={params.walletId || undefined}
+          />
+        }
+      />
 
       <ViewTabs view={view} month={selectedMonth} year={selectedYear} currentParams={params} />
 
@@ -84,14 +121,7 @@ export default async function ExpensesPage({ searchParams }: Props) {
             month={selectedMonth}
             year={selectedYear}
             groupBy={parseGroupBy(params.groupBy)}
-            filters={{
-              category: params.category || undefined,
-              wallet: params.wallet || undefined,
-              walletId: params.walletId || undefined,
-              type: parseType(params.type),
-              search: params.search || undefined,
-              tagId: params.tagId || undefined,
-            }}
+            filters={ledgerFilters(params)}
           />
         </Suspense>
       ) : (

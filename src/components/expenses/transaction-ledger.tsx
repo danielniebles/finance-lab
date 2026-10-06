@@ -11,7 +11,6 @@ import { getFinancialPeriodBounds } from "@/lib/financial-period-utils";
 import { periodProgress } from "@/lib/forecast-utils";
 import { LedgerSummary } from "@/components/expenses/ledger-summary";
 import { LedgerControls } from "@/components/expenses/ledger-controls";
-import { AddTransactionRow } from "@/components/expenses/add-transaction-row";
 import { TransactionGroupList } from "@/components/expenses/transaction-group-list";
 import { LedgerEmptyState } from "@/components/expenses/ledger-empty-state";
 import { CategorySummaryPanel } from "@/components/expenses/category-summary-panel";
@@ -113,16 +112,6 @@ export async function TransactionLedgerPage({ month, year, groupBy, filters }: P
         year={year}
         groupBy={groupBy}
         filters={filters}
-      />
-
-      {/* Sibling of LedgerControls, not a child — must stay interactive
-          during LedgerControls's filter-requery dimming (see
-          .scratch/manual-transaction-entry.md). */}
-      <AddTransactionRow
-        categories={categories}
-        walletOptions={walletOptions}
-        tags={tags}
-        activeWalletId={filters.walletId}
       />
 
       <LedgerControls

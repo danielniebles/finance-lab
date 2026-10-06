@@ -104,7 +104,7 @@ export type CategoryOption = {
   // returned here (not filtered out) — transaction-row.tsx's edit form needs
   // it present so editing a transfer row doesn't fall through to "Sin
   // categoría" and silently clear it on save. Callers that build a picker for
-  // a brand-new manual transaction (AddTransactionRow's Expense/Income tab)
+  // a brand-new manual transaction (AddTransactionButton's Expense/Income tab)
   // filter it out client-side instead.
   isTransfer: boolean;
   /** Stored icon/colour overrides (null = derived from the name). */

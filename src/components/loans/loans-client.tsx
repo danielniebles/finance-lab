@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, ArrowRightLeft, HandCoins } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HeaderAction } from "@/components/ds";
 import { AccountForm } from "./account-form";
 import { DebtorForm } from "./debtor-form";
 import { LoanForm } from "./loan-form";
@@ -11,7 +12,8 @@ import { TransferForm } from "./transfer-form";
 import type { AccountWithBalance, DebtorWithLoans } from "@/lib/queries/loans";
 
 type Mode =
-  | "action-bar"       // top-right header — Transfer, Record Payment, New Loan
+  | "transfer"         // page header control (outline) → TransferForm
+  | "new-loan"         // page header primary action → LoanForm
   | "add-account"      // accounts section header
   | "add-debtor"       // debtors section header → DebtorForm
   | "add-loan-button"  // per-debtor row → LoanForm pre-filled with debtorId
@@ -51,19 +53,22 @@ export function LoansClient({ accounts, debtors, mode, debtorId }: Props) {
     </>
   );
 
-  if (mode === "action-bar") {
+  if (mode === "transfer") {
     return (
       <>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen("transfer")}>
-            <ArrowRightLeft className="size-4" />
-            Transfer
-          </Button>
-          <Button size="sm" className="gap-1.5" onClick={() => setOpen("loan")}>
-            <Plus className="size-4" />
-            New loan
-          </Button>
-        </div>
+        <Button variant="outline" size="lg" className="gap-1.5 max-sm:flex-1" onClick={() => setOpen("transfer")}>
+          <ArrowRightLeft className="size-4" />
+          Transfer
+        </Button>
+        {forms}
+      </>
+    );
+  }
+
+  if (mode === "new-loan") {
+    return (
+      <>
+        <HeaderAction label="New loan" shortLabel="Loan" onClick={() => setOpen("loan")} />
         {forms}
       </>
     );

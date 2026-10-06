@@ -1,8 +1,7 @@
 "use client";
 
-import { Eye, EyeOff } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { PageHeader, SectionHeader } from "@/components/ds";
+import { PrivacyToggle } from "@/components/shared/privacy-toggle";
 import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 import { LoansClient } from "./loans-client";
 import { AccountCard } from "./account-card";
@@ -21,37 +20,26 @@ export function LoansDashboard({ data }: { data: LoansOverview }) {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold">Savings & Loans</h1>
-          <p className="text-sm text-muted-foreground">Account balances and outstanding loans</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn("gap-1.5", privacyMode && "border-primary/50 text-primary")}
-            onClick={handlePrivacyToggle}
-            title={privacyMode ? "Exit privacy mode" : "Enter privacy mode"}
-          >
-            {privacyMode ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            Privacy
-          </Button>
-          <LoansClient accounts={data.accounts} debtors={data.debtors} mode="action-bar" />
-        </div>
-      </div>
+      <PageHeader
+        title="Savings & Loans"
+        description="Account balances and outstanding loans"
+        controls={
+          <>
+            <PrivacyToggle on={privacyMode} onToggle={handlePrivacyToggle} />
+            <LoansClient accounts={data.accounts} debtors={data.debtors} mode="transfer" />
+          </>
+        }
+        action={<LoansClient accounts={data.accounts} debtors={data.debtors} mode="new-loan" />}
+      />
 
       <NetWorthCard data={data} masked={privacyMode} activeDebtorCount={activeDebtorCount} />
 
       {/* Accounts grid */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Accounts
-          </h2>
-          <LoansClient accounts={data.accounts} debtors={data.debtors} mode="add-account" />
-        </div>
+        <SectionHeader
+          title="Accounts"
+          trailing={<LoansClient accounts={data.accounts} debtors={data.debtors} mode="add-account" />}
+        />
         {data.accounts.length === 0 ? (
           <p className="text-sm text-muted-foreground">No accounts yet.</p>
         ) : (

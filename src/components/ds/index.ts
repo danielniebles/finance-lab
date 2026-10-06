@@ -6,6 +6,7 @@ export { Meter } from "./meter";
 export { StatCard } from "./stat-card";
 export { SectionHeader } from "./section-header";
 export { PageHeader } from "./page-header";
+export { HeaderAction } from "./header-action";
 export { ListRow } from "./list-row";
 export { ReadingGrid, type Reading } from "./reading-grid";
 export { ColorDot } from "./color-dot";

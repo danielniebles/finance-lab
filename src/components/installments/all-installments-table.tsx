@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Meter, Money, StatusChip } from "@/components/ds";
 import { sortInstallments } from "@/lib/installment-display";
 import { cn } from "@/lib/utils";
-import { InstallmentActions } from "./installment-actions";
 import { InstallmentForm } from "./installment-form";
 import type { InstallmentRow } from "@/lib/queries/installments";
 
@@ -124,16 +123,11 @@ export function AllInstallmentsTable({
               {showFinished ? "Hide finished" : `Show finished (${finishedCount})`}
             </button>
           )}
-          <InstallmentActions
-            formCards={formCards}
-            formDebtors={formDebtors}
-            formAccounts={formAccounts}
-          />
         </div>
       </div>
 
       {installments.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No installments yet. Add one above.</p>
+        <p className="text-sm text-muted-foreground">No installments yet. Use Add installment at the top.</p>
       ) : visible.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No active installments.{" "}

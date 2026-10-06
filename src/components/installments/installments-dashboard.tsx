@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Eye, EyeOff } from "lucide-react";
-import { SectionHeader } from "@/components/ds";
+import { PageHeader, SectionHeader } from "@/components/ds";
+import { PrivacyToggle } from "@/components/shared/privacy-toggle";
 import { cardStatus, nextCardDue } from "@/lib/installment-display";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 import { MonthNav } from "./month-nav";
+import { InstallmentActions } from "./installment-actions";
 import { InstallmentsSummary } from "./installments-summary";
 import { DueThisMonthTable } from "./due-this-month-table";
 import { AllInstallmentsTable } from "./all-installments-table";
@@ -75,26 +75,17 @@ export function InstallmentsDashboard({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold">Installments</h1>
-          <p className="text-sm text-muted-foreground">Credit card installment tracker</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn("gap-1.5", privacyMode && "border-primary/50 text-primary")}
-            onClick={handlePrivacyToggle}
-            title={privacyMode ? "Exit privacy mode" : "Enter privacy mode"}
-          >
-            {privacyMode ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            Privacy
-          </Button>
-          <MonthNav month={month} year={year} />
-        </div>
-      </div>
+      <PageHeader
+        title="Installments"
+        description="Credit card installment tracker"
+        controls={
+          <>
+            <PrivacyToggle on={privacyMode} onToggle={handlePrivacyToggle} />
+            <MonthNav month={month} year={year} />
+          </>
+        }
+        action={<InstallmentActions formCards={formCards} formDebtors={formDebtors} formAccounts={formAccounts} />}
+      />
 
       <InstallmentsSummary
         summary={activeSummary}

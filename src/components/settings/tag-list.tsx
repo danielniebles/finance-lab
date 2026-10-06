@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HeaderAction } from "@/components/ds";
 import { Input } from "@/components/ui/input";
 import { Field, FormDialog, FormFooter, OptionSelect } from "@/components/ds";
 import { CategoryIconTile, categorySelectOptions } from "@/components/shared/category-option";
@@ -210,10 +210,7 @@ export function AddTagButton({ categories }: { categories: CategoryOption[] }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button onClick={() => setOpen(true)}>
-        <Plus aria-hidden />
-        Add tag
-      </Button>
+      <HeaderAction label="Add tag" onClick={() => setOpen(true)} />
       <TagDialog categories={categories} open={open} onClose={() => setOpen(false)} />
     </>
   );

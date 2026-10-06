@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HeaderAction, PageHeader } from "@/components/ds";
 import { nextDueByVault } from "@/lib/vault-display";
 import { VaultCarousel } from "./vault-carousel";
 import { VaultsSummary } from "./vaults-summary";
@@ -104,19 +105,11 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
 
   return (
     <div className="space-y-8">
-      {/* Page header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold">Vaults</h1>
-          <p className="text-sm text-muted-foreground">
-            Goal-based savings pockets
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={openAddDialog}>
-          <Plus className="size-4 mr-1.5" aria-hidden="true" />
-          New vault
-        </Button>
-      </div>
+      <PageHeader
+        title="Vaults"
+        description="Goal-based savings pockets"
+        action={<HeaderAction label="New vault" onClick={openAddDialog} />}
+      />
 
       {/* This month: one summary (replaces the due banner + stat band) */}
       {vaults.length > 0 && <VaultsSummary obligations={obligations} />}

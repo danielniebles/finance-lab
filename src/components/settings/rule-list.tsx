@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus } from "lucide-react";
 import {
   createCounterpartyRule,
   updateCounterpartyRule,
@@ -9,6 +8,7 @@ import {
 } from "@/lib/actions/counterparty-rules";
 import type { RuleMatchType, RuleDirection } from "@/generated/prisma";
 import { Button } from "@/components/ui/button";
+import { HeaderAction } from "@/components/ds";
 import { Input } from "@/components/ui/input";
 import { CheckField, Field, FormDialog, FormFooter, MoneyInput, OptionSelect, SegmentedControl, StatusChip } from "@/components/ds";
 import { CategoryIconTile, categorySelectOptions } from "@/components/shared/category-option";
@@ -404,10 +404,7 @@ export function AddRuleButton({ categories, walletOptions }: { categories: Categ
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button onClick={() => setOpen(true)}>
-        <Plus aria-hidden />
-        Add rule
-      </Button>
+      <HeaderAction label="Add rule" onClick={() => setOpen(true)} />
       <RuleDialog categories={categories} walletOptions={walletOptions} open={open} onClose={() => setOpen(false)} />
     </>
   );

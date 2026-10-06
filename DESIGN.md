@@ -301,10 +301,17 @@ Domain states never pick classes themselves. Map the state to a `Tone` (`positiv
 | `Meter` | Inline progress bars; supports a target tick and is a real `role="meter"` |
 | `StatCard` | Overview `KpiCard`, the StatCard spec in §5 |
 | `SectionHeader` | Uppercase section labels + "View …" links |
-| `PageHeader` | Page title (display style), one-line description and the page's main action on the right ("Add category"). The main action never sits at the bottom of a long list. |
+| `PageHeader` + `HeaderAction` | Page title (display style), one-line description, `controls` and the page's one primary `action`. See "Page actions" below. |
 | `ListRow` | Icon tile + title/subtitle + trailing rows (vaults, installments, debtors) |
 | `ReadingGrid` | Label + amount readings that wrap instead of overflowing with long COP values |
 | `ColorDot` | Dot in a user-chosen colour (account, card); muted token when there's none |
+
+### Page actions
+
+- **One primary action per page, top right of the `PageHeader`**: a `HeaderAction` (teal, 36px, plus icon, verb + noun: "Add transaction", "Add installment", "New vault"). Never at the bottom of a list or inside a section.
+- **Page controls sit to its left, in outline** (`controls`): month navigation, `PrivacyToggle`, a secondary action such as Transfer. Nothing else in the header is teal.
+- **Section actions stay in that section's `SectionHeader`** as small outline buttons (Manage cards, Add recurring, Add account, Add debtor); row actions stay on the row (Pay, Add entry).
+- **Phones:** the action stays on the title row, with `shortLabel` when the title is long ("Add", "Loan"); the controls get their own full-width row (the month navigation stretches, Privacy becomes an icon button).
 
 ### Forms (`src/components/ds/form`)
 

@@ -9,7 +9,7 @@ export type WalletOption = { id: string; name: string };
  * and passes the id straight through, so the caller's write path
  * (`walletId` param) bypasses `resolveWalletId`'s collision-prone name
  * lookup (Wallet names are only unique per-account). Was duplicated 4x
- * (add-transaction-row.tsx's `CreateWalletSelect`, transaction-row.tsx's
+ * (add-transaction-button.tsx's `CreateWalletSelect`, transaction-row.tsx's
  * `EditWalletSelect`, ledger-controls.tsx's filter `WalletSelect`,
  * rule-list.tsx's `WalletSelect`) — identical value/options/onChange +
  * null-guard, differing only in trigger sizing/label; consolidated here,

@@ -79,7 +79,7 @@ const TRANSFER_IN_CATEGORY = "Incoming Transfer";
 
 /**
  * Records a transfer between two wallets as a paired MANUAL transaction on
- * each side (AddTransactionRow's "Transfer" tab) — an outgoing leg (negative,
+ * each side (AddTransactionButton's "Transfer" tab) — an outgoing leg (negative,
  * "Outgoing Transfer" category) in fromWalletId and an incoming leg
  * (positive, "Incoming Transfer" category) in toWalletId, sharing a
  * transferPairId so deleteTransaction can remove both together. The two
@@ -273,7 +273,7 @@ export async function setTransactionTags(transactionId: string, tagNames: string
   revalidateAll();
 }
 
-// ─── Suggestions (AddTransactionRow autofill) ──────────────────────────────
+// ─── Suggestions (AddTransactionButton autofill) ──────────────────────────────
 
 export type TransactionSuggestion = {
   appCategoryId: string;
@@ -401,7 +401,7 @@ async function suggestFromAmount(amount: number): Promise<TransactionSuggestion 
 }
 
 /**
- * AddTransactionRow autofill: given the note typed so far and/or the signed
+ * AddTransactionButton autofill: given the note typed so far and/or the signed
  * amount (same sign convention as Transaction.amount — negative = expense),
  * looks at past transactions to suggest a category + wallet. Note match is
  * tried first (more specific — e.g. "Rappi" matches prior "Rappi delivery"

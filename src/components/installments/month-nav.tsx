@@ -25,14 +25,15 @@ export function MonthNav({
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <Button variant="outline" size="icon" onClick={() => navigate(-1)}>
+    // Stretches across the controls row on phones (PageHeader).
+    <div className="flex items-center gap-2 max-sm:flex-1">
+      <Button variant="outline" size="icon-lg" aria-label="Previous month" onClick={() => navigate(-1)}>
         <ChevronLeft className="size-5" />
       </Button>
-      <span className="w-36 text-center font-heading text-sm font-semibold">
+      <span className="min-w-0 flex-1 text-center font-heading text-sm font-semibold sm:w-36 sm:flex-none">
         {MONTH_NAMES[month - 1]} {year}
       </span>
-      <Button variant="outline" size="icon" onClick={() => navigate(1)}>
+      <Button variant="outline" size="icon-lg" aria-label="Next month" onClick={() => navigate(1)}>
         <ChevronRight className="size-5" />
       </Button>
     </div>

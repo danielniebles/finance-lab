@@ -94,11 +94,14 @@ export function PeriodSelector({
   const isInProgress = isCurrentMonth;
 
   return (
-    <div className="flex w-full items-center gap-2">
+    // Fills the controls row on phones; a fixed width beside the header
+    // action from sm up.
+    <div className="flex items-center gap-2 max-sm:flex-1 sm:w-80">
       <Button
         variant="outline"
-        size="icon"
+        size="icon-lg"
         className="shrink-0"
+        aria-label="Previous month"
         disabled={!hasPrev}
         onClick={() => availableMonths && prevEntry ? navigate(prevEntry) : navigateDelta(-1)}
       >
@@ -123,8 +126,9 @@ export function PeriodSelector({
 
       <Button
         variant="outline"
-        size="icon"
+        size="icon-lg"
         className="shrink-0"
+        aria-label="Next month"
         disabled={!hasNext}
         onClick={() => availableMonths && nextEntry ? navigate(nextEntry) : navigateDelta(1)}
       >

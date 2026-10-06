@@ -7,6 +7,7 @@ import { sortDebtors } from "@/lib/loan-display";
 import { cn } from "@/lib/utils";
 import type { AccountWithBalance, DebtorWithLoans } from "@/lib/queries/loans";
 import { LoansClient } from "./loans-client";
+import { SectionHeader } from "@/components/ds";
 import { DebtorAccountFilter } from "./debtors/account-filter";
 import { DebtorCard } from "./debtors/debtor-card";
 import { DebtorPaymentsDialog } from "./debtors/payments-dialog";
@@ -101,13 +102,15 @@ export function DebtorsSection({
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-muted-foreground">Debtors</h2>
-        <div className="flex items-center gap-2">
-          <ShowSettledToggle settledCount={settledCount} showSettled={showSettled} onToggle={() => setShowSettled((v) => !v)} />
-          <LoansClient accounts={accounts} debtors={debtors} mode="add-debtor" />
-        </div>
-      </div>
+      <SectionHeader
+        title="Debtors"
+        trailing={
+          <>
+            <ShowSettledToggle settledCount={settledCount} showSettled={showSettled} onToggle={() => setShowSettled((v) => !v)} />
+            <LoansClient accounts={accounts} debtors={debtors} mode="add-debtor" />
+          </>
+        }
+      />
 
       {debtors.length === 0 ? (
         <p className="text-sm text-muted-foreground">No debtors yet.</p>

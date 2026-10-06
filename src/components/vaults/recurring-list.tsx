@@ -129,7 +129,7 @@ export function RecurringList({ recurringData, recurringVaults, formContext }: P
         trailing={
           <Button variant="outline" size="sm" onClick={openCreate}>
             <Plus className="size-4" aria-hidden="true" />
-            Add
+            Add recurring
           </Button>
         }
         className="mb-3"

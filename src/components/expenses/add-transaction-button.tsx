@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
-import { Plus, ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { HeaderAction } from "@/components/ds";
 import { Input } from "@/components/ui/input";
 import {
   DateField,
@@ -48,7 +49,7 @@ type FormValues = {
 };
 
 // Open-time / post-cancel defaults. `walletId` is the one field that carries
-// state across open/close cycles within the session (see AddTransactionRow's
+// state across open/close cycles within the session (see AddTransactionButton's
 // `lastWallet`) — every other field resets clean.
 function defaultValues(lastWallet: string): FormValues {
   return {
@@ -191,7 +192,8 @@ type Props = {
 // instead of the old inline-expanding row: expanding in place pushed the
 // list down and stole scroll position, and its autoFocus fired every time
 // the row expanded even when it wasn't the user's intent to type immediately.
-export function AddTransactionRow({ categories, walletOptions, tags, activeWalletId }: Props) {
+/** The Expenses page header action: opens the add-transaction dialog. */
+export function AddTransactionButton({ categories, walletOptions, tags, activeWalletId }: Props) {
   const [open, setOpen] = useState(false);
   const [lastWallet, setLastWallet] = useState("");
   const [values, setValues] = useState<FormValues>(() => defaultValues(activeWalletId ?? ""));
@@ -268,15 +270,7 @@ export function AddTransactionRow({ categories, walletOptions, tags, activeWalle
 
   return (
     <>
-      <Button
-        type="button"
-        variant="ghost"
-        onClick={openDialog}
-        className="h-auto w-full justify-start gap-1.5 rounded-xl border border-dashed border-border/60 px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <Plus className="size-4" />
-        Add transaction
-      </Button>
+      <HeaderAction label="Add transaction" onClick={openDialog} />
 
       <CreateForm
         open={open}

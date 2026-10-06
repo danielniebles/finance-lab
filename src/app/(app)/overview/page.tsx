@@ -1,7 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import Link from "next/link";
-import { Plus } from "lucide-react";
+import { HeaderAction, PageHeader } from "@/components/ds";
 import { BalanceCard } from "@/components/overview/home/balance-card";
 import { MonthSnapshot } from "@/components/overview/home/month-snapshot";
 import { WalletsStrip } from "@/components/overview/home/wallets-strip";
@@ -44,24 +43,11 @@ export default async function OverviewPage() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="font-heading text-2xl font-semibold">Overview</h1>
-          <p className="text-sm text-muted-foreground">
-            {monthLabel} {year}
-            {progress && ` · day ${progress.daysElapsed} of ${progress.daysInPeriod}`}
-          </p>
-        </div>
-        {/* Plain Link styled like the primary button: buttonVariants lives in a
-            "use client" module and can't be called from this server component. */}
-        <Link
-          href="/expenses?view=ledger"
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-        >
-          <Plus className="size-4" aria-hidden />
-          Add transaction
-        </Link>
-      </header>
+      <PageHeader
+        title="Overview"
+        description={`${monthLabel} ${year}${progress ? ` · day ${progress.daysElapsed} of ${progress.daysInPeriod}` : ""}`}
+        action={<HeaderAction label="Add transaction" href="/expenses?view=ledger" />}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <BalanceCard

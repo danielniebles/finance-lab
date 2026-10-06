@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HeaderAction } from "@/components/ds";
 import { Input } from "@/components/ui/input";
 import { Field, FormDialog, FormFooter } from "@/components/ds";
 import { createAppCategory, deleteAppCategory, updateAppCategory } from "@/lib/actions/categories";
@@ -166,10 +166,7 @@ export function AddCategoryButton() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button onClick={() => setOpen(true)}>
-        <Plus aria-hidden />
-        Add category
-      </Button>
+      <HeaderAction label="Add category" onClick={() => setOpen(true)} />
       <CategoryDialog open={open} onClose={() => setOpen(false)} />
     </>
   );

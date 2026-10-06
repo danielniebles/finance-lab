@@ -12,7 +12,7 @@ import type { CategoryOption } from "@/lib/queries/expenses";
 import type { DueThisMonth } from "@/lib/queries/installments";
 
 // Prefilled note listing what's being paid — editable before confirming, same
-// "generate a sane default, let the user override" pattern as add-transaction-row.
+// "generate a sane default, let the user override" pattern as add-transaction-button.
 function defaultNote(items: DueThisMonth[]): string {
   return items
     .map(

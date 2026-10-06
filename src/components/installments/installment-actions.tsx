@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { HeaderAction } from "@/components/ds";
 import { InstallmentForm } from "./installment-form";
 
 type FormData = {
@@ -20,10 +19,7 @@ export function InstallmentActions({
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)} className="gap-1.5">
-        <Plus className="size-4" />
-        Add installment
-      </Button>
+      <HeaderAction label="Add installment" shortLabel="Add" onClick={() => setOpen(true)} />
       <InstallmentForm
         open={open}
         onClose={() => setOpen(false)}

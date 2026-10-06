@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { missingFieldsHint } from "./add-transaction-row";
+import { missingFieldsHint } from "./add-transaction-button";
 
 const base = { type: "expense" as const, amount: "", date: "2026-10-06", appCategoryId: "", walletId: "", toWalletId: "", note: "", tagNames: "" };
 
