@@ -151,6 +151,34 @@ async function deliverResultToTelegram(
   for (const notice of result.autoRecorded ?? []) {
     await sendAutoRecordNotification(chatId, notice);
   }
+
+  await notifyUnbackedClaim(chatId, result.unbackedClaim);
+}
+
+// The backstop firing is worth knowing about even when it worked (ADR-051).
+//
+// Scoped to the RECOVERED case on purpose: an unrecovered claim already sends
+// the user "Something went wrong drafting that", so pinging there would just
+// double up. The recovered case is the blind spot — the model misbehaved, the
+// retry saved it, the card looks completely normal, and the only trace is an
+// `unbacked_claim` row nobody is going to query unprompted. That count is what
+// says whether the event log actually fixed the behavior or the retry is
+// quietly load-bearing.
+//
+// Not a substitute for the audit query in ADR-051: this only catches failures
+// the backstop's regex recognizes. A notification that silently produced
+// nothing in new phrasing is caught by checking that every `shortcut` message
+// is followed by a proposal_created/auto_recorded event.
+async function notifyUnbackedClaim(
+  chatId: string,
+  unbackedClaim: AgentTurnResult["unbackedClaim"],
+): Promise<void> {
+  if (!unbackedClaim?.recovered) return;
+
+  await sendMessage(
+    chatId,
+    "⚠️ The agent reported an action it hadn't actually taken — retrying recorded it properly. Nothing was lost; flagging it so the behaviour stays visible.",
+  );
 }
 
 /**

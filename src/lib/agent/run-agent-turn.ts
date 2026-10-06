@@ -455,6 +455,7 @@ export async function runAgentTurn(args: {
   const autoRecorded: AutoRecordedNotice[] = [];
   let fullText = "";
   let lastTool: string | null = null;
+  let unbackedClaim: { recovered: boolean } | undefined;
 
   try {
     const attempt = await runToolLoop({
@@ -526,6 +527,7 @@ export async function runAgentTurn(args: {
         { retried: !onTextDelta, recovered, lastTool, text: phantomText },
         channel,
       );
+      unbackedClaim = { recovered };
 
       if (!recovered) {
         console.error("[run-agent-turn] Unbacked proposal claim survived the forced-tool retry:", {
@@ -548,5 +550,10 @@ export async function runAgentTurn(args: {
     });
   }
 
-  return { text: stripLearnRuleNudge(fullText), proposals, autoRecorded };
+  return {
+    text: stripLearnRuleNudge(fullText),
+    proposals,
+    autoRecorded,
+    ...(unbackedClaim ? { unbackedClaim } : {}),
+  };
 }

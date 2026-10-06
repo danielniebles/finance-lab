@@ -43,6 +43,8 @@ import {
   saveAssistantTurn,
 } from "./deliver-to-telegram";
 
+const INGEST_TEXT = "Compra aprobada";
+
 describe("runTurnAndDeliverToTelegram — typing indicator", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -291,13 +293,13 @@ describe("runTurnAndDeliverToTelegram — event replay", () => {
       { role: EVENT_ROLE, content: "⟦event⟧ proposal_approved id=p1", createdAt: new Date() },
     ] as never);
 
-    await runTurnAndDeliverToTelegram("Compra aprobada", { channel: "shortcut" });
+    await runTurnAndDeliverToTelegram(INGEST_TEXT, { channel: "shortcut" });
 
     expect(runAgentTurnMock).toHaveBeenCalledWith(
       expect.objectContaining({
         messages: [
           { role: EVENT_ROLE, content: "⟦event⟧ proposal_approved id=p1" },
-          { role: "user", content: "Compra aprobada" },
+          { role: "user", content: INGEST_TEXT },
         ],
       }),
     );
@@ -315,7 +317,7 @@ describe("runTurnAndDeliverToTelegram — event replay", () => {
       { role: EVENT_ROLE, content: "⟦event⟧ proposal_approved id=p1", createdAt: new Date() },
     ] as never);
 
-    await runTurnAndDeliverToTelegram("Compra aprobada", { channel: "shortcut" });
+    await runTurnAndDeliverToTelegram(INGEST_TEXT, { channel: "shortcut" });
 
     const { messages } = runAgentTurnMock.mock.calls[0][0];
     expect(JSON.stringify(messages)).not.toContain("unbacked_claim");
@@ -323,7 +325,7 @@ describe("runTurnAndDeliverToTelegram — event replay", () => {
   });
 
   it("forces the first tool call for the shortcut channel only", async () => {
-    await runTurnAndDeliverToTelegram("Compra aprobada", { channel: "shortcut" });
+    await runTurnAndDeliverToTelegram(INGEST_TEXT, { channel: "shortcut" });
     expect(runAgentTurnMock).toHaveBeenCalledWith(
       expect.objectContaining({ forceInitialToolUse: true }),
     );
@@ -333,5 +335,55 @@ describe("runTurnAndDeliverToTelegram — event replay", () => {
     expect(runAgentTurnMock).toHaveBeenCalledWith(
       expect.objectContaining({ forceInitialToolUse: false }),
     );
+  });
+});
+
+// ─── Unbacked-claim ping (ADR-051) ───────────────────────────────────────────
+// Scoped to the recovered case: an unrecovered claim already sends the user
+// "Something went wrong drafting that", so pinging there would double up. The
+// recovered case is the blind spot — the card looks normal and the only trace
+// is a row nobody queries unprompted.
+
+describe("unbacked-claim ping", () => {
+  const WARNING = /reported an action it hadn't actually taken/;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.TELEGRAM_ALLOWED_CHAT_ID = "12345";
+  });
+
+  const pings = () =>
+    sendMessageMock.mock.calls.filter(([, text]) => WARNING.test(String(text)));
+
+  it("pings when the retry recovered the turn", async () => {
+    runAgentTurnMock.mockResolvedValue({
+      text: "Drafted for your approval.",
+      proposals: [],
+      unbackedClaim: { recovered: true },
+    });
+
+    await runTurnAndDeliverToTelegram(INGEST_TEXT, { channel: "shortcut" });
+
+    expect(pings()).toHaveLength(1);
+  });
+
+  it("stays quiet when the claim was not recovered (user already sees the failure)", async () => {
+    runAgentTurnMock.mockResolvedValue({
+      text: "Something went wrong drafting that — nothing was recorded. Please try again.",
+      proposals: [],
+      unbackedClaim: { recovered: false },
+    });
+
+    await runTurnAndDeliverToTelegram(INGEST_TEXT, { channel: "shortcut" });
+
+    expect(pings()).toHaveLength(0);
+  });
+
+  it("stays quiet on a normal turn", async () => {
+    runAgentTurnMock.mockResolvedValue({ text: "Drafted.", proposals: [] });
+
+    await runTurnAndDeliverToTelegram(INGEST_TEXT, { channel: "shortcut" });
+
+    expect(pings()).toHaveLength(0);
   });
 });

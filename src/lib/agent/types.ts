@@ -81,4 +81,14 @@ export type AgentTurnResult = {
   text: string;
   proposals: ProposalDescriptor[];
   autoRecorded: AutoRecordedNotice[];
+  /**
+   * Set only when the unbacked-claim backstop fired this turn (ADR-051): the
+   * model claimed an action with no tool call behind it. `recovered` reports
+   * whether the forced-tool retry then produced a real proposal.
+   *
+   * Reported out rather than notified from `run-agent-turn.ts` directly,
+   * which is channel-agnostic by contract — the delivery layer decides what
+   * to do with it.
+   */
+  unbackedClaim?: { recovered: boolean };
 };
