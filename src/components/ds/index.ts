@@ -15,3 +15,4 @@ export { DateField, type QuickPick } from "./form/date-field";
 export { OptionSelect, type SelectOption } from "./form/option-select";
 export { TagInput } from "./form/tag-input";
 export { FormDialog, FormFooter } from "./form/form-dialog";
+export { ColorPicker } from "./form/color-picker";

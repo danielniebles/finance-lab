@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { VaultWithMetrics } from "@/lib/queries/vaults";
 import type { RecurringExpenseRow } from "@/lib/queries/recurring";
-import { daysUntil, needsMoney, nextDueByVault, sortVaultsByUrgency, stillNeededThisMonth } from "./vault-display";
+import { deadlinePlan, daysUntil, needsMoney, nextDueByVault, sortVaultsByUrgency, stillNeededThisMonth } from "./vault-display";
 
 function vault(o: Partial<VaultWithMetrics>): VaultWithMetrics {
   return {
@@ -79,5 +79,16 @@ describe("needsMoney", () => {
     expect(needsMoney(vault({ status: "On track", requiredThisMonth: 10 }))).toBe(true);
     expect(needsMoney(vault({ status: "Met" }))).toBe(false);
     expect(needsMoney(vault({ status: "Open", goalType: "OPEN_ENDED" }))).toBe(false);
+  });
+});
+
+describe("deadlinePlan", () => {
+  const period = { month: 10, year: 2026, startDay: 1 };
+  it("spreads what's left over the months up to the deadline, this month included", () => {
+    expect(deadlinePlan(1_200_000, 200_000, new Date(2027, 2, 15), period)).toEqual({ remaining: 1_000_000, months: 6, perMonth: 1_000_000 / 6 });
+  });
+  it("never goes negative and never divides by zero", () => {
+    expect(deadlinePlan(100, 500, new Date(2026, 9, 20), period)).toEqual({ remaining: 0, months: 1, perMonth: 0 });
+    expect(deadlinePlan(300, 0, new Date(2025, 0, 1), period).months).toBe(1);
   });
 });

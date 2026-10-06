@@ -46,25 +46,6 @@
   "src/components/vaults/entry-form.tsx": {
     "complexity": {
       "count": 1
-    },
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "src/components/vaults/recurring-list.tsx": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
-  "src/components/vaults/vault-form.tsx": {
-    "complexity": {
-      "count": 1
-    },
-    "max-lines-per-function": {
-      "count": 1
-    },
-    "sonarjs/no-duplicate-string": {
-      "count": 2
     }
   },
   "src/components/vaults/vaults-dashboard.tsx": {

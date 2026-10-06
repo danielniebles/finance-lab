@@ -3,7 +3,7 @@
 
 import type { VaultWithMetrics } from "@/lib/queries/vaults";
 import type { RecurringExpenseRow } from "@/lib/queries/recurring";
-import type { VaultStatus } from "@/lib/vault-utils";
+import { monthsLeft, type VaultPeriod, type VaultStatus } from "@/lib/vault-utils";
 
 /**
  * What's still missing for this month. RECURRING's requiredThisMonth is
@@ -82,4 +82,20 @@ export function needsMoney(v: VaultWithMetrics): boolean {
     v.status === "Underfunded" ||
     stillNeededThisMonth(v) > 0
   );
+}
+
+/**
+ * Form preview for a deadline vault: what's left to save (target minus what
+ * the vault already holds), spread evenly over the months up to the
+ * deadline, this month included. Same rule as computeVaultMetrics.
+ */
+export function deadlinePlan(
+  target: number,
+  balance: number,
+  deadline: Date,
+  period: VaultPeriod,
+): { remaining: number; months: number; perMonth: number } {
+  const remaining = Math.max(0, target - balance);
+  const months = monthsLeft(deadline, period);
+  return { remaining, months, perMonth: remaining / months };
 }

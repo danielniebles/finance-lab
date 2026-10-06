@@ -163,6 +163,7 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
         mode={vaultFormMode}
         vault={editingVault}
         onClose={() => setVaultFormOpen(false)}
+        period={{ month, year, startDay }}
       />
 
       {/* Entry form dialog */}

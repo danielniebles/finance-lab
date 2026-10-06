@@ -1,21 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Money, SectionHeader, StatusChip } from "@/components/ds";
 import { TONE_CLASSES, toneForRecurringStatus } from "@/lib/status";
 import { cadenceLabel, daysUntil } from "@/lib/vault-display";
 import { cn } from "@/lib/utils";
-import { payRecurringExpense } from "@/lib/actions/recurring";
 import { RecurringExpenseForm, type RecurringFormContext } from "./recurring-expense-form";
+import { RecurringPayDialog } from "./recurring-pay-dialog";
 import type { RecurringExpenseRow } from "@/lib/queries/recurring";
 import type { VaultWithMetrics } from "@/lib/queries/vaults";
 
@@ -108,15 +101,6 @@ function RecurringRow({
   );
 }
 
-// ─── Pay dialog state ─────────────────────────────────────────────────────────
-
-type PayState = {
-  open: boolean;
-  expense: RecurringExpenseRow | null;
-  amount: string;
-  fromVaultId: string;
-};
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function RecurringList({ recurringData, recurringVaults, formContext }: Props) {
@@ -126,16 +110,7 @@ export function RecurringList({ recurringData, recurringVaults, formContext }: P
   const [formOpen, setFormOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<RecurringExpenseRow | undefined>(undefined);
 
-  // Pay dialog
-  const [payState, setPayState] = useState<PayState>({
-    open: false,
-    expense: null,
-    amount: "",
-    fromVaultId: "",
-  });
-
-  const [payPending, startPayTransition] = useTransition();
-  const [payError, setPayError] = useState<string | null>(null);
+  const [paying, setPaying] = useState<RecurringExpenseRow | null>(null);
 
   function openCreate() {
     setEditingExpense(undefined);
@@ -145,41 +120,6 @@ export function RecurringList({ recurringData, recurringVaults, formContext }: P
   function openEdit(expense: RecurringExpenseRow) {
     setEditingExpense(expense);
     setFormOpen(true);
-  }
-
-  function openPay(expense: RecurringExpenseRow) {
-    setPayState({
-      open: true,
-      expense,
-      amount: String(expense.estimatedAmount),
-      fromVaultId: expense.fundingVaultId ?? "",
-    });
-    setPayError(null);
-  }
-
-  function closePay() {
-    setPayState((prev) => ({ ...prev, open: false }));
-    setPayError(null);
-  }
-
-  function handlePay(e: React.FormEvent) {
-    e.preventDefault();
-    if (!payState.expense) return;
-    const amount = parseFloat(payState.amount);
-    if (isNaN(amount) || amount <= 0) return;
-    setPayError(null);
-
-    startPayTransition(async () => {
-      try {
-        await payRecurringExpense(payState.expense!.id, {
-          amount,
-          fromVaultId: payState.fromVaultId || undefined,
-        });
-        closePay();
-      } catch (err) {
-        setPayError(err instanceof Error ? err.message : "Something went wrong.");
-      }
-    });
   }
 
   return (
@@ -205,7 +145,7 @@ export function RecurringList({ recurringData, recurringVaults, formContext }: P
           {[...items]
             .sort((x, y) => new Date(x.nextDueDate).getTime() - new Date(y.nextDueDate).getTime())
             .map((item) => (
-              <RecurringRow key={item.id} item={item} onPay={() => openPay(item)} onEdit={() => openEdit(item)} />
+              <RecurringRow key={item.id} item={item} onPay={() => setPaying(item)} onEdit={() => openEdit(item)} />
             ))}
         </ul>
       )}
@@ -222,107 +162,7 @@ export function RecurringList({ recurringData, recurringVaults, formContext }: P
         context={formContext}
       />
 
-      {/* Pay dialog */}
-      {payState.open && payState.expense && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Pay ${payState.expense.name}`}
-          className="fixed inset-0 z-50 flex items-center justify-center"
-        >
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={closePay}
-            aria-hidden="true"
-          />
-
-          {/* Panel */}
-          <div className="relative z-10 w-full max-w-sm rounded-xl bg-card ring-1 ring-foreground/10 p-5 space-y-4">
-            <h3 className="font-heading text-base font-semibold text-foreground">
-              Pay{" "}
-              <span className="text-primary">{payState.expense.name}</span>
-            </h3>
-
-            <form className="space-y-4" onSubmit={handlePay}>
-              {/* Amount */}
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="pay-amount"
-                  className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-                >
-                  Amount (COP)
-                </label>
-                <input
-                  id="pay-amount"
-                  type="number"
-                  min="1"
-                  value={payState.amount}
-                  onChange={(e) =>
-                    setPayState((prev) => ({ ...prev, amount: e.target.value }))
-                  }
-                  required
-                  disabled={payPending}
-                  className="flex h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm font-mono outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
-                />
-              </div>
-
-              {/* Withdraw from vault — only if fundingVaultId is set */}
-              {payState.expense.fundingVaultId && recurringVaults.length > 0 && (
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="pay-vault"
-                    className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-                  >
-                    Withdraw from vault{" "}
-                    <span className="font-normal normal-case tracking-normal text-muted-foreground">
-                      (optional)
-                    </span>
-                  </label>
-                  <Select
-                    value={payState.fromVaultId}
-                    onValueChange={(v) =>
-                      setPayState((prev) => ({ ...prev, fromVaultId: v ?? "" }))
-                    }
-                  >
-                    <SelectTrigger className="w-full" disabled={payPending}>
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {recurringVaults.map((v) => (
-                        <SelectItem key={v.id} value={v.id}>
-                          {v.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {payError && (
-                <p className="text-xs text-destructive" role="alert">
-                  {payError}
-                </p>
-              )}
-
-              <div className="flex justify-end gap-2 pt-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={closePay}
-                  disabled={payPending}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={payPending}>
-                  {payPending ? "Saving…" : "Record payment"}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <RecurringPayDialog expense={paying} recurringVaults={recurringVaults} onClose={() => setPaying(null)} />
     </section>
   );
 }
