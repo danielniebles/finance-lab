@@ -31,6 +31,7 @@ export default async function VaultsPage() {
       year={year}
       walletAccounts={walletBalances.accounts}
       categories={categories}
+      startDay={startDay}
     />
   );
 }

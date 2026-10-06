@@ -11,6 +11,58 @@ function revalidatePaths() {
   revalidatePath("/overview");
 }
 
+/**
+ * The Advisor still proposes recurring expenses with a free-text category;
+ * link it to the matching category when the name matches one (ADR-050).
+ */
+async function categoryIdForLabel(label: string | null | undefined): Promise<string | null> {
+  const name = label?.trim();
+  if (!name) return null;
+  const match = await db.appCategory.findFirst({
+    where: { isTransfer: false, name: { equals: name, mode: "insensitive" } },
+    select: { id: true },
+  });
+  return match?.id ?? null;
+}
+
+function validateNewRecurring(data: { name: string; estimatedAmount: number; cadenceMonths: number; nextDueDate: Date }) {
+  if (!data.name || data.name.trim() === "") throw new Error("name is required.");
+  if (!data.estimatedAmount || data.estimatedAmount <= 0) throw new Error("estimatedAmount must be greater than 0.");
+  if (!data.cadenceMonths || data.cadenceMonths < 1) throw new Error("cadenceMonths must be at least 1.");
+  if (!(data.nextDueDate instanceof Date) || isNaN(data.nextDueDate.getTime())) {
+    throw new Error("nextDueDate must be a valid date.");
+  }
+}
+
+type RecurringUpdate = {
+  name?: string;
+  estimatedAmount?: number;
+  cadenceMonths?: number;
+  nextDueDate?: Date;
+  category?: string | null;
+  appCategoryId?: string | null;
+  fundingVaultId?: string | null;
+  active?: boolean;
+  notes?: string | null;
+};
+
+function validateRecurringUpdate(data: RecurringUpdate) {
+  if (data.estimatedAmount !== undefined && data.estimatedAmount <= 0) {
+    throw new Error("estimatedAmount must be greater than 0.");
+  }
+  if (data.cadenceMonths !== undefined && data.cadenceMonths < 1) {
+    throw new Error("cadenceMonths must be at least 1.");
+  }
+  if (data.nextDueDate !== undefined && (!(data.nextDueDate instanceof Date) || isNaN(data.nextDueDate.getTime()))) {
+    throw new Error("nextDueDate must be a valid date.");
+  }
+}
+
+/** Prisma skips `undefined` fields, so only the keys the caller passed change. */
+function recurringUpdateData(data: RecurringUpdate): RecurringUpdate {
+  return { ...data, name: data.name?.trim() };
+}
+
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
 
 export async function createRecurringExpense(data: {
@@ -19,21 +71,11 @@ export async function createRecurringExpense(data: {
   cadenceMonths: number;
   nextDueDate: Date;
   category?: string | null;
+  appCategoryId?: string | null;
   fundingVaultId?: string | null;
   notes?: string | null;
 }) {
-  if (!data.name || data.name.trim() === "") {
-    throw new Error("name is required.");
-  }
-  if (!data.estimatedAmount || data.estimatedAmount <= 0) {
-    throw new Error("estimatedAmount must be greater than 0.");
-  }
-  if (!data.cadenceMonths || data.cadenceMonths < 1) {
-    throw new Error("cadenceMonths must be at least 1.");
-  }
-  if (!(data.nextDueDate instanceof Date) || isNaN(data.nextDueDate.getTime())) {
-    throw new Error("nextDueDate must be a valid date.");
-  }
+  validateNewRecurring(data);
 
   await db.recurringExpense.create({
     data: {
@@ -42,6 +84,7 @@ export async function createRecurringExpense(data: {
       cadenceMonths: data.cadenceMonths,
       nextDueDate: data.nextDueDate,
       category: data.category ?? null,
+      appCategoryId: data.appCategoryId ?? (await categoryIdForLabel(data.category)),
       fundingVaultId: data.fundingVaultId ?? null,
       notes: data.notes ?? null,
     },
@@ -50,46 +93,9 @@ export async function createRecurringExpense(data: {
   revalidatePaths();
 }
 
-export async function updateRecurringExpense(
-  id: string,
-  data: {
-    name?: string;
-    estimatedAmount?: number;
-    cadenceMonths?: number;
-    nextDueDate?: Date;
-    category?: string | null;
-    fundingVaultId?: string | null;
-    active?: boolean;
-    notes?: string | null;
-  },
-) {
-  if (data.estimatedAmount !== undefined && data.estimatedAmount <= 0) {
-    throw new Error("estimatedAmount must be greater than 0.");
-  }
-  if (data.cadenceMonths !== undefined && data.cadenceMonths < 1) {
-    throw new Error("cadenceMonths must be at least 1.");
-  }
-  if (
-    data.nextDueDate !== undefined &&
-    (!(data.nextDueDate instanceof Date) || isNaN(data.nextDueDate.getTime()))
-  ) {
-    throw new Error("nextDueDate must be a valid date.");
-  }
-
-  await db.recurringExpense.update({
-    where: { id },
-    data: {
-      ...(data.name !== undefined && { name: data.name.trim() }),
-      ...(data.estimatedAmount !== undefined && { estimatedAmount: data.estimatedAmount }),
-      ...(data.cadenceMonths !== undefined && { cadenceMonths: data.cadenceMonths }),
-      ...(data.nextDueDate !== undefined && { nextDueDate: data.nextDueDate }),
-      ...("category" in data && { category: data.category }),
-      ...("fundingVaultId" in data && { fundingVaultId: data.fundingVaultId }),
-      ...(data.active !== undefined && { active: data.active }),
-      ...("notes" in data && { notes: data.notes }),
-    },
-  });
-
+export async function updateRecurringExpense(id: string, data: RecurringUpdate) {
+  validateRecurringUpdate(data);
+  await db.recurringExpense.update({ where: { id }, data: recurringUpdateData(data) });
   revalidatePaths();
 }
 

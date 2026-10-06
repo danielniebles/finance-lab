@@ -54,7 +54,7 @@ src/
 │       ├── chat/                 # Advisor (agent)
 │       └── settings/             # categories, rules, tags, mappings (legacy), design-system (dev only)
 ├── components/
-│   ├── ds/                       # Design system: Money, StatusChip, Meter, StatCard, SectionHeader, ListRow, ReadingGrid, ColorDot
+│   ├── ds/                       # Design system: Money, StatusChip, Meter, StatCard, SectionHeader, ListRow, ReadingGrid, ColorDot; ds/form: FormDialog, Field, MoneyInput, DateField, OptionSelect, SegmentedControl, TagInput
 │   ├── ui/                       # shadcn primitives (don't restyle here)
 │   └── <module>/                 # One folder per screen; big screens split into subfolders (overview/home, expenses/analysis, loans/debtors)
 └── lib/
@@ -84,6 +84,7 @@ Read `DESIGN.md` before building UI; §7 maps it to code. `/settings/design-syst
 - Rows of label + amount: `<ReadingGrid>`. It wraps instead of overflowing with long COP values.
 - Cards: `rounded-2xl border border-border/60 bg-card p-5 sm:p-6`; the page's hero card adds `surface-glow`. Section labels: small uppercase `text-muted-foreground`.
 - Lists are responsive grids (one markup, `sm:` columns), not a `<Table>` plus a separate mobile list.
+- Forms and modals: `FormDialog` + `FormFooter`, every control inside a `Field`; amounts with `MoneyInput`, dates with `DateField` (values stay `YYYY-MM-DD`; parse with `parseISODate`, never `new Date("YYYY-MM-DD")`, which is UTC midnight), dropdowns with `OptionSelect`. DESIGN.md §7 "Forms".
 - Keep display rules (sorting, labels, which chip to show) in a pure `lib/*-display.ts` with tests; components stay presentational.
 - Server components can't call client-only helpers (e.g. `buttonVariants`); use plain classes on `Link`.
 

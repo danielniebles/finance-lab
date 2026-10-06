@@ -1,26 +1,23 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
-import { Plus, Check, ArrowLeftRight } from "lucide-react";
+import { Plus, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
-import { cn } from "@/lib/utils";
-import { dateInputValue, formatCOP } from "@/lib/format";
+  DateField,
+  Field,
+  FormDialog,
+  FormFooter,
+  MoneyInput,
+  OptionSelect,
+  SegmentedControl,
+  TagInput,
+  type SegmentOption,
+} from "@/components/ds";
+import { formatCOP } from "@/lib/format";
+import { amountToDigits, localISODate } from "@/lib/form-format";
 import {
   createTransaction,
   createWalletTransfer,
@@ -28,7 +25,7 @@ import {
   setTransactionTags,
 } from "@/lib/actions/transactions";
 import { WalletSelect } from "@/components/shared/wallet-select";
-import { TagsField } from "@/components/shared/tags-field";
+import { categorySelectOptions } from "@/components/shared/category-option";
 import { parseTagNames } from "@/lib/tag-utils";
 import type { CategoryOption } from "@/lib/queries/expenses";
 import type { TransactionSuggestion } from "@/lib/actions/transactions";
@@ -58,7 +55,7 @@ function defaultValues(lastWallet: string): FormValues {
   return {
     type: "expense",
     amount: "",
-    date: dateInputValue(new Date()),
+    date: localISODate(new Date()),
     appCategoryId: "",
     walletId: lastWallet,
     toWalletId: "",
@@ -86,6 +83,34 @@ function canSubmit(values: FormValues): boolean {
   return validAmount && validDate && values.appCategoryId !== "" && values.walletId !== "";
 }
 
+/** Footer hint naming what's still missing ("" when the form can be saved). */
+export function missingFieldsHint(values: FormValues): string {
+  const missing: string[] = [];
+  const amount = parseFloat(values.amount);
+  if (Number.isNaN(amount) || amount === 0) missing.push("an amount");
+  if (values.type === "transfer") {
+    if (!values.walletId || !values.toWalletId) missing.push("both wallets");
+  } else {
+    if (!values.appCategoryId) missing.push("a category");
+    if (!values.walletId) missing.push("a wallet");
+  }
+  if (missing.length === 0) return "";
+  const list = missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(", ")} and ${missing.at(-1)}`;
+  return `Add ${list} to save.`;
+}
+
+const TYPE_OPTIONS: SegmentOption<TxnType>[] = [
+  { value: "expense", label: "Expense" },
+  { value: "income", label: "Income" },
+  { value: "transfer", label: "Transfer", icon: <ArrowLeftRight aria-hidden /> },
+];
+
+const SUBMIT_LABEL: Record<TxnType, string> = {
+  expense: "Add expense",
+  income: "Add income",
+  transfer: "Add transfer",
+};
+
 // Amount is always typed as a positive magnitude; the sign is applied here
 // from the TypeToggle selection at submit time.
 function signedAmount(type: TxnType, rawAmount: string): number {
@@ -105,7 +130,7 @@ function suggestionToPatch(suggestion: TransactionSuggestion): Partial<FormValue
   };
   if (suggestion.amount !== undefined) {
     patch.type = suggestion.amount < 0 ? "expense" : "income";
-    patch.amount = String(Math.abs(suggestion.amount));
+    patch.amount = amountToDigits(suggestion.amount);
   }
   if (suggestion.note !== undefined) {
     patch.note = suggestion.note;
@@ -251,29 +276,24 @@ export function AddTransactionRow({ categories, walletOptions, tags, activeWalle
         Add transaction
       </Button>
 
-      <Dialog open={open} onOpenChange={(o) => !o && closeDialog()}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add transaction</DialogTitle>
-          </DialogHeader>
-          <CreateForm
-            values={values}
-            categories={categories}
-            walletOptions={walletOptions}
-            tags={tags}
-            pending={pending}
-            amountInputRef={amountInputRef}
-            onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
-            onSubmit={handleSubmit}
-            onCancel={closeDialog}
-          />
-        </DialogContent>
-      </Dialog>
+      <CreateForm
+        open={open}
+        values={values}
+        categories={categories}
+        walletOptions={walletOptions}
+        tags={tags}
+        pending={pending}
+        amountInputRef={amountInputRef}
+        onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
+        onSubmit={handleSubmit}
+        onCancel={closeDialog}
+      />
     </>
   );
 }
 
 function CreateForm({
+  open,
   values,
   categories,
   walletOptions,
@@ -284,6 +304,7 @@ function CreateForm({
   onSubmit,
   onCancel,
 }: {
+  open: boolean;
   values: FormValues;
   categories: CategoryOption[];
   walletOptions: { id: string; name: string }[];
@@ -296,11 +317,7 @@ function CreateForm({
 }) {
   const idPrefix = useId();
   const submitDisabled = pending || !canSubmit(values);
-  const { suggestion, dismissed, dismiss } = useTransactionSuggestion(
-    values.note,
-    values.amount,
-    values.type,
-  );
+  const { suggestion, dismissed, dismiss } = useTransactionSuggestion(values.note, values.amount, values.type);
   const showSuggestion =
     values.type !== "transfer" &&
     suggestion !== null &&
@@ -308,37 +325,35 @@ function CreateForm({
     (values.appCategoryId !== suggestion.appCategoryId || values.walletId !== suggestion.walletId);
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <TypeToggle value={values.type} onChange={(type) => onChange({ type })} />
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && onCancel()}
+      title="Add transaction"
+      onSubmit={onSubmit}
+      footer={
+        <FormFooter hint={pending ? "" : missingFieldsHint(values)}>
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitDisabled}>
+            {SUBMIT_LABEL[values.type]}
+          </Button>
+        </FormFooter>
+      }
+    >
+      <SegmentedControl ariaLabel="Transaction type" value={values.type} onChange={(type) => onChange({ type })} options={TYPE_OPTIONS} />
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-amount`}>Amount</Label>
-          <Input
-            ref={amountInputRef}
-            id={`${idPrefix}-amount`}
-            type="number"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            min="0"
-            value={values.amount}
-            onChange={(e) => onChange({ amount: e.target.value })}
-            className="font-mono"
-            autoFocus
-            required
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-date`}>Date</Label>
-          <Input
-            id={`${idPrefix}-date`}
-            type="date"
-            value={values.date}
-            onChange={(e) => onChange({ date: e.target.value })}
-            required
-          />
-        </div>
-      </div>
+      <Field label="Amount" htmlFor={`${idPrefix}-amount`}>
+        <MoneyInput
+          id={`${idPrefix}-amount`}
+          inputRef={amountInputRef}
+          size="lg"
+          value={values.amount}
+          onValueChange={(amount) => onChange({ amount })}
+          autoFocus
+          required
+        />
+      </Field>
 
       {showSuggestion && (
         <SuggestionBanner
@@ -348,42 +363,36 @@ function CreateForm({
         />
       )}
 
-      <CategoryOrTransferFields
-        values={values}
-        categories={categories}
-        walletOptions={walletOptions}
-        onChange={onChange}
-      />
+      <CategoryOrTransferFields values={values} categories={categories} walletOptions={walletOptions} onChange={onChange} />
 
-      <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-note`}>
-          Note <span className="text-muted-foreground font-normal">(optional)</span>
-        </Label>
+      <Field label="Date" htmlFor={`${idPrefix}-date`}>
+        <DateField
+          id={`${idPrefix}-date`}
+          value={values.date}
+          onChange={(date) => onChange({ date })}
+          quickPicks={["today", "yesterday"]}
+          required
+        />
+      </Field>
+
+      <Field label="Note" htmlFor={`${idPrefix}-note`} optional>
         <Input
           id={`${idPrefix}-note`}
           value={values.note}
           onChange={(e) => onChange({ note: e.target.value })}
-          placeholder={values.type === "transfer" ? "Defaults to “Transfer to/from …”" : "Note"}
+          placeholder={values.type === "transfer" ? "Defaults to “Transfer to/from …”" : "What was it for?"}
         />
-      </div>
+      </Field>
 
-      <TagsField
-        idPrefix={idPrefix}
-        value={values.tagNames}
-        tags={tags}
-        onChange={(v) => onChange({ tagNames: v })}
-      />
-
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={submitDisabled}>
-          <Check className="size-4" />
-          {values.type === "transfer" ? "Transfer" : "Add transaction"}
-        </Button>
-      </DialogFooter>
-    </form>
+      <Field label="Tags" htmlFor={`${idPrefix}-tags`} optional>
+        <TagInput
+          id={`${idPrefix}-tags`}
+          value={values.tagNames}
+          existing={tags.map((t) => t.name)}
+          onChange={(tagNames) => onChange({ tagNames })}
+        />
+      </Field>
+    </FormDialog>
   );
 }
 
@@ -404,8 +413,7 @@ function CategoryOrTransferFields({
   if (values.type === "transfer") {
     return (
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label>From wallet</Label>
+        <Field label="From">
           <WalletSelect
             value={values.walletId}
             options={walletOptions}
@@ -413,36 +421,37 @@ function CategoryOrTransferFields({
               onChange({ walletId: v, toWalletId: v === values.toWalletId ? "" : values.toWalletId })
             }
             ariaLabel="From wallet"
-            placeholder="From wallet"
+            placeholder="Choose…"
           />
-        </div>
-        <div className="space-y-1.5">
-          <Label>To wallet</Label>
+        </Field>
+        <Field label="To">
           <WalletSelect
             value={values.toWalletId}
             options={walletOptions.filter((w) => w.id !== values.walletId)}
             onChange={(v) => onChange({ toWalletId: v })}
             ariaLabel="To wallet"
-            placeholder="To wallet"
+            placeholder="Choose…"
           />
-        </div>
+        </Field>
       </div>
     );
   }
+  // Outgoing/Incoming Transfer are only ever auto-assigned by
+  // createWalletTransfer (the Transfer tab) — never a manual pick here.
+  const selectable = categories.filter((c) => !c.isTransfer);
   return (
     <div className="grid grid-cols-2 gap-3">
-      <div className="space-y-1.5">
-        <Label>Category</Label>
-        <CreateCategorySelect
-          value={values.appCategoryId}
-          categories={categories}
-          onChange={(v) => onChange({ appCategoryId: v })}
+      <Field label="Category">
+        <OptionSelect
+          ariaLabel="Category"
+          value={values.appCategoryId || null}
+          onChange={(v) => onChange({ appCategoryId: v ?? "" })}
+          options={categorySelectOptions(selectable)}
         />
-      </div>
-      <div className="space-y-1.5">
-        <Label>Wallet</Label>
-        <WalletSelect value={values.walletId} options={walletOptions} onChange={(v) => onChange({ walletId: v })} />
-      </div>
+      </Field>
+      <Field label="Wallet">
+        <WalletSelect value={values.walletId} options={walletOptions} onChange={(v) => onChange({ walletId: v })} placeholder="Choose…" />
+      </Field>
     </div>
   );
 }
@@ -487,76 +496,3 @@ function SuggestionBanner({
     </div>
   );
 }
-
-function TypeToggle({ value, onChange }: { value: TxnType; onChange: (v: TxnType) => void }) {
-  return (
-    <div className="flex items-center gap-1">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        aria-pressed={value === "expense"}
-        aria-label="Mark as expense"
-        onClick={() => onChange("expense")}
-        className={cn(
-          value === "expense" && "bg-muted text-destructive hover:bg-muted hover:text-destructive"
-        )}
-      >
-        Expense
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        aria-pressed={value === "income"}
-        aria-label="Mark as income"
-        onClick={() => onChange("income")}
-        className={cn(value === "income" && "bg-muted text-success hover:bg-muted hover:text-success")}
-      >
-        Income
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        aria-pressed={value === "transfer"}
-        aria-label="Mark as transfer"
-        onClick={() => onChange("transfer")}
-        className={cn(value === "transfer" && "bg-muted text-foreground hover:bg-muted")}
-      >
-        <ArrowLeftRight className="size-3.5" />
-        Transfer
-      </Button>
-    </div>
-  );
-}
-
-function CreateCategorySelect({
-  value,
-  categories,
-  onChange,
-}: {
-  value: string;
-  categories: CategoryOption[];
-  onChange: (v: string) => void;
-}) {
-  // Outgoing/Incoming Transfer are only ever auto-assigned by
-  // createWalletTransfer (the Transfer tab above) — never a manual pick here.
-  const selectableCategories = categories.filter((c) => !c.isTransfer);
-  const selectedName = selectableCategories.find((c) => c.id === value)?.name ?? "Category";
-  return (
-    <Select value={value || undefined} onValueChange={(v) => v && onChange(v)}>
-      <SelectTrigger className="w-full" aria-label="Category">
-        <span className="text-sm truncate">{selectedName}</span>
-      </SelectTrigger>
-      <SelectContent>
-        {selectableCategories.map((c) => (
-          <SelectItem key={c.id} value={c.id}>
-            {c.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-

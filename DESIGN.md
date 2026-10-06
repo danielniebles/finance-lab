@@ -305,6 +305,23 @@ Domain states never pick classes themselves. Map the state to a `Tone` (`positiv
 | `ReadingGrid` | Label + amount readings that wrap instead of overflowing with long COP values |
 | `ColorDot` | Dot in a user-chosen colour (account, card); muted token when there's none |
 
+### Forms (`src/components/ds/form`)
+
+Every modal form is built from these; no hand-rolled label or dialog styles.
+
+| Component | Use |
+|---|---|
+| `FormDialog` + `FormFooter` | The modal: title, scrolling body, footer band with the actions on the right and an optional hint on the left ("Add an amount to save."). It is a bottom sheet on phones, with the footer always reachable. |
+| `Field` | Label, muted "optional", hint or error. It also sizes the shadcn input/select inside it (40px, full width). |
+| `FieldGroupLabel` / `FormReadout` | A group heading inside a form ("Optional links") / a read-only computed value ("Monthly payment $ 350.000"). |
+| `MoneyInput` | Peso amounts. Holds a digit string and shows "$ 1.200.000" while typing, with the numeric keypad on phones. |
+| `DateField` | Shows "Today, Oct 6" / "Mar 12, 2027" and opens the browser's own picker (`showPicker()`). No date library. Optional quick picks (Today / Yesterday). |
+| `OptionSelect` | Dropdown that always shows the option label (base-ui otherwise shows the raw value), with an optional leading icon or dot and an optional "None" → `null`. |
+| `SegmentedControl` | 2–4 exclusive options. The selection is neutral, never a status colour. |
+| `TagInput` | Tags as chips. The value is the same comma-separated string as before. |
+
+Labels are sentence case; uppercase is only for group headings. Primary actions are named for what they do ("Add expense", "Create expense", "Save changes").
+
 Reference page: `/settings/design-system` (dev only) renders every token and component. Check it in light and dark, and with `THEME_FAMILY=signal`, after any token change.
 
 ### Rules

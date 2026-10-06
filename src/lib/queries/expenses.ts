@@ -107,6 +107,9 @@ export type CategoryOption = {
   // a brand-new manual transaction (AddTransactionRow's Expense/Income tab)
   // filter it out client-side instead.
   isTransfer: boolean;
+  /** Stored icon/colour overrides (null = derived from the name). */
+  icon?: string | null;
+  color?: string | null;
 };
 
 /** All AppCategories with their derived budgetType — used by the agent to guess/shortlist a category. */
@@ -120,6 +123,8 @@ export async function getCategories(): Promise<CategoryOption[]> {
     name: cat.name,
     budgetType: deriveCategoryBudgetType(cat.budgetItems).budgetType,
     isTransfer: cat.isTransfer,
+    icon: cat.icon,
+    color: cat.color,
   }));
 }
 

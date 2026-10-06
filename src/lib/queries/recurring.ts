@@ -10,7 +10,12 @@ export type RecurringExpenseRow = {
   estimatedAmount: number;
   cadenceMonths: number;
   nextDueDate: Date;
+  /** Legacy free-text label (ADR-050); prefer appCategoryId / categoryName. */
   category: string | null;
+  appCategoryId: string | null;
+  /** Linked category's name, else the legacy label. */
+  categoryName: string | null;
+  notes: string | null;
   fundingVaultId: string | null;
   fundingVaultName: string | null;
   monthsUntilDue: number;
@@ -49,6 +54,7 @@ export async function getRecurringExpenses(
     orderBy: { nextDueDate: "asc" },
     include: {
       fundingVault: { select: { id: true, name: true, entries: true } },
+      appCategory: { select: { name: true } },
     },
   });
 
@@ -86,6 +92,9 @@ export async function getRecurringExpenses(
       cadenceMonths: r.cadenceMonths,
       nextDueDate: dueDate,
       category: r.category,
+      appCategoryId: r.appCategoryId,
+      categoryName: r.appCategory?.name ?? r.category,
+      notes: r.notes,
       fundingVaultId: r.fundingVaultId,
       fundingVaultName: r.fundingVault?.name ?? null,
       monthsUntilDue: mUntilDue,

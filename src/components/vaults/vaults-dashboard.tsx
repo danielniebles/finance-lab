@@ -39,11 +39,12 @@ type Props = {
   year: number;
   walletAccounts: AccountWithWallets[];
   categories: CategoryOption[];
+  startDay?: number;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function VaultsDashboard({ vaults, obligations, recurringData, recurringVaults, walletAccounts, categories }: Props) {
+export function VaultsDashboard({ vaults, obligations, recurringData, recurringVaults, month, year, walletAccounts, categories, startDay = 1 }: Props) {
   // Vault form dialog
   const [vaultFormOpen, setVaultFormOpen] = useState(false);
   const [vaultFormMode, setVaultFormMode] = useState<"create" | "edit">("create");
@@ -148,7 +149,11 @@ export function VaultsDashboard({ vaults, obligations, recurringData, recurringV
       )}
 
       {/* Recurring expenses list */}
-      <RecurringList recurringData={recurringData} recurringVaults={recurringVaults} />
+      <RecurringList
+        recurringData={recurringData}
+        recurringVaults={recurringVaults}
+        formContext={{ categories, month, year, startDay }}
+      />
 
       {/* Vault form dialog — key forces remount on every open so useState initializer
           always sees the current vault (base-nova doesn't call onOpenChange on external open) */}

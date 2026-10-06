@@ -3,25 +3,33 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DateField,
+  Field,
+  FormDialog,
+  FormFooter,
+  FormReadout,
+  Money,
+  MoneyInput,
+  OptionSelect,
+} from "@/components/ds";
+import { categorySelectOptions } from "@/components/shared/category-option";
 import { createRecurringExpense, updateRecurringExpense } from "@/lib/actions/recurring";
+import { dateInputValue } from "@/lib/format";
+import { amountToDigits, localISODate, parseISODate } from "@/lib/form-format";
+import { monthlySetAside } from "@/lib/recurring-utils";
+import { TONE_CLASSES } from "@/lib/status";
+import type { CategoryOption } from "@/lib/queries/expenses";
 import type { RecurringExpenseRow } from "@/lib/queries/recurring";
 import type { VaultWithMetrics } from "@/lib/queries/vaults";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+/** What the form needs from the page: categories to link, and the month for the set-aside preview. */
+export type RecurringFormContext = {
+  categories: CategoryOption[];
+  month: number;
+  year: number;
+  startDay: number;
+};
 
 type Props = {
   open: boolean;
@@ -29,52 +37,46 @@ type Props = {
   vault?: VaultWithMetrics;
   expense?: RecurringExpenseRow;
   recurringVaults: VaultWithMetrics[];
+  context: RecurringFormContext;
 };
 
-// ─── Cadence options ──────────────────────────────────────────────────────────
-
 const CADENCE_OPTIONS = [
-  { label: "Monthly",     value: "1" },
-  { label: "Quarterly",   value: "3" },
-  { label: "Semiannual",  value: "6" },
-  { label: "Annual",      value: "12" },
-  { label: "Custom",      value: "custom" },
+  { label: "Monthly", value: "1" },
+  { label: "Every 2 months", value: "2" },
+  { label: "Quarterly", value: "3" },
+  { label: "Every 6 months", value: "6" },
+  { label: "Yearly", value: "12" },
+  { label: "Custom…", value: "custom" },
 ];
 
 function cadenceToSelectValue(months: number): string {
-  if ([1, 3, 6, 12].includes(months)) return String(months);
-  return "custom";
+  return CADENCE_OPTIONS.some((o) => o.value === String(months)) ? String(months) : "custom";
 }
-
-// ─── Form state ───────────────────────────────────────────────────────────────
 
 type FormState = {
   name: string;
-  estimatedAmount: string;
+  estimatedAmount: string; // digits
   cadenceSelect: string;
   cadenceCustom: string;
-  nextDueDate: string;
-  category: string;
-  fundingVaultId: string;
+  nextDueDate: string; // YYYY-MM-DD
+  appCategoryId: string | null;
+  fundingVaultId: string | null;
   notes: string;
 };
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function toFormState(
-  expense: RecurringExpenseRow,
-): FormState {
+function toFormState(expense: RecurringExpenseRow): FormState {
   return {
     name: expense.name,
-    estimatedAmount: String(expense.estimatedAmount),
+    estimatedAmount: amountToDigits(expense.estimatedAmount),
     cadenceSelect: cadenceToSelectValue(expense.cadenceMonths),
     cadenceCustom: String(expense.cadenceMonths),
-    nextDueDate: new Date(expense.nextDueDate).toISOString().slice(0, 10),
-    category: expense.category ?? "",
-    fundingVaultId: expense.fundingVaultId ?? "",
-    notes: "",
+    // UTC read on purpose (see dateInputValue): older rows were saved as UTC
+    // midnight; new saves are local noon, which reads back the same either way.
+    nextDueDate: dateInputValue(new Date(expense.nextDueDate)),
+    appCategoryId: expense.appCategoryId,
+    fundingVaultId: expense.fundingVaultId,
+    // Was always "" before, so every edit wiped the saved notes.
+    notes: expense.notes ?? "",
   };
 }
 
@@ -84,76 +86,52 @@ function emptyForm(vaultId?: string): FormState {
     estimatedAmount: "",
     cadenceSelect: "1",
     cadenceCustom: "",
-    nextDueDate: today(),
-    category: "",
-    fundingVaultId: vaultId ?? "",
+    nextDueDate: localISODate(new Date()),
+    appCategoryId: null,
+    fundingVaultId: vaultId ?? null,
     notes: "",
   };
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+function resolvedCadence(form: FormState): number {
+  if (form.cadenceSelect === "custom") return Math.max(1, parseInt(form.cadenceCustom, 10) || 1);
+  return parseInt(form.cadenceSelect, 10);
+}
 
-export function RecurringExpenseForm({
-  open,
-  onClose,
-  vault,
-  expense,
-  recurringVaults,
-}: Props) {
+export function RecurringExpenseForm({ open, onClose, vault, expense, recurringVaults, context }: Props) {
   const isEdit = !!expense;
-  const [form, setForm] = useState<FormState>(() =>
-    isEdit && expense ? toFormState(expense) : emptyForm(vault?.id),
-  );
+  const [form, setForm] = useState<FormState>(() => (expense ? toFormState(expense) : emptyForm(vault?.id)));
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-
-  // Called only when base-nova internally closes the dialog (Escape / backdrop).
-  // External open is handled by the parent via the `key` prop (remounts the component).
-  function handleOpenChange(isOpen: boolean) {
-    if (!isOpen) {
-      handleClose();
-    }
-  }
 
   function handleClose() {
     setError(null);
     onClose();
   }
 
-  function setField<K extends keyof FormState>(k: K, v: FormState[K]) {
-    setForm((prev) => ({ ...prev, [k]: v }));
-  }
-
-  function resolvedCadence(): number {
-    if (form.cadenceSelect === "custom") {
-      return parseInt(form.cadenceCustom, 10) || 1;
-    }
-    return parseInt(form.cadenceSelect, 10);
-  }
+  const setField = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((prev) => ({ ...prev, [k]: v }));
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-
+    const due = parseISODate(form.nextDueDate);
     const data = {
       name: form.name.trim(),
       estimatedAmount: parseFloat(form.estimatedAmount),
-      cadenceMonths: resolvedCadence(),
-      nextDueDate: new Date(form.nextDueDate),
-      category: form.category.trim() || null,
-      fundingVaultId: form.fundingVaultId || null,
+      cadenceMonths: resolvedCadence(form),
+      // Local noon: `new Date("YYYY-MM-DD")` is UTC midnight, the previous
+      // evening in Bogotá, which could move a due date into the prior month.
+      nextDueDate: due ?? new Date(NaN),
+      appCategoryId: form.appCategoryId,
+      fundingVaultId: form.fundingVaultId,
       notes: form.notes.trim() || null,
     };
-
-    if (!data.name || isNaN(data.estimatedAmount) || data.estimatedAmount <= 0) return;
+    if (!data.name || isNaN(data.estimatedAmount) || data.estimatedAmount <= 0 || !due) return;
 
     startTransition(async () => {
       try {
-        if (isEdit && expense) {
-          await updateRecurringExpense(expense.id, data);
-        } else {
-          await createRecurringExpense(data);
-        }
+        if (isEdit && expense) await updateRecurringExpense(expense.id, data);
+        else await createRecurringExpense(data);
         handleClose();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -162,204 +140,137 @@ export function RecurringExpenseForm({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="font-heading text-base font-semibold">
-            {isEdit ? "Edit recurring expense" : "New recurring expense"}
-          </DialogTitle>
-        </DialogHeader>
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && handleClose()}
+      title={isEdit ? "Edit recurring expense" : "New recurring expense"}
+      onSubmit={handleSubmit}
+      footer={
+        <FormFooter hint={error ? <span className={TONE_CLASSES.danger.text}>{error}</span> : undefined}>
+          <Button type="button" variant="outline" onClick={handleClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={pending}>
+            {pending ? "Saving…" : isEdit ? "Save changes" : "Create expense"}
+          </Button>
+        </FormFooter>
+      }
+    >
+      <Field label="Name" htmlFor="re-name">
+        <Input id="re-name" value={form.name} onChange={(e) => setField("name", e.target.value)} placeholder="e.g. Car insurance" required disabled={pending} />
+      </Field>
+      <Field label="Estimated amount" htmlFor="re-amount">
+        <MoneyInput id="re-amount" value={form.estimatedAmount} onValueChange={(v) => setField("estimatedAmount", v)} required disabled={pending} />
+      </Field>
+      <ScheduleFields form={form} setField={setField} context={context} disabled={pending} />
+      <LinkFields form={form} setField={setField} expense={expense} recurringVaults={recurringVaults} categories={context.categories} disabled={pending} />
+      <Field label="Notes" htmlFor="re-notes" optional>
+        <Input id="re-notes" value={form.notes} onChange={(e) => setField("notes", e.target.value)} placeholder="Policy number, provider…" disabled={pending} />
+      </Field>
+    </FormDialog>
+  );
+}
 
-        <form className="space-y-5 pt-2" onSubmit={handleSubmit}>
-          {/* Name */}
-          <div className="space-y-1.5">
-            <Label
-              htmlFor="re-name"
-              className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            >
-              Name
-            </Label>
+type SetField = <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+
+function ScheduleFields({
+  form,
+  setField,
+  context,
+  disabled,
+}: {
+  form: FormState;
+  setField: SetField;
+  context: RecurringFormContext;
+  disabled: boolean;
+}) {
+  const amount = parseFloat(form.estimatedAmount);
+  const due = parseISODate(form.nextDueDate);
+  const setAside =
+    amount > 0 && due ? monthlySetAside(amount, due, context.month, context.year, context.startDay) : null;
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Repeats">
+          <OptionSelect
+            ariaLabel="Repeats"
+            value={form.cadenceSelect}
+            onChange={(v) => v && setField("cadenceSelect", v)}
+            options={CADENCE_OPTIONS}
+            disabled={disabled}
+          />
+        </Field>
+        <Field label="Next due" htmlFor="re-due">
+          <DateField id="re-due" value={form.nextDueDate} onChange={(v) => setField("nextDueDate", v)} required disabled={disabled} />
+        </Field>
+      </div>
+      {form.cadenceSelect === "custom" && (
+        <Field label="Every" htmlFor="re-custom">
+          <div className="relative">
             <Input
-              id="re-name"
-              value={form.name}
-              onChange={(e) => setField("name", e.target.value)}
-              placeholder="e.g. Car insurance"
-              required
-              disabled={pending}
+              id="re-custom"
+              inputMode="numeric"
+              value={form.cadenceCustom}
+              onChange={(e) => setField("cadenceCustom", e.target.value.replace(/\D/g, "").slice(0, 3))}
+              placeholder="e.g. 4"
+              className="pr-20 font-mono"
+              disabled={disabled}
             />
+            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs text-muted-foreground">months</span>
           </div>
+        </Field>
+      )}
+      {setAside !== null && (
+        <FormReadout label="Set aside this month">
+          <Money value={Math.round(setAside)} />
+        </FormReadout>
+      )}
+    </>
+  );
+}
 
-          {/* Estimated amount */}
-          <div className="space-y-1.5">
-            <Label
-              htmlFor="re-amount"
-              className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            >
-              Estimated amount (COP)
-            </Label>
-            <Input
-              id="re-amount"
-              type="number"
-              min="1"
-              value={form.estimatedAmount}
-              onChange={(e) => setField("estimatedAmount", e.target.value)}
-              placeholder="1200000"
-              required
-              disabled={pending}
-              className="font-mono"
-            />
-          </div>
-
-          {/* Cadence */}
-          <div className="space-y-1.5">
-            <Label className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Cadence
-            </Label>
-            <Select
-              value={form.cadenceSelect}
-              onValueChange={(v) => v && setField("cadenceSelect", v)}
-            >
-              <SelectTrigger className="w-full" disabled={pending}>
-                <SelectValue placeholder="Select cadence" />
-              </SelectTrigger>
-              <SelectContent>
-                {CADENCE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {form.cadenceSelect === "custom" && (
-              <div className="flex items-center gap-2 mt-2">
-                <Input
-                  type="number"
-                  min="1"
-                  max="120"
-                  value={form.cadenceCustom}
-                  onChange={(e) => setField("cadenceCustom", e.target.value)}
-                  placeholder="e.g. 2"
-                  disabled={pending}
-                  className="w-24"
-                />
-                <span className="text-sm text-muted-foreground">months</span>
-              </div>
-            )}
-          </div>
-
-          {/* Next due date */}
-          <div className="space-y-1.5">
-            <Label
-              htmlFor="re-due"
-              className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            >
-              Next due date
-            </Label>
-            <Input
-              id="re-due"
-              type="date"
-              value={form.nextDueDate}
-              onChange={(e) => setField("nextDueDate", e.target.value)}
-              required
-              disabled={pending}
-            />
-          </div>
-
-          {/* Category */}
-          <div className="space-y-1.5">
-            <Label
-              htmlFor="re-category"
-              className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            >
-              Category{" "}
-              <span className="font-normal normal-case tracking-normal text-muted-foreground">
-                (optional)
-              </span>
-            </Label>
-            <Input
-              id="re-category"
-              value={form.category}
-              onChange={(e) => setField("category", e.target.value)}
-              placeholder="e.g. Vehicle, Taxes"
-              disabled={pending}
-            />
-          </div>
-
-          {/* Funding vault */}
-          {recurringVaults.length > 0 && (
-            <div className="space-y-1.5">
-              <Label className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Funding vault{" "}
-                <span className="font-normal normal-case tracking-normal text-muted-foreground">
-                  (optional)
-                </span>
-              </Label>
-              <Select
-                value={form.fundingVaultId}
-                onValueChange={(v) => setField("fundingVaultId", v ?? "")}
-              >
-                <SelectTrigger className="w-full" disabled={pending}>
-                  <SelectValue placeholder="None" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">None</SelectItem>
-                  {recurringVaults.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Notes */}
-          <div className="space-y-1.5">
-            <Label
-              htmlFor="re-notes"
-              className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            >
-              Notes{" "}
-              <span className="font-normal normal-case tracking-normal text-muted-foreground">
-                (optional)
-              </span>
-            </Label>
-            <Input
-              id="re-notes"
-              value={form.notes}
-              onChange={(e) => setField("notes", e.target.value)}
-              placeholder="Extra context"
-              disabled={pending}
-            />
-          </div>
-
-          {/* Error */}
-          {error && (
-            <p className="text-xs text-destructive" role="alert">
-              {error}
-            </p>
-          )}
-
-          {/* Actions */}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              disabled={pending}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending}>
-              {pending
-                ? "Saving…"
-                : isEdit
-                ? "Save changes"
-                : "Create expense"}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+function LinkFields({
+  form,
+  setField,
+  expense,
+  recurringVaults,
+  categories,
+  disabled,
+}: {
+  form: FormState;
+  setField: SetField;
+  expense?: RecurringExpenseRow;
+  recurringVaults: VaultWithMetrics[];
+  categories: CategoryOption[];
+  disabled: boolean;
+}) {
+  // An expense created before ADR-050 may carry a text label that matched no
+  // category; show it so it can be linked by hand.
+  const legacy = expense && !expense.appCategoryId && expense.category ? expense.category : null;
+  return (
+    <>
+      <Field label="Category" optional hint={legacy && !form.appCategoryId ? `Was “${legacy}”. Pick a category to link it.` : undefined}>
+        <OptionSelect
+          ariaLabel="Category"
+          value={form.appCategoryId}
+          onChange={(v) => setField("appCategoryId", v)}
+          noneLabel="None"
+          options={categorySelectOptions(categories.filter((c) => !c.isTransfer))}
+          disabled={disabled}
+        />
+      </Field>
+      {recurringVaults.length > 0 && (
+        <Field label="Funding vault" optional>
+          <OptionSelect
+            ariaLabel="Funding vault"
+            value={form.fundingVaultId}
+            onChange={(v) => setField("fundingVaultId", v)}
+            noneLabel="None"
+            options={recurringVaults.map((v) => ({ value: v.id, label: v.name }))}
+            disabled={disabled}
+          />
+        </Field>
+      )}
+    </>
   );
 }

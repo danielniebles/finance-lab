@@ -55,6 +55,7 @@ model AppCategory {
   mappings          CategoryMapping[]
   budgetItems       BudgetItem[]
   transactions      Transaction[]
+  recurringExpenses RecurringExpense[]
   counterpartyRules CounterpartyRule[]
   // Tags that hint at this category (Tag.defaultAppCategoryId) — lets the bot
   // map a hashtag like "#uber" straight to a category guess.
@@ -403,7 +404,11 @@ model RecurringExpense {
   estimatedAmount Float
   cadenceMonths   Int
   nextDueDate     DateTime
+  // Legacy free-text label, kept for history (ADR-050). New and edited
+  // expenses link a real category through appCategoryId instead.
   category        String?
+  appCategoryId   String?
+  appCategory     AppCategory?              @relation(fields: [appCategoryId], references: [id], onDelete: SetNull)
   fundingVaultId  String?
   fundingVault    Vault?                    @relation("VaultRecurring", fields: [fundingVaultId], references: [id], onDelete: SetNull)
   active          Boolean                   @default(true)

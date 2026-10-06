@@ -15,7 +15,7 @@ import { TONE_CLASSES, toneForRecurringStatus } from "@/lib/status";
 import { cadenceLabel, daysUntil } from "@/lib/vault-display";
 import { cn } from "@/lib/utils";
 import { payRecurringExpense } from "@/lib/actions/recurring";
-import { RecurringExpenseForm } from "./recurring-expense-form";
+import { RecurringExpenseForm, type RecurringFormContext } from "./recurring-expense-form";
 import type { RecurringExpenseRow } from "@/lib/queries/recurring";
 import type { VaultWithMetrics } from "@/lib/queries/vaults";
 
@@ -29,6 +29,7 @@ type Props = {
     next90Days: RecurringExpenseRow[];
   };
   recurringVaults: VaultWithMetrics[];
+  formContext: RecurringFormContext;
 };
 
 // ─── Row ──────────────────────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ type PayState = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function RecurringList({ recurringData, recurringVaults }: Props) {
+export function RecurringList({ recurringData, recurringVaults, formContext }: Props) {
   const { items } = recurringData;
 
   // Create / edit form
@@ -218,6 +219,7 @@ export function RecurringList({ recurringData, recurringVaults }: Props) {
         onClose={() => setFormOpen(false)}
         expense={editingExpense}
         recurringVaults={recurringVaults}
+        context={formContext}
       />
 
       {/* Pay dialog */}

@@ -3,23 +3,22 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
+  ColorDot,
+  DateField,
+  Field,
+  FieldGroupLabel,
+  FormDialog,
+  FormFooter,
+  FormReadout,
+  MoneyInput,
+  Money,
+  OptionSelect,
+  SegmentedControl,
+} from "@/components/ds";
 import { createInstallment, updateInstallment, deleteInstallment } from "@/lib/actions/installments";
 import { computeInstallmentDue, eaToMonthly, monthlyToEA } from "@/lib/installment-utils";
-import { cn } from "@/lib/utils";
+import { amountToDigits } from "@/lib/form-format";
 import type { InstallmentRow } from "@/lib/queries/installments";
 
 type RateType = "monthly" | "annual_ea";
@@ -57,7 +56,7 @@ function toFormState(row: InstallmentRow): FormState {
   const dd = String(d.getDate()).padStart(2, "0");
   return {
     description: row.description,
-    totalAmount: String(row.totalAmount),
+    totalAmount: amountToDigits(row.totalAmount),
     numInstallments: String(row.numInstallments),
     // stored value is always monthly — display as m.v.
     interestRate: row.monthlyInterestRate != null ? row.monthlyInterestRate.toFixed(4) : "",
@@ -165,299 +164,229 @@ export function InstallmentForm({
     });
   }
 
-  // Live preview — always compute using monthly rate
-  const totalAmount = parseFloat(form.totalAmount);
-  const numInstallments = parseInt(form.numInstallments, 10);
-  const monthlyRate = getMonthlyRate();
-  const hasValidInputs = !isNaN(totalAmount) && !isNaN(numInstallments) && numInstallments > 0;
-  const firstInstallment = hasValidInputs
-    ? computeInstallmentDue(totalAmount, numInstallments, 1, monthlyRate)
-    : null;
-  const lastInstallment = hasValidInputs && monthlyRate && numInstallments > 1
-    ? computeInstallmentDue(totalAmount, numInstallments, numInstallments, monthlyRate)
-    : null;
+  const title = confirmingDelete ? "Delete installment?" : editing ? "Edit installment" : "New installment";
 
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>
-            {confirmingDelete
-              ? "Delete installment?"
-              : editing ? "Edit installment" : "New installment"}
-          </DialogTitle>
-        </DialogHeader>
-        {confirmingDelete ? (
-          <div className="space-y-4">
-            <p className="text-sm text-destructive">
-              Delete this installment and all its payment records?
-            </p>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)} autoFocus>
-                Cancel
-              </Button>
-              <Button type="button" variant="destructive" disabled={pending} onClick={handleDelete}>
-                Confirm delete
-              </Button>
-            </DialogFooter>
-          </div>
-        ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="description">Description</Label>
-            <Input
-              id="description"
-              value={form.description}
-              onChange={(e) => set("description", e.target.value)}
-              placeholder="e.g. iPhone"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="totalAmount">Total amount (COP)</Label>
-              <Input
-                id="totalAmount"
-                type="number"
-                min={0}
-                value={form.totalAmount}
-                onChange={(e) => set("totalAmount", e.target.value)}
-                placeholder="190000"
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="numInstallments">Installments</Label>
-              <Input
-                id="numInstallments"
-                type="number"
-                min={1}
-                value={form.numInstallments}
-                onChange={(e) => set("numInstallments", e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          {/* Interest rate with m.v. / EA toggle */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="interestRate">
-                Interest rate{" "}
-                <span className="text-muted-foreground font-normal">(optional)</span>
-              </Label>
-              {/* Type toggle */}
-              <div className="flex rounded-md border border-input overflow-hidden text-xs">
-                <button
-                  type="button"
-                  onClick={() => switchRateType("monthly")}
-                  className={cn(
-                    "px-2.5 py-1 transition-colors",
-                    form.rateType === "monthly"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  % m.v.
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchRateType("annual_ea")}
-                  className={cn(
-                    "px-2.5 py-1 transition-colors border-l border-input",
-                    form.rateType === "annual_ea"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  % EA
-                </button>
-              </div>
-            </div>
-            <Input
-              id="interestRate"
-              type="number"
-              min={0}
-              step={0.01}
-              value={form.interestRate}
-              onChange={(e) => set("interestRate", e.target.value)}
-              placeholder={
-                form.rateType === "monthly"
-                  ? "e.g. 1.89  (as shown on statement)"
-                  : "e.g. 25.37  (effective annual)"
-              }
-            />
-            {form.rateType === "monthly" && (
-              <p className="text-xs text-muted-foreground/70">
-                Mensual vencido — read directly from your credit card statement.
-              </p>
-            )}
-            {form.rateType === "annual_ea" && (
-              <p className="text-xs text-muted-foreground/70">
-                Efectiva anual — will be converted to monthly for calculation.
-              </p>
-            )}
-          </div>
-
-          {firstInstallment !== null && !isNaN(firstInstallment) && (
-            <p className="text-xs text-muted-foreground font-mono">
-              {lastInstallment !== null ? (
-                <>
-                  First: ${new Intl.NumberFormat("es-CO").format(firstInstallment)} →{" "}
-                  Last: ${new Intl.NumberFormat("es-CO").format(lastInstallment)} COP
-                  <span className="ml-1 text-muted-foreground/60">(cuota decreciente)</span>
-                </>
-              ) : (
-                <>Monthly: ${new Intl.NumberFormat("es-CO").format(firstInstallment)} COP</>
-              )}
-            </p>
-          )}
-
-          <div className="space-y-1.5">
-            <Label htmlFor="startDate">First payment date</Label>
-            <Input
-              id="startDate"
-              type="date"
-              value={form.startDate}
-              onChange={(e) => set("startDate", e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="notes">Notes (optional)</Label>
-            <Input
-              id="notes"
-              value={form.notes}
-              onChange={(e) => set("notes", e.target.value)}
-              placeholder="Optional notes"
-            />
-          </div>
-
-          {/* Optional links */}
-          <div className="border-t border-border pt-4 space-y-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Optional links
-            </p>
-
-            {/* Card picker */}
-            <div className="space-y-1.5">
-              <Label>
-                Credit card{" "}
-                <span className="text-muted-foreground font-normal">(optional)</span>
-              </Label>
-              <Select
-                value={form.cardId ?? ""}
-                onValueChange={(v) => set("cardId", v || null)}
-              >
-                <SelectTrigger className="h-8">
-                  <span className="text-sm">
-                    {form.cardId
-                      ? (cards.find((c) => c.id === form.cardId)?.name ?? "Unknown card")
-                      : "None"}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">None</SelectItem>
-                  {cards.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Debtor picker */}
-            <div className="space-y-1.5">
-              <Label>
-                For debtor{" "}
-                <span className="text-muted-foreground font-normal">(optional)</span>
-              </Label>
-              <Select
-                value={form.debtorId ?? ""}
-                onValueChange={(v) => {
-                  set("debtorId", v || null);
-                  if (!v) set("fundingAccountId", null);
-                }}
-              >
-                <SelectTrigger className="h-8">
-                  <span className="text-sm">
-                    {form.debtorId
-                      ? (debtors.find((d) => d.id === form.debtorId)?.name ?? "Unknown debtor")
-                      : "None"}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">None</SelectItem>
-                  {debtors.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Funding account picker — conditional on debtorId */}
-            {form.debtorId && (
-              <div className="space-y-1.5">
-                <Label>
-                  Funding account{" "}
-                  <span className="text-muted-foreground font-normal">
-                    (the account you paid from)
-                  </span>
-                </Label>
-                <Select
-                  value={form.fundingAccountId ?? ""}
-                  onValueChange={(v) => set("fundingAccountId", v || null)}
-                >
-                  <SelectTrigger className="h-8">
-                    <span className="text-sm">
-                      {form.fundingAccountId
-                        ? (accounts.find((a) => a.id === form.fundingAccountId)?.name ?? "Unknown account")
-                        : "None"}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">None</SelectItem>
-                    {accounts.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground/70">
-                  Each cuota paid will create a Loan record under this debtor.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            {editing && (
-              <Button
-                type="button"
-                variant="destructive"
-                className="sm:mr-auto"
-                disabled={pending}
-                onClick={() => setConfirmingDelete(true)}
-              >
-                Delete
-              </Button>
-            )}
-            <Button type="button" variant="outline" onClick={onClose}>
+  if (confirmingDelete) {
+    return (
+      <FormDialog
+        open={open}
+        onOpenChange={(o) => !o && onClose()}
+        title={title}
+        footer={
+          <FormFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)} autoFocus>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending}>
-              {editing ? "Save changes" : "Add installment"}
+            <Button type="button" variant="destructive" disabled={pending} onClick={handleDelete}>
+              Delete
             </Button>
-          </DialogFooter>
-        </form>
-        )}
-      </DialogContent>
-    </Dialog>
+          </FormFooter>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          This deletes <span className="font-medium text-foreground">{editing?.description}</span> and all its
+          payment records.
+        </p>
+      </FormDialog>
+    );
+  }
+
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={title}
+      onSubmit={handleSubmit}
+      footer={
+        <FormFooter>
+          {editing && (
+            <Button
+              type="button"
+              variant="destructive"
+              className="sm:mr-auto"
+              disabled={pending}
+              onClick={() => setConfirmingDelete(true)}
+            >
+              Delete
+            </Button>
+          )}
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={pending}>
+            {editing ? "Save changes" : "Add installment"}
+          </Button>
+        </FormFooter>
+      }
+    >
+      <PlanFields form={form} set={set} switchRateType={switchRateType} monthlyRate={getMonthlyRate()} />
+      <LinkFields form={form} set={set} cards={cards} debtors={debtors} accounts={accounts} />
+    </FormDialog>
+  );
+}
+
+type SetField = <K extends keyof FormState>(field: K, value: FormState[K]) => void;
+
+const RATE_OPTIONS = [
+  { value: "monthly" as const, label: "% m.v." },
+  { value: "annual_ea" as const, label: "% EA" },
+];
+
+/** First / last cuota for the readout (German amortization decreases with interest). */
+function paymentPreview(form: FormState, monthlyRate: number | null) {
+  const total = parseFloat(form.totalAmount);
+  const n = parseInt(form.numInstallments, 10);
+  if (Number.isNaN(total) || total <= 0 || Number.isNaN(n) || n <= 0) return null;
+  const first = computeInstallmentDue(total, n, 1, monthlyRate);
+  const last = monthlyRate && n > 1 ? computeInstallmentDue(total, n, n, monthlyRate) : null;
+  return Number.isNaN(first) ? null : { first, last };
+}
+
+function PlanFields({
+  form,
+  set,
+  switchRateType,
+  monthlyRate,
+}: {
+  form: FormState;
+  set: SetField;
+  switchRateType: (next: RateType) => void;
+  monthlyRate: number | null;
+}) {
+  const preview = paymentPreview(form, monthlyRate);
+  return (
+    <>
+      <Field label="Description" htmlFor="inst-description">
+        <Input
+          id="inst-description"
+          value={form.description}
+          onChange={(e) => set("description", e.target.value)}
+          placeholder="e.g. iPhone"
+          required
+        />
+      </Field>
+      <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-3">
+        <Field label="Total amount" htmlFor="inst-total">
+          <MoneyInput id="inst-total" value={form.totalAmount} onValueChange={(v) => set("totalAmount", v)} required />
+        </Field>
+        <Field label="Installments" htmlFor="inst-count">
+          <div className="relative">
+            <Input
+              id="inst-count"
+              inputMode="numeric"
+              value={form.numInstallments}
+              onChange={(e) => set("numInstallments", e.target.value.replace(/\D/g, "").slice(0, 3))}
+              className="pr-16 font-mono"
+              required
+            />
+            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs text-muted-foreground">
+              months
+            </span>
+          </div>
+        </Field>
+      </div>
+      {preview && (
+        <FormReadout label={preview.last !== null ? "First → last payment (decreasing)" : "Monthly payment"}>
+          <Money value={preview.first} />
+          {preview.last !== null && (
+            <>
+              {" → "}
+              <Money value={preview.last} />
+            </>
+          )}
+        </FormReadout>
+      )}
+      <Field
+        label="Interest rate"
+        htmlFor="inst-rate"
+        optional
+        aside={
+          <SegmentedControl
+            size="sm"
+            ariaLabel="Rate type"
+            value={form.rateType}
+            onChange={switchRateType}
+            options={RATE_OPTIONS}
+          />
+        }
+        hint={
+          form.rateType === "monthly"
+            ? "Mensual vencido — as shown on your statement."
+            : "Efectiva anual — converted to monthly for the plan."
+        }
+      >
+        <div className="relative">
+          <Input
+            id="inst-rate"
+            inputMode="decimal"
+            value={form.interestRate}
+            onChange={(e) => set("interestRate", e.target.value.replace(",", ".").replace(/[^\d.]/g, ""))}
+            placeholder={form.rateType === "monthly" ? "e.g. 1.89" : "e.g. 25.37"}
+            className="pr-8 font-mono"
+          />
+          <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+        </div>
+      </Field>
+      <Field label="First payment date" htmlFor="inst-start">
+        <DateField id="inst-start" value={form.startDate} onChange={(v) => set("startDate", v)} required />
+      </Field>
+      <Field label="Notes" htmlFor="inst-notes" optional>
+        <Input id="inst-notes" value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Anything to remember" />
+      </Field>
+    </>
+  );
+}
+
+function LinkFields({
+  form,
+  set,
+  cards,
+  debtors,
+  accounts,
+}: {
+  form: FormState;
+  set: SetField;
+  cards: { id: string; name: string; color: string | null }[];
+  debtors: { id: string; name: string }[];
+  accounts: { id: string; name: string }[];
+}) {
+  return (
+    <>
+      <FieldGroupLabel>Optional links</FieldGroupLabel>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Credit card">
+          <OptionSelect
+            ariaLabel="Credit card"
+            value={form.cardId}
+            onChange={(v) => set("cardId", v)}
+            noneLabel="None"
+            options={cards.map((c) => ({ value: c.id, label: c.name, leading: <ColorDot color={c.color} /> }))}
+          />
+        </Field>
+        <Field label="For debtor">
+          <OptionSelect
+            ariaLabel="For debtor"
+            value={form.debtorId}
+            onChange={(v) => {
+              set("debtorId", v);
+              if (!v) set("fundingAccountId", null);
+            }}
+            noneLabel="None"
+            options={debtors.map((d) => ({ value: d.id, label: d.name }))}
+          />
+        </Field>
+      </div>
+      {form.debtorId && (
+        <Field label="Funding account" hint="The account you paid from. Each cuota paid creates a loan under this debtor.">
+          <OptionSelect
+            ariaLabel="Funding account"
+            value={form.fundingAccountId}
+            onChange={(v) => set("fundingAccountId", v)}
+            noneLabel="None"
+            options={accounts.map((a) => ({ value: a.id, label: a.name }))}
+          />
+        </Field>
+      )}
+    </>
   );
 }
