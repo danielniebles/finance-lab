@@ -14,7 +14,9 @@ export function Panel({
   return (
     <section
       className={cn(
-        "rounded-2xl border border-border/60 bg-card p-5 sm:p-6",
+        // min-w-0: panels sit in grids; without it one wide child widens the
+        // whole track (and every panel sharing it) past the viewport.
+        "min-w-0 rounded-2xl border border-border/60 bg-card p-5 sm:p-6",
         glow && "surface-glow",
         className,
       )}

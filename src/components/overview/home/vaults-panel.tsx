@@ -22,12 +22,13 @@ function VaultRow({ item }: { item: VaultObligationItem }) {
       title={item.name}
       subtitle={mandatory ? "Mandatory" : "Leisure"}
       trailing={
-        <>
+        // Phones: chip stacked over the amount so the vault name keeps room.
+        <span className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
           <StatusChip tone={toneForVaultStatus(item.status)}>{item.status}</StatusChip>
-          <span className="w-24 text-right text-sm">
+          <span className="text-right text-sm sm:min-w-24">
             {item.stillNeeded > 0 ? <Money value={item.stillNeeded} /> : <span className="text-muted-foreground">—</span>}
           </span>
-        </>
+        </span>
       }
     />
   );

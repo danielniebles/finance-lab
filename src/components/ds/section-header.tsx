@@ -22,11 +22,13 @@ export function SectionHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-center justify-between gap-3", className)}>
+    // Wraps on narrow screens: a long trailing ("Still needed $ 1.613.400 ·
+    // Fund vaults →") must never force its card wider than the viewport.
+    <div className={cn("flex flex-wrap items-center justify-between gap-x-3 gap-y-1", className)}>
       <Heading className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
       </Heading>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {trailing}
         {href && (
           <Link

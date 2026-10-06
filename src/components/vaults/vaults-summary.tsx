@@ -25,7 +25,7 @@ function GapCard({
   return (
     <div
       className={cn(
-        "flex flex-col gap-1 rounded-xl px-4 py-3.5",
+        "flex min-w-0 flex-col gap-1 rounded-xl px-4 py-3.5",
         urgent ? TONE_CLASSES.danger.soft : "border border-border/60 bg-background",
       )}
     >
@@ -47,7 +47,7 @@ export function VaultsSummary({ obligations }: { obligations: VaultObligations }
   return (
     <section
       aria-labelledby="vaults-month-heading"
-      className="surface-glow grid gap-6 rounded-2xl border border-border/60 bg-card p-5 sm:p-6 lg:grid-cols-2 lg:items-center"
+      className="surface-glow grid min-w-0 gap-6 rounded-2xl border border-border/60 bg-card p-5 sm:p-6 lg:grid-cols-2 lg:items-center"
     >
       <div className="flex flex-col gap-3">
         <h2 id="vaults-month-heading" className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -67,7 +67,9 @@ export function VaultsSummary({ obligations }: { obligations: VaultObligations }
         </span>
       </div>
       {!done && (
-        <div className="grid grid-cols-2 gap-3">
+        // Side by side only when each tile has room for a long COP amount;
+        // on phones they stack instead of pushing the amount to the edge.
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(11rem,100%),1fr))] gap-3">
           <GapCard
             label="Mandatory gap"
             amount={mandatoryStillNeeded}
