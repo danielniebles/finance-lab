@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Plus } from "lucide-react";
 import {
   createCounterpartyRule,
   updateCounterpartyRule,
@@ -9,24 +10,12 @@ import {
 import type { RuleMatchType, RuleDirection } from "@/generated/prisma";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Plus, Check, X } from "lucide-react";
-import { WalletSelect } from "@/components/shared/wallet-select";
-import { cn } from "@/lib/utils";
+import { CheckField, Field, FormDialog, FormFooter, MoneyInput, OptionSelect, SegmentedControl, StatusChip } from "@/components/ds";
+import { CategoryIconTile, categorySelectOptions } from "@/components/shared/category-option";
+import { amountToDigits } from "@/lib/form-format";
+import { MATCH_TYPE_LABELS, MATCH_VALUE_FIELD, ruleMissingHint } from "@/lib/settings-forms";
 import { TONE_CLASSES } from "@/lib/status";
+import { cn } from "@/lib/utils";
 
 export type CounterpartyRuleRowData = {
   id: string;
@@ -37,7 +26,7 @@ export type CounterpartyRuleRowData = {
   appCategoryName: string;
   wallet: string;
   // Curated Wallet.id this rule routes to (ADR-036/037-style upgrade). Null
-  // until backfilled/resolved — see WalletSelect's placeholder fallback.
+  // until backfilled — the form then asks for a wallet before saving.
   walletId: string | null;
   autoRecord: boolean;
   recurring: boolean;
@@ -48,137 +37,22 @@ export type CounterpartyRuleRowData = {
   createdAt: Date;
 };
 
-type CategoryOption = { id: string; name: string };
+type CategoryOption = { id: string; name: string; icon?: string | null; color?: string | null; isTransfer?: boolean };
 type WalletOption = { id: string; name: string };
 
-const MATCH_TYPE_LABELS: Record<RuleMatchType, string> = {
-  ACCOUNT: "Account",
-  MERCHANT: "Merchant",
-  SENDER: "Sender",
-  KEYWORD: "Keyword",
-};
+const MATCH_TYPE_OPTIONS = (Object.keys(MATCH_TYPE_LABELS) as RuleMatchType[]).map((t) => ({ value: t, label: MATCH_TYPE_LABELS[t] }));
 
-const MATCH_TYPE_HINTS: Record<RuleMatchType, string> = {
-  ACCOUNT: "Account number",
-  MERCHANT: "Merchant name",
-  SENDER: "Sender name",
-  KEYWORD: "Keyword",
-};
+const DIRECTION_OPTIONS: { value: RuleDirection; label: string }[] = [
+  { value: "EXPENSE", label: "Expense" },
+  { value: "INCOME", label: "Income" },
+  { value: "ANY", label: "Any" },
+];
 
-const DIRECTION_LABELS: Record<RuleDirection, string> = {
-  EXPENSE: "Expense",
-  INCOME: "Income",
-  ANY: "Any",
-};
+const DIRECTION_LABELS: Record<RuleDirection, string> = { EXPENSE: "Expense", INCOME: "Income", ANY: "Any" };
 
 function formatLastMatched(date: Date | null): string {
   if (!date) return "Never";
-  return new Date(date).toLocaleDateString("es-CO", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function ToggleField({
-  id,
-  label,
-  checked,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        type="checkbox"
-        id={id}
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="size-4 rounded"
-      />
-      <Label htmlFor={id} className="font-normal cursor-pointer">
-        {label}
-      </Label>
-    </div>
-  );
-}
-
-function MatchTypeSelect({
-  value,
-  onChange,
-}: {
-  value: RuleMatchType;
-  onChange: (v: RuleMatchType) => void;
-}) {
-  return (
-    <Select value={value} onValueChange={(v) => v && onChange(v as RuleMatchType)}>
-      <SelectTrigger className="h-8 w-32">
-        <span className="text-sm">{MATCH_TYPE_LABELS[value]}</span>
-      </SelectTrigger>
-      <SelectContent>
-        {(Object.keys(MATCH_TYPE_LABELS) as RuleMatchType[]).map((t) => (
-          <SelectItem key={t} value={t}>
-            {MATCH_TYPE_LABELS[t]}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-function DirectionSelect({
-  value,
-  onChange,
-}: {
-  value: RuleDirection;
-  onChange: (v: RuleDirection) => void;
-}) {
-  return (
-    <Select value={value} onValueChange={(v) => v && onChange(v as RuleDirection)}>
-      <SelectTrigger className="h-8 w-24">
-        <span className="text-sm">{DIRECTION_LABELS[value]}</span>
-      </SelectTrigger>
-      <SelectContent>
-        {(Object.keys(DIRECTION_LABELS) as RuleDirection[]).map((d) => (
-          <SelectItem key={d} value={d}>
-            {DIRECTION_LABELS[d]}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-function CategorySelect({
-  value,
-  categories,
-  onChange,
-}: {
-  value: string;
-  categories: CategoryOption[];
-  onChange: (v: string) => void;
-}) {
-  const selected = categories.find((c) => c.id === value);
-  return (
-    <Select value={value} onValueChange={(v) => v && onChange(v)}>
-      <SelectTrigger className="h-8 w-36">
-        <span className="text-sm truncate">
-          {selected?.name ?? <span className="text-muted-foreground">Select…</span>}
-        </span>
-      </SelectTrigger>
-      <SelectContent>
-        {categories.map((c) => (
-          <SelectItem key={c.id} value={c.id}>
-            {c.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
+  return new Date(date).toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "numeric" });
 }
 
 export type RuleFormValues = {
@@ -189,25 +63,14 @@ export type RuleFormValues = {
   walletId: string;
   autoRecord: boolean;
   recurring: boolean;
-  expectedAmount: string;
+  expectedAmount: string; // digits
   notes: string;
 };
 
-function emptyFormValues(): RuleFormValues {
-  return {
-    matchType: "ACCOUNT",
-    matchValue: "",
-    direction: "ANY",
-    appCategoryId: "",
-    walletId: "",
-    autoRecord: true,
-    recurring: false,
-    expectedAmount: "",
-    notes: "",
-  };
-}
-
-function formValuesFromRule(rule: CounterpartyRuleRowData): RuleFormValues {
+function defaultFormValues(rule?: CounterpartyRuleRowData): RuleFormValues {
+  if (!rule) {
+    return { matchType: "ACCOUNT", matchValue: "", direction: "ANY", appCategoryId: "", walletId: "", autoRecord: true, recurring: false, expectedAmount: "", notes: "" };
+  }
   return {
     matchType: rule.matchType,
     matchValue: rule.matchValue,
@@ -216,134 +79,175 @@ function formValuesFromRule(rule: CounterpartyRuleRowData): RuleFormValues {
     walletId: rule.walletId ?? "",
     autoRecord: rule.autoRecord,
     recurring: rule.recurring,
-    expectedAmount: rule.expectedAmount != null ? String(rule.expectedAmount) : "",
+    expectedAmount: rule.expectedAmount != null ? amountToDigits(rule.expectedAmount) : "",
     notes: rule.notes ?? "",
   };
 }
 
-function defaultFormValues(rule?: CounterpartyRuleRowData): RuleFormValues {
-  return rule ? formValuesFromRule(rule) : emptyFormValues();
-}
-
-function RuleFormFields({
-  values,
-  categories,
-  walletOptions,
-  onChange,
-}: {
-  values: RuleFormValues;
-  categories: CategoryOption[];
-  walletOptions: WalletOption[];
-  onChange: (patch: Partial<RuleFormValues>) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-2 w-full">
-      <div className="flex items-center gap-2 flex-wrap">
-        <MatchTypeSelect
-          value={values.matchType}
-          onChange={(matchType) => onChange({ matchType })}
-        />
-        <div className="flex flex-col gap-0.5">
-          <Input
-            value={values.matchValue}
-            onChange={(e) => onChange({ matchValue: e.target.value })}
-            placeholder={MATCH_TYPE_HINTS[values.matchType]}
-            className="h-8 w-40 text-sm"
-            required
-          />
-          <span className="text-xs text-muted-foreground pl-1">
-            {MATCH_TYPE_HINTS[values.matchType]}
-          </span>
-        </div>
-        <DirectionSelect value={values.direction} onChange={(direction) => onChange({ direction })} />
-        <CategorySelect
-          value={values.appCategoryId}
-          categories={categories}
-          onChange={(appCategoryId) => onChange({ appCategoryId })}
-        />
-        <div className="flex flex-col gap-0.5">
-          <WalletSelect
-            value={values.walletId}
-            options={walletOptions}
-            onChange={(walletId) => onChange({ walletId })}
-            className="h-8 w-32"
-            invalid={values.walletId === ""}
-          />
-          {values.walletId === "" && (
-            <span className="text-xs text-destructive pl-1">Select a wallet to save</span>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center gap-4 flex-wrap">
-        <ToggleField
-          id="autoRecord"
-          label="Auto-record"
-          checked={values.autoRecord}
-          onChange={(autoRecord) => onChange({ autoRecord })}
-        />
-        <ToggleField
-          id="recurring"
-          label="Recurring"
-          checked={values.recurring}
-          onChange={(recurring) => onChange({ recurring })}
-        />
-        {values.recurring && (
-          <Input
-            type="number"
-            value={values.expectedAmount}
-            onChange={(e) => onChange({ expectedAmount: e.target.value })}
-            placeholder="Expected amount"
-            className="h-8 w-32 text-sm font-mono"
-          />
-        )}
-        <Input
-          value={values.notes}
-          onChange={(e) => onChange({ notes: e.target.value })}
-          placeholder="Notes (optional)"
-          className="h-8 w-40 text-sm"
-        />
-      </div>
-    </div>
-  );
-}
-
-// createCounterpartyRule/updateCounterpartyRule still require a `wallet`
-// name (resolveWalletFields writes it back for every other reader of that
-// legacy column), so the curated walletId's name is resolved here and sent
-// alongside it — walletId wins server-side and overwrites `wallet` anyway
-// (see resolve-wallet.ts), this just satisfies the required field.
+// The actions still require the legacy `wallet` name (resolveWalletFields
+// writes it back for older readers); walletId wins server-side anyway.
+// null (not undefined) for expectedAmount and notes: on edit, turning off
+// "recurring" or emptying the notes has to clear the stored value —
+// undefined left the old one in place.
 function buildPayload(values: RuleFormValues, walletOptions: WalletOption[]) {
   return {
     matchType: values.matchType,
-    matchValue: values.matchValue,
+    matchValue: values.matchValue.trim(),
     direction: values.direction,
     appCategoryId: values.appCategoryId,
     wallet: walletOptions.find((w) => w.id === values.walletId)?.name ?? "",
     walletId: values.walletId || undefined,
     autoRecord: values.autoRecord,
     recurring: values.recurring,
-    // Only submit expectedAmount when recurring is on — the input is hidden
-    // (and stale) once recurring is toggled off, so never trust leftover
-    // local state for it here.
-    expectedAmount:
-      values.recurring && values.expectedAmount ? parseFloat(values.expectedAmount) : undefined,
-    notes: values.notes || undefined,
+    expectedAmount: values.recurring && values.expectedAmount ? parseFloat(values.expectedAmount) : null,
+    notes: values.notes.trim() || null,
   };
 }
 
-// Click-to-open edit dialog (full form + a confirm-delete step) — mirrors
-// category-list.tsx's CategoryEditDialog and tag-list.tsx's TagEditDialog.
-// Replaces the previous inline-edit-in-row state and hover-reveal edit/
-// delete icons, which never showed on touch devices (no hover state) —
-// every other settings list in this app already uses "tap the row to edit".
-function RuleEditDialog({
+type Patch = (patch: Partial<RuleFormValues>) => void;
+
+function MatchFields({ values, onChange, disabled }: { values: RuleFormValues; onChange: Patch; disabled: boolean }) {
+  const field = MATCH_VALUE_FIELD[values.matchType];
+  return (
+    <>
+      <Field label="Match by">
+        <SegmentedControl ariaLabel="Match by" value={values.matchType} onChange={(matchType) => onChange({ matchType })} options={MATCH_TYPE_OPTIONS} />
+      </Field>
+      <Field label={field.label} htmlFor="rule-value" hint={field.hint}>
+        <Input
+          id="rule-value"
+          value={values.matchValue}
+          onChange={(e) => onChange({ matchValue: e.target.value })}
+          placeholder={field.placeholder}
+          inputMode={values.matchType === "ACCOUNT" ? "numeric" : undefined}
+          className={values.matchType === "ACCOUNT" ? "font-mono" : undefined}
+          required
+          disabled={disabled}
+        />
+      </Field>
+      <Field label="Applies to">
+        <SegmentedControl ariaLabel="Applies to" value={values.direction} onChange={(direction) => onChange({ direction })} options={DIRECTION_OPTIONS} />
+      </Field>
+    </>
+  );
+}
+
+function RouteFields({
+  values,
+  categories,
+  walletOptions,
+  onChange,
+  disabled,
+}: {
+  values: RuleFormValues;
+  categories: CategoryOption[];
+  walletOptions: WalletOption[];
+  onChange: Patch;
+  disabled: boolean;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <Field label="Category">
+        <OptionSelect
+          ariaLabel="Category"
+          value={values.appCategoryId || null}
+          onChange={(v) => onChange({ appCategoryId: v ?? "" })}
+          placeholder="Pick a category…"
+          options={categorySelectOptions(categories.filter((c) => !c.isTransfer))}
+          disabled={disabled}
+        />
+      </Field>
+      <Field label="Wallet">
+        <OptionSelect
+          ariaLabel="Wallet"
+          value={values.walletId || null}
+          onChange={(v) => onChange({ walletId: v ?? "" })}
+          placeholder="Pick a wallet…"
+          options={walletOptions.map((w) => ({ value: w.id, label: w.name }))}
+          disabled={disabled}
+        />
+      </Field>
+    </div>
+  );
+}
+
+function BehaviourFields({ values, onChange, disabled }: { values: RuleFormValues; onChange: Patch; disabled: boolean }) {
+  return (
+    <div className="flex flex-col">
+      <CheckField
+        id="rule-auto"
+        label="Auto-record"
+        hint="Matching messages are saved right away instead of waiting for review."
+        checked={values.autoRecord}
+        onChange={(autoRecord) => onChange({ autoRecord })}
+        disabled={disabled}
+      />
+      <CheckField
+        id="rule-recurring"
+        label="Recurring"
+        checked={values.recurring}
+        onChange={(recurring) => onChange({ recurring })}
+        disabled={disabled}
+      />
+      {values.recurring && (
+        <Field label="Expected amount" htmlFor="rule-expected" optional className="mt-2">
+          <MoneyInput id="rule-expected" value={values.expectedAmount} onValueChange={(expectedAmount) => onChange({ expectedAmount })} disabled={disabled} />
+        </Field>
+      )}
+    </div>
+  );
+}
+
+function footerHint(error: string | null, pending: boolean, missing: string): React.ReactNode {
+  if (error) return <span className={TONE_CLASSES.danger.text}>{error}</span>;
+  return pending ? "" : missing;
+}
+
+function DeleteRuleStep({ rule, open, onClose, onBack }: { rule: CounterpartyRuleRowData; open: boolean; onClose: () => void; onBack: () => void }) {
+  const [pending, startTransition] = useTransition();
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title="Delete rule?"
+      footer={
+        <FormFooter>
+          <Button type="button" variant="outline" onClick={onBack} autoFocus>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                await deleteCounterpartyRule(rule.id);
+                onClose();
+              })
+            }
+          >
+            Confirm delete
+          </Button>
+        </FormFooter>
+      }
+    >
+      <p className="text-sm text-muted-foreground">
+        Delete this rule for &quot;{rule.matchValue}&quot;? Future matching messages go back to review instead of being
+        routed automatically.
+      </p>
+    </FormDialog>
+  );
+}
+
+/** New rule, or edit / delete one (`rule`). */
+function RuleDialog({
   rule,
   categories,
   walletOptions,
   open,
   onClose,
 }: {
-  rule: CounterpartyRuleRowData;
+  rule?: CounterpartyRuleRowData;
   categories: CategoryOption[];
   walletOptions: WalletOption[];
   open: boolean;
@@ -351,217 +255,115 @@ function RuleEditDialog({
 }) {
   const [values, setValues] = useState<RuleFormValues>(() => defaultFormValues(rule));
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  // Reset whenever the dialog (re)opens.
   const [lastOpen, setLastOpen] = useState(open);
   if (open !== lastOpen) {
     setLastOpen(open);
     if (open) {
       setValues(defaultFormValues(rule));
+      setError(null);
       setConfirmingDelete(false);
     }
   }
 
-  function handlePatch(patch: Partial<RuleFormValues>) {
-    setValues((v) => ({ ...v, ...patch }));
-  }
+  const onChange: Patch = (patch) => setValues((v) => ({ ...v, ...patch }));
+  const missing = ruleMissingHint(values);
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (missing) return;
+    setError(null);
+    const payload = buildPayload(values, walletOptions);
     startTransition(async () => {
-      await updateCounterpartyRule(rule.id, buildPayload(values, walletOptions));
-      onClose();
+      try {
+        if (rule) await updateCounterpartyRule(rule.id, payload);
+        else await createCounterpartyRule(payload);
+        onClose();
+      } catch {
+        setError("Couldn't save the rule. Try again.");
+      }
     });
   }
 
-  function handleDelete() {
-    startTransition(async () => {
-      await deleteCounterpartyRule(rule.id);
-      onClose();
-    });
+  if (confirmingDelete && rule) {
+    return <DeleteRuleStep rule={rule} open={open} onClose={onClose} onBack={() => setConfirmingDelete(false)} />;
   }
 
-  // A rule whose walletId hasn't been backfilled yet has "" here — mirror
-  // transaction-row.tsx's EditWalletSelect saveDisabled guard rather than
-  // letting an empty walletId reach updateCounterpartyRule (buildPayload
-  // would resolve an empty `wallet` name for it).
-  const saveDisabled = pending || values.walletId === "";
-
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{confirmingDelete ? "Delete rule?" : "Edit rule"}</DialogTitle>
-        </DialogHeader>
-        {confirmingDelete ? (
-          <div className="space-y-4">
-            <p className="text-sm text-destructive">
-              Delete this rule for &quot;{rule.matchValue}&quot;? Future matching transactions will no
-              longer be routed automatically.
-            </p>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)} autoFocus>
-                Cancel
-              </Button>
-              <Button type="button" variant="destructive" disabled={pending} onClick={handleDelete}>
-                Confirm delete
-              </Button>
-            </DialogFooter>
-          </div>
-        ) : (
-          <form onSubmit={handleSave} className="space-y-4">
-            <RuleFormFields
-              values={values}
-              categories={categories}
-              walletOptions={walletOptions}
-              onChange={handlePatch}
-            />
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="destructive"
-                className="sm:mr-auto"
-                disabled={pending}
-                onClick={() => setConfirmingDelete(true)}
-              >
-                Delete
-              </Button>
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={saveDisabled}>
-                Save rule
-              </Button>
-            </DialogFooter>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={rule ? "Edit rule" : "New rule"}
+      size="lg"
+      onSubmit={handleSave}
+      footer={
+        <FormFooter hint={footerHint(error, pending, missing)}>
+          {rule && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive sm:mr-auto"
+              disabled={pending}
+              onClick={() => setConfirmingDelete(true)}
+            >
+              Delete
+            </Button>
+          )}
+          <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={pending || !!missing}>
+            {pending ? "Saving…" : rule ? "Save rule" : "Create rule"}
+          </Button>
+        </FormFooter>
+      }
+    >
+      <MatchFields values={values} onChange={onChange} disabled={pending} />
+      <RouteFields values={values} categories={categories} walletOptions={walletOptions} onChange={onChange} disabled={pending} />
+      <BehaviourFields values={values} onChange={onChange} disabled={pending} />
+      <Field label="Notes" htmlFor="rule-notes" optional>
+        <Input id="rule-notes" value={values.notes} onChange={(e) => onChange({ notes: e.target.value })} placeholder="Who this is, why it's routed here…" disabled={pending} />
+      </Field>
+    </FormDialog>
   );
 }
 
-function FlagBadge({ className, children }: { className: string; children: React.ReactNode }) {
-  return (
-    <span className={cn("inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium", className)}>
-      {children}
-    </span>
-  );
-}
+// One markup for phone and desktop. Phones: match + type on the first line,
+// category → wallet and flags below. sm+: columns.
+const ROW_GRID = "grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 px-4 py-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_9rem_6.5rem]";
 
-// Six data columns: Type | Match (+ direction) | Category | Wallet | Flags |
-// Activity. Narrower than that on mobile, columns would either overflow the
-// card or squeeze into each other — the RuleList wrapper scrolls
-// horizontally instead, mirroring category-list.tsx's ROW_GRID treatment.
-const ROW_GRID = "grid grid-cols-[6.5rem_1fr_8rem_8rem_9rem_8rem] items-center gap-3 px-4 py-3";
-
-function RuleRow({
-  rule,
-  categories,
-  walletOptions,
-}: {
-  rule: CounterpartyRuleRowData;
-  categories: CategoryOption[];
-  walletOptions: WalletOption[];
-}) {
+function RuleRow({ rule, categories, walletOptions }: { rule: CounterpartyRuleRowData; categories: CategoryOption[]; walletOptions: WalletOption[] }) {
   const [editOpen, setEditOpen] = useState(false);
-
+  const category = categories.find((c) => c.id === rule.appCategoryId);
   return (
-    <>
-      <button
-        type="button"
-        aria-label="Edit rule"
-        onClick={() => setEditOpen(true)}
-        className={cn(
-          ROW_GRID,
-          "w-full text-left border-b border-border last:border-0 transition-colors hover:bg-muted/20"
-        )}
-      >
-        <span className="inline-flex w-fit items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-          {MATCH_TYPE_LABELS[rule.matchType]}
+    <li>
+      <button type="button" aria-label="Edit rule" onClick={() => setEditOpen(true)} className={cn(ROW_GRID, "w-full text-left transition-colors hover:bg-muted/20")}>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium">{rule.matchValue}</span>
+          <span className="block text-xs text-muted-foreground">
+            {MATCH_TYPE_LABELS[rule.matchType]} · {DIRECTION_LABELS[rule.direction]}
+          </span>
         </span>
-
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium">{rule.matchValue}</div>
-          <div className="text-xs text-muted-foreground">{DIRECTION_LABELS[rule.direction]}</div>
-        </div>
-
-        <span className="truncate text-sm">{rule.appCategoryName}</span>
-
-        <span className="truncate text-sm text-muted-foreground">· {rule.wallet}</span>
-
-        <div className="flex flex-wrap gap-1">
-          {rule.autoRecord && (
-            <FlagBadge className={TONE_CLASSES.info.soft}>Auto-record</FlagBadge>
-          )}
-          {rule.recurring && (
-            <FlagBadge className={TONE_CLASSES.neutral.soft}>Recurring</FlagBadge>
-          )}
-        </div>
-
-        <div className="text-right text-xs text-muted-foreground">
-          <div>
+        <span className="flex min-w-0 items-center gap-1.5 text-sm max-sm:col-span-2 max-sm:row-start-2">
+          <CategoryIconTile category={category ?? { name: rule.appCategoryName }} />
+          <span className="truncate">{rule.appCategoryName}</span>
+          <span className="truncate text-muted-foreground">· {rule.wallet}</span>
+        </span>
+        <span className="flex flex-wrap gap-1 max-sm:col-span-2 max-sm:row-start-3">
+          {rule.autoRecord && <StatusChip tone="info">Auto-record</StatusChip>}
+          {rule.recurring && <StatusChip tone="neutral">Recurring</StatusChip>}
+        </span>
+        <span className="text-right text-xs text-muted-foreground max-sm:col-start-2 max-sm:row-start-1">
+          <span className="block">
             {rule.matchCount} match{rule.matchCount !== 1 ? "es" : ""}
-          </div>
-          <div>{formatLastMatched(rule.lastMatchedAt)}</div>
-        </div>
+          </span>
+          <span className="block">{formatLastMatched(rule.lastMatchedAt)}</span>
+        </span>
       </button>
-      <RuleEditDialog
-        rule={rule}
-        categories={categories}
-        walletOptions={walletOptions}
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-      />
-    </>
-  );
-}
-
-function AddRuleRow({
-  categories,
-  walletOptions,
-  onDone,
-}: {
-  categories: CategoryOption[];
-  walletOptions: WalletOption[];
-  onDone: () => void;
-}) {
-  const [values, setValues] = useState<RuleFormValues>(() => defaultFormValues());
-  const [pending, startTransition] = useTransition();
-
-  function handlePatch(patch: Partial<RuleFormValues>) {
-    setValues((v) => ({ ...v, ...patch }));
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    startTransition(async () => {
-      await createCounterpartyRule(buildPayload(values, walletOptions));
-      onDone();
-    });
-  }
-
-  const submitDisabled = pending || values.walletId === "";
-
-  return (
-    <form onSubmit={handleSubmit} className="flex items-start justify-between gap-3 p-4 border-t border-border">
-      <RuleFormFields values={values} categories={categories} walletOptions={walletOptions} onChange={handlePatch} />
-      <div className="flex gap-1 shrink-0 pt-1">
-        <Button type="submit" size="icon" className="size-8" disabled={submitDisabled} aria-label="Create rule">
-          <Check className="size-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          aria-label="Cancel"
-          onClick={onDone}
-        >
-          <X className="size-4" />
-        </Button>
-      </div>
-    </form>
+      <RuleDialog rule={rule} categories={categories} walletOptions={walletOptions} open={editOpen} onClose={() => setEditOpen(false)} />
+    </li>
   );
 }
 
@@ -577,47 +379,28 @@ export function RuleList({
   const [adding, setAdding] = useState(false);
 
   return (
-    <div className="rounded-xl border border-border overflow-hidden">
-      <div className="overflow-x-auto">
-        <div className="min-w-3xl">
-          {rules.length > 0 && (
-            <div
-              className={cn(
-                ROW_GRID,
-                "border-b border-border/60 bg-muted/20 py-2 text-xs text-muted-foreground uppercase tracking-wide"
-              )}
-            >
-              <span>Type</span>
-              <span>Match</span>
-              <span>Category</span>
-              <span>Wallet</span>
-              <span>Flags</span>
-              <span className="text-right">Activity</span>
-            </div>
-          )}
-
+    <div className="flex flex-col gap-3">
+      <div className="overflow-hidden rounded-2xl border border-border/60 bg-card">
+        {rules.length > 0 && (
+          <div className={cn(ROW_GRID, "hidden border-b border-border/60 py-2 text-xs tracking-wide text-muted-foreground uppercase sm:grid")}>
+            <span>Match</span>
+            <span>Routes to</span>
+            <span>Flags</span>
+            <span className="text-right">Activity</span>
+          </div>
+        )}
+        <ul className="divide-y divide-border/40">
           {rules.map((rule) => (
             <RuleRow key={rule.id} rule={rule} categories={categories} walletOptions={walletOptions} />
           ))}
-
-          {rules.length === 0 && !adding && (
-            <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-              No rules yet. Add one below.
-            </div>
-          )}
-
-          {adding && <AddRuleRow categories={categories} walletOptions={walletOptions} onDone={() => setAdding(false)} />}
-        </div>
+          {rules.length === 0 && <li className="px-4 py-6 text-center text-sm text-muted-foreground">No rules yet.</li>}
+        </ul>
       </div>
-
-      {!adding && (
-        <div className="p-4 border-t border-border">
-          <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-            <Plus className="size-5" />
-            Add rule
-          </Button>
-        </div>
-      )}
+      <Button variant="outline" size="sm" className="w-fit" onClick={() => setAdding(true)}>
+        <Plus className="size-4" />
+        Add rule
+      </Button>
+      <RuleDialog categories={categories} walletOptions={walletOptions} open={adding} onClose={() => setAdding(false)} />
     </div>
   );
 }

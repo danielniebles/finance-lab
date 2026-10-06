@@ -44,8 +44,8 @@ export async function createCounterpartyRule(data: {
   walletId?: string;
   autoRecord?: boolean;
   recurring?: boolean;
-  expectedAmount?: number;
-  notes?: string;
+  expectedAmount?: number | null;
+  notes?: string | null;
   tagNames?: string[];
 }) {
   const walletFields = await resolveWalletFields({ wallet: data.wallet, walletId: data.walletId });

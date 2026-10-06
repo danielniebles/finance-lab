@@ -1,291 +1,213 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createTag, updateTag, deleteTag } from "@/lib/actions/tags";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
-import { Plus, Check, X } from "lucide-react";
+import { Field, FormDialog, FormFooter, OptionSelect } from "@/components/ds";
+import { CategoryIconTile, categorySelectOptions } from "@/components/shared/category-option";
+import { createTag, updateTag, deleteTag } from "@/lib/actions/tags";
+import { TONE_CLASSES } from "@/lib/status";
 import type { TagSettingsRow } from "@/lib/queries/tags";
 
-type CategoryOption = { id: string; name: string };
+type CategoryOption = { id: string; name: string; icon?: string | null; color?: string | null; isTransfer?: boolean };
 
-const NONE_CATEGORY = "__none__";
+type TagFormValues = { name: string; defaultAppCategoryId: string | null };
 
-function DefaultCategorySelect({
-  value,
-  categories,
-  onChange,
-  className = "h-8 w-44",
-}: {
-  value: string;
-  categories: CategoryOption[];
-  onChange: (v: string) => void;
-  className?: string;
-}) {
-  const selectedName = categories.find((c) => c.id === value)?.name ?? "No default";
+function initial(tag?: TagSettingsRow): TagFormValues {
+  return { name: tag?.name ?? "", defaultAppCategoryId: tag?.defaultAppCategoryId ?? null };
+}
+
+function errorHint(error: string | null): React.ReactNode {
+  return error ? <span className={TONE_CLASSES.danger.text}>{error}</span> : undefined;
+}
+
+function DeleteTagStep({ tag, open, onClose, onBack }: { tag: TagSettingsRow; open: boolean; onClose: () => void; onBack: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const n = tag.transactionCount;
   return (
-    <Select value={value || NONE_CATEGORY} onValueChange={(v) => v && onChange(v === NONE_CATEGORY ? "" : v)}>
-      <SelectTrigger className={className} aria-label="Default category">
-        <span className="text-sm truncate">{value ? selectedName : "No default"}</span>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={NONE_CATEGORY}>No default</SelectItem>
-        {categories.map((c) => (
-          <SelectItem key={c.id} value={c.id}>
-            {c.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={`Delete #${tag.name}?`}
+      footer={
+        <FormFooter>
+          <Button type="button" variant="outline" onClick={onBack} autoFocus>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                await deleteTag(tag.id);
+                onClose();
+              })
+            }
+          >
+            Delete tag
+          </Button>
+        </FormFooter>
+      }
+    >
+      <p className="text-sm text-muted-foreground">
+        {n > 0 ? `It comes off ${n} ${n === 1 ? "transaction" : "transactions"}; the transactions stay.` : "No transactions use it."}
+      </p>
+    </FormDialog>
   );
 }
 
-type TagFormValues = { name: string; defaultAppCategoryId: string };
-
-function formValuesFromTag(tag: TagSettingsRow): TagFormValues {
-  return { name: tag.name, defaultAppCategoryId: tag.defaultAppCategoryId ?? "" };
-}
-
-// Click-to-open edit dialog (name + default category + a confirm-delete
-// step) — mirrors category-list.tsx's CategoryEditDialog. Replaces an
-// earlier hover-reveal edit/delete affordance that never showed on mobile
-// (no hover state on touch), which is why every other settings list in this
-// app already uses "tap the row to edit" instead.
-function TagEditDialog({
+/** New tag, or rename / set the default category / delete one (`tag`). */
+function TagDialog({
   tag,
   categories,
   open,
   onClose,
 }: {
-  tag: TagSettingsRow;
+  tag?: TagSettingsRow;
   categories: CategoryOption[];
   open: boolean;
   onClose: () => void;
 }) {
-  const [values, setValues] = useState<TagFormValues>(() => formValuesFromTag(tag));
+  const [values, setValues] = useState<TagFormValues>(() => initial(tag));
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  // Reset whenever the dialog (re)opens.
   const [lastOpen, setLastOpen] = useState(open);
   if (open !== lastOpen) {
     setLastOpen(open);
     if (open) {
-      setValues(formValuesFromTag(tag));
+      setValues(initial(tag));
+      setError(null);
       setConfirmingDelete(false);
     }
   }
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (!values.name.trim()) return;
+    setError(null);
     startTransition(async () => {
-      await updateTag(tag.id, {
-        name: values.name,
-        defaultAppCategoryId: values.defaultAppCategoryId || null,
-      });
-      onClose();
+      try {
+        if (tag) await updateTag(tag.id, values);
+        else await createTag(values);
+        onClose();
+      } catch {
+        setError("Couldn't save. Is there already a tag with that name?");
+      }
     });
   }
 
-  function handleDelete() {
-    startTransition(async () => {
-      await deleteTag(tag.id);
-      onClose();
-    });
+  if (confirmingDelete && tag) {
+    return <DeleteTagStep tag={tag} open={open} onClose={onClose} onBack={() => setConfirmingDelete(false)} />;
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{confirmingDelete ? "Delete tag?" : "Edit tag"}</DialogTitle>
-        </DialogHeader>
-        {confirmingDelete ? (
-          <div className="space-y-4">
-            <p className="text-sm text-destructive">
-              Delete &quot;#{tag.name}&quot;? It will be removed from every transaction.
-            </p>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)} autoFocus>
-                Cancel
-              </Button>
-              <Button type="button" variant="destructive" disabled={pending} onClick={handleDelete}>
-                Confirm delete
-              </Button>
-            </DialogFooter>
-          </div>
-        ) : (
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="tag-name">Name</Label>
-              <Input
-                id="tag-name"
-                value={values.name}
-                onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
-                autoFocus
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Default category</Label>
-              <DefaultCategorySelect
-                value={values.defaultAppCategoryId}
-                categories={categories}
-                onChange={(v) => setValues((val) => ({ ...val, defaultAppCategoryId: v }))}
-                className="h-8 w-full"
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="destructive"
-                className="sm:mr-auto"
-                disabled={pending}
-                onClick={() => setConfirmingDelete(true)}
-              >
-                Delete
-              </Button>
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={pending}>
-                Save changes
-              </Button>
-            </DialogFooter>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={tag ? "Edit tag" : "New tag"}
+      onSubmit={handleSave}
+      footer={
+        <FormFooter hint={errorHint(error)}>
+          {tag && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive sm:mr-auto"
+              disabled={pending}
+              onClick={() => setConfirmingDelete(true)}
+            >
+              Delete
+            </Button>
+          )}
+          <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={pending || !values.name.trim()}>
+            {pending ? "Saving…" : tag ? "Save changes" : "Add tag"}
+          </Button>
+        </FormFooter>
+      }
+    >
+      <Field label="Name" htmlFor="tag-name" hint="Saved in lowercase, without the #.">
+        <div className="relative">
+          <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">#</span>
+          <Input
+            id="tag-name"
+            value={values.name}
+            onChange={(e) => setValues((v) => ({ ...v, name: e.target.value.replace(/^#+/, "") }))}
+            placeholder="uber"
+            className="pl-7"
+            autoFocus
+            required
+            disabled={pending}
+          />
+        </div>
+      </Field>
+      <Field label="Default category" optional hint="Lets the Advisor file a message with this #tag straight into this category.">
+        <OptionSelect
+          ariaLabel="Default category"
+          value={values.defaultAppCategoryId}
+          onChange={(v) => setValues((val) => ({ ...val, defaultAppCategoryId: v }))}
+          noneLabel="No default"
+          options={categorySelectOptions(categories.filter((c) => !c.isTransfer))}
+          disabled={pending}
+        />
+      </Field>
+    </FormDialog>
   );
 }
 
-function TagRow({
-  tag,
-  categories,
-}: {
-  tag: TagSettingsRow;
-  categories: CategoryOption[];
-}) {
+function TagRow({ tag, categories }: { tag: TagSettingsRow; categories: CategoryOption[] }) {
   const [open, setOpen] = useState(false);
-
+  const category = categories.find((c) => c.id === tag.defaultAppCategoryId);
   return (
-    <>
+    <li>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full items-center gap-3 border-b border-border px-4 py-3 text-left transition-colors last:border-0 hover:bg-muted/20"
+        className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/20"
       >
-        <span className="inline-flex w-fit shrink-0 items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-          #{tag.name}
-        </span>
+        <span className="inline-flex w-fit shrink-0 items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">#{tag.name}</span>
         {tag.defaultAppCategoryName && (
-          <>
-            <span className="text-muted-foreground text-sm">→</span>
-            <span className="text-sm truncate">{tag.defaultAppCategoryName}</span>
-          </>
+          <span className="flex min-w-0 items-center gap-1.5 text-sm">
+            <span className="text-muted-foreground" aria-hidden>
+              →
+            </span>
+            <CategoryIconTile category={category ?? { name: tag.defaultAppCategoryName }} />
+            <span className="truncate">{tag.defaultAppCategoryName}</span>
+          </span>
         )}
-        <span className="text-xs text-muted-foreground ml-auto shrink-0">
-          {tag.transactionCount} transaction{tag.transactionCount !== 1 ? "s" : ""}
+        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+          {tag.transactionCount} <span className="max-sm:hidden">transaction{tag.transactionCount !== 1 ? "s" : ""}</span>
         </span>
       </button>
-      <TagEditDialog tag={tag} categories={categories} open={open} onClose={() => setOpen(false)} />
-    </>
+      <TagDialog tag={tag} categories={categories} open={open} onClose={() => setOpen(false)} />
+    </li>
   );
 }
 
-function AddTagRow({
-  categories,
-  onDone,
-}: {
-  categories: CategoryOption[];
-  onDone: () => void;
-}) {
-  const [values, setValues] = useState<TagFormValues>({ name: "", defaultAppCategoryId: "" });
-  const [pending, startTransition] = useTransition();
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    startTransition(async () => {
-      await createTag({
-        name: values.name,
-        defaultAppCategoryId: values.defaultAppCategoryId || null,
-      });
-      onDone();
-    });
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-2 p-4 border-t border-border">
-      <Input
-        value={values.name}
-        onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
-        placeholder="e.g. uber"
-        className="h-8 w-40 text-sm"
-        autoFocus
-        required
-      />
-      <DefaultCategorySelect
-        value={values.defaultAppCategoryId}
-        categories={categories}
-        onChange={(v) => setValues((val) => ({ ...val, defaultAppCategoryId: v }))}
-      />
-      <div className="flex gap-1 ml-auto">
-        <Button type="submit" size="icon" className="size-8" disabled={pending} aria-label="Create tag">
-          <Check className="size-4" />
-        </Button>
-        <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Cancel" onClick={onDone}>
-          <X className="size-4" />
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-export function TagList({
-  tags,
-  categories,
-}: {
-  tags: TagSettingsRow[];
-  categories: CategoryOption[];
-}) {
+export function TagList({ tags, categories }: { tags: TagSettingsRow[]; categories: CategoryOption[] }) {
   const [adding, setAdding] = useState(false);
 
   return (
-    <div className="rounded-xl border border-border overflow-hidden">
-      {tags.map((tag) => (
-        <TagRow key={tag.id} tag={tag} categories={categories} />
-      ))}
-
-      {tags.length === 0 && !adding && (
-        <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-          No tags yet. Add one below.
-        </div>
-      )}
-
-      {adding ? (
-        <AddTagRow categories={categories} onDone={() => setAdding(false)} />
-      ) : (
-        <div className="p-4 border-t border-border">
-          <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-            <Plus className="size-5" />
-            Add tag
-          </Button>
-        </div>
-      )}
+    <div className="flex flex-col gap-3">
+      <div className="overflow-hidden rounded-2xl border border-border/60 bg-card">
+        <ul className="divide-y divide-border/40">
+          {tags.map((tag) => (
+            <TagRow key={tag.id} tag={tag} categories={categories} />
+          ))}
+          {tags.length === 0 && <li className="px-4 py-6 text-center text-sm text-muted-foreground">No tags yet.</li>}
+        </ul>
+      </div>
+      <Button variant="outline" size="sm" className="w-fit" onClick={() => setAdding(true)}>
+        <Plus className="size-4" />
+        Add tag
+      </Button>
+      <TagDialog categories={categories} open={adding} onClose={() => setAdding(false)} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { BudgetType } from "@/generated/prisma";
 import { revalidatePath } from "next/cache";
 import { CATEGORY_ICON_KEYS, CATEGORY_COLOR_KEYS } from "@/lib/category-keys";
+import { categoryDeleteBlocker } from "@/lib/settings-forms";
 
 const CATEGORIES_PATH = "/settings/categories";
 
@@ -53,9 +54,25 @@ export async function updateAppCategoryStyle(
   revalidatePath("/expenses");
 }
 
-export async function deleteAppCategory(id: string) {
+/**
+ * Budget items go with the category (cascade) and tags just lose their
+ * default. Transactions, rules, mappings and recurring expenses don't: while
+ * any point at it the database refuses, so this checks first and says what's
+ * in the way. Returns `{ error }` instead of throwing, because thrown
+ * messages are hidden from the client in production.
+ */
+export async function deleteAppCategory(id: string): Promise<{ error?: string }> {
+  const [transactions, rules, mappings, recurring] = await Promise.all([
+    db.transaction.count({ where: { appCategoryId: id } }),
+    db.counterpartyRule.count({ where: { appCategoryId: id } }),
+    db.categoryMapping.count({ where: { appCategoryId: id } }),
+    db.recurringExpense.count({ where: { appCategoryId: id } }),
+  ]);
+  const blocker = categoryDeleteBlocker({ transactions, rules, mappings, recurring });
+  if (blocker) return { error: blocker };
   await db.appCategory.delete({ where: { id } });
   revalidatePath(CATEGORIES_PATH);
+  return {};
 }
 
 export async function createBudgetItem(

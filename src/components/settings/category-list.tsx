@@ -1,69 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import {
-  createAppCategory,
-  updateAppCategory,
-  updateAppCategoryStyle,
-  deleteAppCategory,
-  createBudgetItem,
-  updateBudgetItem,
-  deleteBudgetItem,
-} from "@/lib/actions/categories";
-import { BudgetType } from "@/generated/prisma";
+import { useState } from "react";
+import { ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Pencil, Trash2, Plus, Check, X, ChevronDown } from "lucide-react";
-import { formatCOP } from "@/lib/format";
+import { Money, SegmentedControl, StatusChip } from "@/components/ds";
+import { resolveEffectiveCategoryStyle } from "@/lib/category-style";
+import type { Tone } from "@/lib/status";
 import { cn } from "@/lib/utils";
-import {
-  ICON_REGISTRY,
-  CATEGORY_ICON_KEYS,
-  CATEGORY_COLOR_KEYS,
-  CATEGORY_SOLID_SWATCH,
-  resolveEffectiveCategoryStyle,
-  getAutoCategoryKeys,
-  categoryPaletteClasses,
-  categoryIconDisplayName,
-  categoryColorDisplayName,
-  type CategoryPalette,
-  type CategoryColorKey,
-} from "@/lib/category-style";
-import { TONE_CLASSES } from "@/lib/status";
-
-type BudgetItemData = {
-  id: string;
-  name: string;
-  amount: number;
-  budgetType: BudgetType;
-};
-
-type Category = {
-  id: string;
-  name: string;
-  // Style overrides (Category icon & color picker). Null = auto-derive from
-  // name via getCategoryStyle(); non-null = explicit override. Populated
-  // automatically by settings/categories/page.tsx's findMany — Prisma's
-  // `include` only adds relations, it doesn't restrict scalar selection.
-  icon: string | null;
-  color: string | null;
-  budgetItems: BudgetItemData[];
-  _count: { mappings: number };
-};
+import { BudgetItemDialog } from "./categories/budget-item-dialog";
+import { CategoryDialog } from "./categories/category-dialog";
+import { CategoryStyleDialog } from "./categories/category-style-dialog";
+import type { BudgetItemData, SettingsCategory } from "./categories/types";
 
 type EffectiveType = "FIXED" | "VARIABLE" | "MIXED";
 
@@ -75,243 +22,34 @@ function getEffectiveType(items: BudgetItemData[]): EffectiveType {
   return hasFixed ? "FIXED" : "VARIABLE";
 }
 
-function TypeBadge({ type }: { type: EffectiveType | BudgetType }) {
-  const map: Record<string, string> = {
-    FIXED: TONE_CLASSES.info.soft,
-    VARIABLE: TONE_CLASSES.neutral.soft,
-    MIXED: TONE_CLASSES.caution.soft,
-  };
-  const label: Record<string, string> = {
-    FIXED: "Fixed",
-    VARIABLE: "Variable",
-    MIXED: "Mixed",
-  };
-  return (
-    <span
-      className={`inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium ${map[type]}`}
-    >
-      {label[type]}
-    </span>
-  );
+const TYPE_CHIP: Record<EffectiveType, { tone: Tone; label: string }> = {
+  FIXED: { tone: "info", label: "Fixed" },
+  VARIABLE: { tone: "neutral", label: "Variable" },
+  MIXED: { tone: "caution", label: "Mixed" },
+};
+
+function TypeChip({ type }: { type: EffectiveType }) {
+  return <StatusChip tone={TYPE_CHIP[type].tone}>{TYPE_CHIP[type].label}</StatusChip>;
 }
 
-function BudgetTypeSelect({
-  value,
-  onChange,
-}: {
-  value: BudgetType;
-  onChange: (v: BudgetType) => void;
-}) {
-  return (
-    <Select value={value} onValueChange={(v) => v && onChange(v as BudgetType)}>
-      <SelectTrigger className="h-8 w-28">
-        <span className="text-sm">{value === "FIXED" ? "Fixed" : "Variable"}</span>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="FIXED">Fixed</SelectItem>
-        <SelectItem value="VARIABLE">Variable</SelectItem>
-      </SelectContent>
-    </Select>
-  );
-}
+const total = (items: BudgetItemData[]) => items.reduce((s, i) => s + i.amount, 0);
 
-function BudgetItemRow({
-  item,
-  onSaved,
-}: {
-  item: BudgetItemData;
-  onSaved?: () => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(item.name);
-  const [amount, setAmount] = useState(String(item.amount));
-  const [budgetType, setBudgetType] = useState<BudgetType>(item.budgetType);
-  const [pending, startTransition] = useTransition();
-
-  function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    startTransition(async () => {
-      await updateBudgetItem(item.id, {
-        name: name.trim(),
-        amount: parseFloat(amount),
-        budgetType,
-      });
-      setEditing(false);
-      onSaved?.();
-    });
-  }
-
-  function handleDelete() {
-    if (!confirm(`Delete budget item "${item.name}"?`)) return;
-    startTransition(async () => {
-      await deleteBudgetItem(item.id);
-    });
-  }
-
-  if (editing) {
-    return (
-      <form onSubmit={handleSave} className="flex items-center gap-2 py-2 pl-8 pr-3">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="h-7 w-32 text-xs"
-          required
-        />
-        <Input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="h-7 w-28 text-xs font-mono"
-          min={0}
-          required
-        />
-        <BudgetTypeSelect value={budgetType} onChange={setBudgetType} />
-        <Button type="submit" size="icon" className="size-7" disabled={pending}>
-          <Check className="size-3.5" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-7"
-          onClick={() => setEditing(false)}
-        >
-          <X className="size-3.5" />
-        </Button>
-      </form>
-    );
-  }
-
-  return (
-    <div className="flex items-center justify-between py-2 pl-8 pr-3 group hover:bg-muted/20">
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-muted-foreground w-2">·</span>
-        <span className="text-sm">{item.name}</span>
-        <TypeBadge type={item.budgetType} />
-        <span className="font-mono text-sm text-muted-foreground">
-          {formatCOP(item.amount)}
-        </span>
-      </div>
-      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-6"
-          onClick={() => setEditing(true)}
-        >
-          <Pencil className="size-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-6 text-destructive hover:text-destructive"
-          onClick={handleDelete}
-          disabled={pending}
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function AddBudgetItemRow({
-  categoryId,
-  onDone,
-}: {
-  categoryId: string;
-  onDone: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [amount, setAmount] = useState("");
-  const [budgetType, setBudgetType] = useState<BudgetType>("FIXED");
-  const [pending, startTransition] = useTransition();
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    startTransition(async () => {
-      await createBudgetItem(categoryId, {
-        name: name.trim(),
-        amount: parseFloat(amount),
-        budgetType,
-      });
-      onDone();
-    });
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-2 py-2 pl-8 pr-3 border-t border-border/50">
-      <Input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="e.g. Rent"
-        className="h-7 w-32 text-xs"
-        autoFocus
-        required
-      />
-      <Input
-        type="number"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        placeholder="Amount"
-        className="h-7 w-28 text-xs font-mono"
-        min={0}
-        required
-      />
-      <BudgetTypeSelect value={budgetType} onChange={setBudgetType} />
-      <Button type="submit" size="icon" className="size-7" disabled={pending}>
-        <Check className="size-3.5" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-7"
-        onClick={onDone}
-      >
-        <X className="size-3.5" />
-      </Button>
-    </form>
-  );
-}
-
-// Grid columns: chevron | name+count | type | mappings | amount. The row
-// itself is clickable (opens the edit dialog) — no separate actions column.
-// Mappings and the item count are single digits/short numbers (not the old
-// "N mappings" / "No mappings" text), so those two columns stay narrow and
-// the name column — the thing this table exists to show — gets the space.
-const ROW_GRID = "grid grid-cols-[1.25rem_1fr_5rem_3rem_8rem] items-center gap-3 px-4 py-3";
-
-function StateChip({ custom }: { custom: boolean }) {
-  return (
-    <span
-      className={cn(
-        "rounded-full px-2 py-0.5 text-xs font-medium",
-        custom ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-      )}
-    >
-      {custom ? "Custom" : "Auto"}
-    </span>
-  );
-}
-
-// Row-level launcher for CategoryStyleDialog. Renders the category's
-// *effective* style (custom override if set, else the name-derived
-// fallback) — identical iconWrap treatment used on ledger rows, so this
-// swatch always previews exactly what transactions in that category will
-// look like.
-function CategorySwatchButton({ cat, onClick }: { cat: Category; onClick: () => void }) {
+// Opens the icon & colour dialog. Shows the category's effective style, the
+// same tile its transactions get on the ledger.
+function CategorySwatchButton({ cat, onClick }: { cat: SettingsCategory; onClick: () => void }) {
   const { icon: CategoryIcon, iconWrap } = resolveEffectiveCategoryStyle(cat.name, cat.icon, cat.color);
   return (
     <button
       type="button"
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
       aria-label={`Customize icon and color for ${cat.name}`}
       className={cn(
-        "flex size-9 shrink-0 items-center justify-center rounded-full transition-colors",
-        "hover:ring-2 hover:ring-ring/40",
-        "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        iconWrap
+        "flex size-9 shrink-0 items-center justify-center rounded-full transition-colors hover:ring-2 hover:ring-ring/40",
+        "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+        iconWrap,
       )}
     >
       <CategoryIcon className="size-5" />
@@ -319,634 +57,194 @@ function CategorySwatchButton({ cat, onClick }: { cat: Category; onClick: () => 
   );
 }
 
-function CategoryStyleDialog({
-  cat,
-  open,
-  pending,
-  draftIcon,
-  draftColor,
-  onDraftIconChange,
-  onDraftColorChange,
-  onSave,
-  onCancel,
-}: {
-  cat: Category;
-  open: boolean;
-  pending: boolean;
-  draftIcon: string | null;
-  draftColor: CategoryColorKey | null;
-  onDraftIconChange: (icon: string | null) => void;
-  onDraftColorChange: (color: CategoryColorKey | null) => void;
-  onSave: () => void;
-  onCancel: () => void;
-}) {
-  const auto = getAutoCategoryKeys(cat.name);
-  const effectiveIconKey = draftIcon ?? auto.iconKey;
-  const effectiveColorKey = draftColor ?? auto.colorKey;
-  const preview = resolveEffectiveCategoryStyle(cat.name, draftIcon, draftColor);
-  const swatchIconWrap = effectiveColorKey
-    ? categoryPaletteClasses(effectiveColorKey).iconWrap
-    : "bg-muted text-muted-foreground";
+// One markup for phone and desktop: chevron | swatch + name (+ meta line on
+// phones) | type | amount. Tapping the name opens the edit dialog.
+const ROW_GRID = "grid grid-cols-[2rem_1fr_auto] items-center gap-x-3 px-3 py-2.5 sm:grid-cols-[2rem_1fr_6rem_9rem] sm:px-4";
 
+function BudgetItemRow({ item, onOpen }: { item: BudgetItemData; onOpen: () => void }) {
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Customize icon &amp; color</DialogTitle>
-          <p className="text-sm text-muted-foreground">{cat.name}</p>
-        </DialogHeader>
-
-        <div className="space-y-6">
-          <CategoryStylePreview preview={preview} name={cat.name} />
-
-          <div className="space-y-2">
-            <SwatchSectionHeader
-              label="Icon"
-              custom={draftIcon !== null}
-              onReset={() => onDraftIconChange(null)}
-            />
-            <IconSwatchGrid
-              effectiveKey={effectiveIconKey}
-              isCustom={draftIcon !== null}
-              swatchIconWrap={swatchIconWrap}
-              onSelect={onDraftIconChange}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <SwatchSectionHeader
-              label="Color"
-              custom={draftColor !== null}
-              onReset={() => onDraftColorChange(null)}
-            />
-            <ColorSwatchGrid
-              effectiveKey={effectiveColorKey}
-              isCustom={draftColor !== null}
-              onSelect={onDraftColorChange}
-            />
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button type="button" disabled={pending} onClick={onSave}>
-            Save changes
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <li>
+      <button type="button" onClick={onOpen} className={cn(ROW_GRID, "w-full text-left transition-colors hover:bg-muted/40")}>
+        <span />
+        <span className="flex min-w-0 flex-col pl-3 sm:pl-12">
+          <span className="truncate text-sm">{item.name}</span>
+          <span className="text-xs text-muted-foreground sm:hidden">{TYPE_CHIP[item.budgetType].label}</span>
+        </span>
+        <span className="hidden sm:block">
+          <TypeChip type={item.budgetType} />
+        </span>
+        <Money value={item.amount} className="text-right text-sm text-muted-foreground" />
+      </button>
+    </li>
   );
 }
 
-function CategoryStylePreview({ preview, name }: { preview: CategoryPalette; name: string }) {
+function BudgetPanel({ cat }: { cat: SettingsCategory }) {
+  const [dialog, setDialog] = useState<{ item?: BudgetItemData } | null>(null);
   return (
-    <div className="flex items-center gap-3">
-      <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-full", preview.iconWrap)}>
-        <preview.icon className="size-5" />
-      </span>
-      <span
-        className={cn(
-          "inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-          preview.badge
-        )}
-      >
-        {name}
-      </span>
-    </div>
-  );
-}
-
-function SwatchSectionHeader({
-  label,
-  custom,
-  onReset,
-}: {
-  label: string;
-  custom: boolean;
-  onReset: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-sm font-medium">{label}</span>
-      <StateChip custom={custom} />
-      {custom && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="ml-auto h-6 text-xs text-muted-foreground"
-          onClick={onReset}
-        >
-          Reset to auto
-        </Button>
+    <div className="border-t border-border/40 bg-muted/20">
+      {cat.budgetItems.length === 0 ? (
+        <p className="py-2.5 pr-4 pl-[3.5rem] text-xs text-muted-foreground sm:pl-[7.25rem]">No budget items yet.</p>
+      ) : (
+        <ul className="divide-y divide-border/30">
+          {cat.budgetItems.map((item) => (
+            <BudgetItemRow key={item.id} item={item} onOpen={() => setDialog({ item })} />
+          ))}
+        </ul>
       )}
+      <div className="py-1.5 pl-[3rem] sm:pl-[6.75rem]">
+        <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs text-muted-foreground" onClick={() => setDialog({})}>
+          <Plus className="size-3.5" />
+          Add item
+        </Button>
+      </div>
+      <BudgetItemDialog
+        categoryId={cat.id}
+        categoryName={cat.name}
+        item={dialog?.item}
+        open={dialog !== null}
+        onClose={() => setDialog(null)}
+      />
     </div>
   );
 }
 
-function IconSwatchGrid({
-  effectiveKey,
-  isCustom,
-  swatchIconWrap,
-  onSelect,
-}: {
-  effectiveKey: string | null;
-  isCustom: boolean;
-  swatchIconWrap: string;
-  onSelect: (key: string) => void;
-}) {
-  return (
-    <div className="grid grid-cols-5 gap-2 sm:grid-cols-8">
-      {CATEGORY_ICON_KEYS.map((key, idx) => {
-        const Icon = ICON_REGISTRY[key];
-        const isSelected = key === effectiveKey;
-        return (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={isSelected}
-            aria-label={`${categoryIconDisplayName(key)} icon`}
-            autoFocus={idx === 0}
-            onClick={() => onSelect(key)}
-            className={cn(
-              "flex size-10 items-center justify-center rounded-full transition-colors",
-              swatchIconWrap,
-              isSelected && (isCustom ? "ring-2 ring-primary" : "ring-1 ring-border/60")
-            )}
-          >
-            <Icon className="size-5" />
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function ColorSwatchGrid({
-  effectiveKey,
-  isCustom,
-  onSelect,
-}: {
-  effectiveKey: CategoryColorKey | null;
-  isCustom: boolean;
-  onSelect: (key: CategoryColorKey) => void;
-}) {
-  return (
-    <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-      {CATEGORY_COLOR_KEYS.map((key) => {
-        const isSelected = key === effectiveKey;
-        return (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={isSelected}
-            aria-label={`${categoryColorDisplayName(key)} color`}
-            onClick={() => onSelect(key)}
-            className={cn(
-              "size-8 rounded-full transition-transform",
-              CATEGORY_SOLID_SWATCH[key],
-              isSelected &&
-                (isCustom
-                  ? "ring-2 ring-offset-2 ring-offset-card ring-foreground"
-                  : "ring-1 ring-border/60")
-            )}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-function CategoryEditDialog({
-  cat,
-  open,
-  onClose,
-}: {
-  cat: Category;
-  open: boolean;
-  onClose: () => void;
-}) {
-  const [name, setName] = useState(cat.name);
-  const [pending, startTransition] = useTransition();
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-
-  // Reset whenever the dialog (re)opens.
-  const [lastOpen, setLastOpen] = useState(open);
-  if (open !== lastOpen) {
-    setLastOpen(open);
-    if (open) {
-      setName(cat.name);
-      setConfirmingDelete(false);
-    }
-  }
-
-  function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    startTransition(async () => {
-      await updateAppCategory(cat.id, { name: name.trim() });
-      onClose();
-    });
-  }
-
-  function handleDelete() {
-    startTransition(async () => {
-      await deleteAppCategory(cat.id);
-      onClose();
-    });
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{confirmingDelete ? "Delete category?" : "Edit category"}</DialogTitle>
-        </DialogHeader>
-        {confirmingDelete ? (
-          <div className="space-y-4">
-            <p className="text-sm text-destructive">
-              Delete &quot;{cat.name}&quot;? This will also remove its mappings and budget items.
-            </p>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)} autoFocus>
-                Cancel
-              </Button>
-              <Button type="button" variant="destructive" disabled={pending} onClick={handleDelete}>
-                Confirm delete
-              </Button>
-            </DialogFooter>
-          </div>
-        ) : (
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="category-name">Name</Label>
-              <Input
-                id="category-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoFocus
-                required
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="destructive"
-                className="sm:mr-auto"
-                disabled={pending}
-                onClick={() => setConfirmingDelete(true)}
-              >
-                Delete
-              </Button>
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={pending}>
-                Save changes
-              </Button>
-            </DialogFooter>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function CategoryRow({ cat }: { cat: Category }) {
+function CategoryRow({ cat }: { cat: SettingsCategory }) {
   const [expanded, setExpanded] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [addingItem, setAddingItem] = useState(false);
-
-  const [styleDialogOpen, setStyleDialogOpen] = useState(false);
-  const [draftIcon, setDraftIcon] = useState<string | null>(cat.icon);
-  // cat.color is validated server-side against the closed CategoryColorKey
-  // set by updateAppCategoryStyle — cast at this single DB-read boundary
-  // rather than widening every downstream consumer back to `string`.
-  const [draftColor, setDraftColor] = useState<CategoryColorKey | null>(cat.color as CategoryColorKey | null);
-  const [stylePending, startStyleTransition] = useTransition();
-
-  function openStyleDialog() {
-    setDraftIcon(cat.icon);
-    setDraftColor(cat.color as CategoryColorKey | null);
-    setStyleDialogOpen(true);
-  }
-
-  function closeStyleDialog() {
-    setStyleDialogOpen(false);
-  }
-
-  function handleStyleSave() {
-    startStyleTransition(async () => {
-      try {
-        await updateAppCategoryStyle(cat.id, { icon: draftIcon, color: draftColor });
-        setStyleDialogOpen(false);
-      } catch {
-        alert("Could not save icon/color changes. Please try again.");
-      }
-    });
-  }
+  const [styleOpen, setStyleOpen] = useState(false);
+  const type = getEffectiveType(cat.budgetItems);
+  const n = cat.budgetItems.length;
 
   return (
-    <div className="border-b border-border last:border-0 group/catrow">
-      <CategoryRowGrid
-        cat={cat}
-        expanded={expanded}
-        onToggleExpand={() => setExpanded((v) => !v)}
-        onOpenStyleDialog={openStyleDialog}
-        onOpenEdit={() => setEditOpen(true)}
-      />
-
-      {expanded && (
-        <CategoryBudgetPanel
-          cat={cat}
-          addingItem={addingItem}
-          onAddItem={() => setAddingItem(true)}
-          onDoneAddingItem={() => setAddingItem(false)}
-        />
-      )}
-
-      <CategoryEditDialog cat={cat} open={editOpen} onClose={() => setEditOpen(false)} />
-
-      <CategoryStyleDialog
-        cat={cat}
-        open={styleDialogOpen}
-        pending={stylePending}
-        draftIcon={draftIcon}
-        draftColor={draftColor}
-        onDraftIconChange={setDraftIcon}
-        onDraftColorChange={setDraftColor}
-        onSave={handleStyleSave}
-        onCancel={closeStyleDialog}
-      />
-    </div>
-  );
-}
-
-function CategoryRowGrid({
-  cat,
-  expanded,
-  onToggleExpand,
-  onOpenStyleDialog,
-  onOpenEdit,
-}: {
-  cat: Category;
-  expanded: boolean;
-  onToggleExpand: () => void;
-  onOpenStyleDialog: () => void;
-  onOpenEdit: () => void;
-}) {
-  const total = cat.budgetItems.reduce((s, i) => s + i.amount, 0);
-  const effectiveType = getEffectiveType(cat.budgetItems);
-
-  return (
-    <div
-      className={cn(ROW_GRID, "cursor-pointer transition-colors hover:bg-muted/20")}
-      onClick={onOpenEdit}
-    >
-      <button
-        onClick={(e) => { e.stopPropagation(); onToggleExpand(); }}
-        className="text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ChevronDown className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
-      </button>
-
-      <div className="flex items-center gap-2 min-w-0">
-        <CategorySwatchButton cat={cat} onClick={onOpenStyleDialog} />
-        <span className="font-medium truncate">{cat.name}</span>
-        <span
-          className="text-xs text-muted-foreground shrink-0 tabular-nums"
-          title={`${cat.budgetItems.length} budget item${cat.budgetItems.length !== 1 ? "s" : ""}`}
+    <li>
+      <div className={cn(ROW_GRID, "transition-colors hover:bg-muted/20")}>
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "Hide" : "Show"} budget items for ${cat.name}`}
+          className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
         >
-          {cat.budgetItems.length}
+          <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
+        </button>
+        <span className="flex min-w-0 items-center gap-3">
+          <CategorySwatchButton cat={cat} onClick={() => setStyleOpen(true)} />
+          <button type="button" onClick={() => setEditOpen(true)} className="flex min-w-0 flex-col text-left">
+            <span className="truncate font-medium">{cat.name}</span>
+            <span className="text-xs text-muted-foreground">
+              {n} {n === 1 ? "item" : "items"}
+              <span className="sm:hidden"> · {TYPE_CHIP[type].label}</span>
+            </span>
+          </button>
+        </span>
+        <span className="hidden sm:block">
+          <TypeChip type={type} />
+        </span>
+        <span className="text-right text-sm">
+          <Money value={total(cat.budgetItems)} compact className="sm:hidden" />
+          <Money value={total(cat.budgetItems)} className="max-sm:hidden" />
         </span>
       </div>
-
-      <TypeBadge type={effectiveType} />
-
-      <span
-        className={cn(
-          "font-mono text-sm tabular-nums",
-          cat._count.mappings === 0 ? "font-semibold text-warning" : "text-muted-foreground"
-        )}
-        title={cat._count.mappings === 0 ? "No mappings" : undefined}
-      >
-        {cat._count.mappings}
-      </span>
-
-      <span className="font-mono text-sm text-right">
-        {formatCOP(total)}
-      </span>
-    </div>
+      {expanded && <BudgetPanel cat={cat} />}
+      <CategoryDialog cat={cat} open={editOpen} onClose={() => setEditOpen(false)} />
+      <CategoryStyleDialog cat={cat} open={styleOpen} onClose={() => setStyleOpen(false)} />
+    </li>
   );
 }
 
-function CategoryBudgetPanel({
-  cat,
-  addingItem,
-  onAddItem,
-  onDoneAddingItem,
-}: {
-  cat: Category;
-  addingItem: boolean;
-  onAddItem: () => void;
-  onDoneAddingItem: () => void;
-}) {
-  return (
-    <div className="border-t border-border/50 bg-muted/10">
-      {cat.budgetItems.length === 0 && !addingItem && (
-        <p className="py-2 pl-8 text-xs text-muted-foreground">No budget items yet.</p>
-      )}
-      {cat.budgetItems.map((item) => (
-        <BudgetItemRow key={item.id} item={item} />
-      ))}
-      {addingItem ? (
-        <AddBudgetItemRow categoryId={cat.id} onDone={onDoneAddingItem} />
-      ) : (
-        <div className="py-2 pl-8 pr-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 gap-1 text-xs text-muted-foreground"
-            onClick={onAddItem}
-          >
-            <Plus className="size-3.5" />
-            Add item
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AddCategoryRow({ onDone }: { onDone: () => void }) {
-  const [name, setName] = useState("");
-  const [pending, startTransition] = useTransition();
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    startTransition(async () => {
-      await createAppCategory({ name: name.trim() });
-      onDone();
-    });
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="flex items-end gap-3 p-4 border-t border-border">
-      <div className="space-y-1">
-        <Label className="text-xs">Category name</Label>
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Bills & Utilities"
-          className="h-8 w-48"
-          autoFocus
-          required
-        />
-      </div>
-      <div className="flex gap-1">
-        <Button type="submit" size="icon" className="size-8" disabled={pending}>
-          <Check className="size-4" />
-        </Button>
-        <Button type="button" variant="ghost" size="icon" className="size-8" onClick={onDone}>
-          <X className="size-4" />
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-type FilterType = "ALL" | "FIXED" | "VARIABLE" | "MIXED";
+type FilterType = "ALL" | EffectiveType;
 type SortBy = "name" | "amount" | "type";
 
-const FILTER_LABELS: Record<FilterType, string> = {
-  ALL: "All", FIXED: "Fixed", VARIABLE: "Variable", MIXED: "Mixed",
-};
+const FILTER_OPTIONS: { value: FilterType; label: string }[] = [
+  { value: "ALL", label: "All" },
+  { value: "FIXED", label: "Fixed" },
+  { value: "VARIABLE", label: "Variable" },
+  { value: "MIXED", label: "Mixed" },
+];
 
-export function CategoryList({ categories }: { categories: Category[] }) {
-  const [adding, setAdding] = useState(false);
-  const [filterType, setFilterType] = useState<FilterType>("ALL");
-  const [sortBy, setSortBy] = useState<SortBy>("name");
+const SORT_OPTIONS: { value: SortBy; label: string }[] = [
+  { value: "name", label: "Name" },
+  { value: "amount", label: "Amount" },
+  { value: "type", label: "Type" },
+];
 
-  // Totals always reflect full list regardless of filter
-  const fixedTotal = categories.reduce((sum, cat) =>
-    sum + cat.budgetItems.filter((i) => i.budgetType === "FIXED").reduce((s, i) => s + i.amount, 0), 0);
-  const variableTotal = categories.reduce((sum, cat) =>
-    sum + cat.budgetItems.filter((i) => i.budgetType === "VARIABLE").reduce((s, i) => s + i.amount, 0), 0);
+const TYPE_ORDER: Record<EffectiveType, number> = { FIXED: 0, MIXED: 1, VARIABLE: 2 };
 
-  const filtered = filterType === "ALL"
-    ? categories
-    : categories.filter((c) => getEffectiveType(c.budgetItems) === filterType);
-
-  const sorted = [...filtered].sort((a, b) => {
-    if (sortBy === "amount") {
-      const aTotal = a.budgetItems.reduce((s, i) => s + i.amount, 0);
-      const bTotal = b.budgetItems.reduce((s, i) => s + i.amount, 0);
-      return bTotal - aTotal;
-    }
-    if (sortBy === "type") {
-      const order: Record<EffectiveType, number> = { FIXED: 0, MIXED: 1, VARIABLE: 2 };
-      return order[getEffectiveType(a.budgetItems)] - order[getEffectiveType(b.budgetItems)];
-    }
+function visibleCategories(categories: SettingsCategory[], filter: FilterType, sortBy: SortBy): SettingsCategory[] {
+  const filtered = filter === "ALL" ? categories : categories.filter((c) => getEffectiveType(c.budgetItems) === filter);
+  return [...filtered].sort((a, b) => {
+    if (sortBy === "amount") return total(b.budgetItems) - total(a.budgetItems);
+    if (sortBy === "type") return TYPE_ORDER[getEffectiveType(a.budgetItems)] - TYPE_ORDER[getEffectiveType(b.budgetItems)];
     return a.name.localeCompare(b.name);
   });
+}
+
+function Totals({ categories }: { categories: SettingsCategory[] }) {
+  const sumOf = (type: "FIXED" | "VARIABLE") =>
+    categories.reduce((s, c) => s + total(c.budgetItems.filter((i) => i.budgetType === type)), 0);
+  const fixed = sumOf("FIXED");
+  const variable = sumOf("VARIABLE");
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border/60 px-4 py-2.5 text-sm">
+      <span className="text-xs tracking-wide text-muted-foreground uppercase">Totals</span>
+      <span className="flex items-center gap-1.5">
+        <TypeChip type="FIXED" />
+        <Money value={fixed} />
+      </span>
+      <span className="flex items-center gap-1.5">
+        <TypeChip type="VARIABLE" />
+        <Money value={variable} />
+      </span>
+      <span className="font-medium sm:ml-auto">
+        <Money value={fixed + variable} /> / mo
+      </span>
+    </div>
+  );
+}
+
+function EmptyRow({ children }: { children: React.ReactNode }) {
+  return <li className="px-4 py-6 text-center text-sm text-muted-foreground">{children}</li>;
+}
+
+export function CategoryList({ categories }: { categories: SettingsCategory[] }) {
+  const [adding, setAdding] = useState(false);
+  const [filter, setFilter] = useState<FilterType>("ALL");
+  const [sortBy, setSortBy] = useState<SortBy>("name");
+  const sorted = visibleCategories(categories, filter, sortBy);
 
   return (
-    <div className="space-y-3">
-      {/* Filter + sort bar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {(Object.keys(FILTER_LABELS) as FilterType[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setFilterType(t)}
-            className={cn(
-              "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-              filterType === t
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            {FILTER_LABELS[t]}
-          </button>
-        ))}
-        <div className="flex items-center gap-1 ml-auto">
-          <span className="text-xs text-muted-foreground">Sort:</span>
-          {(["name", "amount", "type"] as SortBy[]).map((s) => (
-            <button
-              key={s}
-              onClick={() => setSortBy(s)}
-              className={cn(
-                "rounded px-2 py-0.5 text-xs transition-colors",
-                sortBy === s ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {s[0].toUpperCase() + s.slice(1)}
-            </button>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SegmentedControl ariaLabel="Filter by type" size="sm" value={filter} onChange={setFilter} options={FILTER_OPTIONS} />
+        <SegmentedControl ariaLabel="Sort by" size="sm" value={sortBy} onChange={setSortBy} options={SORT_OPTIONS} />
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-border/60 bg-card">
+        <div className={cn(ROW_GRID, "hidden border-b border-border/60 py-2 text-xs tracking-wide text-muted-foreground uppercase sm:grid")}>
+          <span />
+          <span>Category</span>
+          <span>Type</span>
+          <span className="text-right">Budget / mo</span>
+        </div>
+        <ul className="divide-y divide-border/40">
+          {sorted.map((cat) => (
+            <CategoryRow key={cat.id} cat={cat} />
           ))}
-        </div>
+          {categories.length === 0 && <EmptyRow>No categories yet.</EmptyRow>}
+          {categories.length > 0 && sorted.length === 0 && (
+            <EmptyRow>No {FILTER_OPTIONS.find((o) => o.value === filter)?.label.toLowerCase()} categories.</EmptyRow>
+          )}
+        </ul>
       </div>
 
-      <div className="rounded-xl border border-border overflow-hidden">
-        {/* Row content is a fixed-width grid (six columns) — narrower than
-            that on mobile, columns would either overflow the card or squeeze
-            into each other. Scrolling horizontally here keeps every column
-            legible instead. */}
-        <div className="overflow-x-auto">
-          <div className="min-w-[40rem] divide-y-0">
-            {/* Column headers */}
-            <div className={`${ROW_GRID} border-b border-border/60 bg-muted/20 py-2 text-xs text-muted-foreground uppercase tracking-wide`}>
-              <span />
-              <span>Category</span>
-              <span>Type</span>
-              <span title="Mappings">Maps</span>
-              <span className="text-right">Budget / mo</span>
-            </div>
+      {categories.length > 0 && <Totals categories={categories} />}
 
-            {sorted.map((cat) => (
-              <CategoryRow key={cat.id} cat={cat} />
-            ))}
-
-            {categories.length === 0 && (
-              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                No categories yet. Add one below.
-              </div>
-            )}
-
-            {categories.length > 0 && sorted.length === 0 && (
-              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                No {FILTER_LABELS[filterType].toLowerCase()} categories.
-              </div>
-            )}
-
-            {adding && <AddCategoryRow onDone={() => setAdding(false)} />}
-          </div>
-        </div>
-      </div>
-
-      {/* Budget totals */}
-      {categories.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 rounded-lg border border-border/40 text-sm">
-          <span className="text-xs text-muted-foreground uppercase tracking-wide">Totals</span>
-          <div className="flex items-center gap-1.5">
-            <TypeBadge type="FIXED" />
-            <span className="font-mono text-sm">{formatCOP(fixedTotal)}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <TypeBadge type="VARIABLE" />
-            <span className="font-mono text-sm">{formatCOP(variableTotal)}</span>
-          </div>
-          <div className="sm:ml-auto font-mono text-sm font-medium">
-            {formatCOP(fixedTotal + variableTotal)} / mo
-          </div>
-        </div>
-      )}
-
-      {!adding && (
-        <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-          <Plus className="size-5" />
-          Add category
-        </Button>
-      )}
+      <Button variant="outline" size="sm" className="w-fit" onClick={() => setAdding(true)}>
+        <Plus className="size-4" />
+        Add category
+      </Button>
+      <CategoryDialog open={adding} onClose={() => setAdding(false)} />
     </div>
   );
 }

@@ -140,3 +140,52 @@ describe("CategoryStyleDialog — Save / Cancel", () => {
     expect(screen.getByRole("button", { name: SHOPPING_CART_ICON })).toHaveAttribute(ARIA_PRESSED, "true");
   });
 });
+
+describe("CategoryDialog — delete", () => {
+  it("shows why a category in use can't be deleted, and keeps the dialog open", async () => {
+    deleteAppCategoryMock.mockResolvedValueOnce({ error: "3 transactions still use it. Move them to another category first." });
+    const user = userEvent.setup();
+    render(<CategoryList categories={[makeCategory()]} />);
+
+    await user.click(screen.getByRole("button", { name: new RegExp(`^${CATEGORY_NAME}`) }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "Delete category" }));
+
+    expect(deleteAppCategoryMock).toHaveBeenCalledWith("cat-1");
+    expect(await screen.findByText(/3 transactions still use it/)).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+describe("BudgetItemDialog", () => {
+  it("adds a budget item with a typed amount and type", async () => {
+    const user = userEvent.setup();
+    render(<CategoryList categories={[makeCategory()]} />);
+
+    await user.click(screen.getByRole("button", { name: `Show budget items for ${CATEGORY_NAME}` }));
+    await user.click(screen.getByRole("button", { name: "Add item" }));
+    const dialog = within(screen.getByRole("dialog"));
+    await user.type(dialog.getByLabelText("Name"), "Weekly market");
+    await user.type(dialog.getByLabelText("Per month"), "800000");
+    await user.click(dialog.getByRole("radio", { name: "Variable" }));
+    await user.click(dialog.getByRole("button", { name: "Add item" }));
+
+    expect(createBudgetItemMock).toHaveBeenCalledWith("cat-1", { name: "Weekly market", amount: 800000, budgetType: "VARIABLE" });
+  });
+
+  it("editing loads the item and saving keeps unchanged fields", async () => {
+    const user = userEvent.setup();
+    render(
+      <CategoryList
+        categories={[makeCategory({ budgetItems: [{ id: "bi-1", name: "Rent", amount: 1500000, budgetType: "FIXED" }] })]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: `Show budget items for ${CATEGORY_NAME}` }));
+    await user.click(screen.getByRole("button", { name: /Rent/ }));
+    expect(screen.getByDisplayValue("1.500.000")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(updateBudgetItemMock).toHaveBeenCalledWith("bi-1", { name: "Rent", amount: 1500000, budgetType: "FIXED" });
+  });
+});

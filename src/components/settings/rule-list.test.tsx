@@ -1,4 +1,7 @@
 // Component test for the counterparty-rules settings page list/form.
+// Create and edit both use the same RuleDialog (FormDialog). jsdom applies
+// no media queries, so both OptionSelect variants render; the tests drive
+// the native <select> (the one phones get).
 // Covers: rendering the list with rules, creating a new rule (asserts the
 // server action is called with the right shape), editing a rule via the
 // tap-to-open dialog, and deleting a rule via the dialog's confirm-delete
@@ -6,7 +9,7 @@
 // category-list.tsx's CategoryEditDialog / tag-list.tsx's TagEditDialog).
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RuleList, type CounterpartyRuleRowData } from "./rule-list";
 
@@ -82,7 +85,7 @@ describe("RuleList — rendering", () => {
   it("shows an empty state when there are no rules", () => {
     render(<RuleList rules={[]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
-    expect(screen.getByText("No rules yet. Add one below.")).toBeInTheDocument();
+    expect(screen.getByText("No rules yet.")).toBeInTheDocument();
   });
 
   it("does not render hover-reveal edit/delete icon buttons on the row", () => {
@@ -94,57 +97,48 @@ describe("RuleList — rendering", () => {
   });
 });
 
+function nativeSelect(label: string) {
+  return screen.getByRole("dialog").querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
+}
+
 describe("RuleList — create", () => {
-  // Explicit timeout: this test now drives two Select popovers (category +
-  // wallet) plus typing and submit — under full-suite parallel contention
-  // that exceeds Vitest's 5000ms default, even though each interaction is
-  // fast in isolation (see the standalone run, ~2.4s for the whole file).
-  it(
-    "creating a rule calls createCounterpartyRule with the form shape",
-    async () => {
-      const user = userEvent.setup();
-      render(<RuleList rules={[]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
-
-      await user.click(screen.getByRole("button", { name: /add rule/i }));
-
-      await user.type(screen.getByPlaceholderText("Account number"), "123456");
-
-      await user.click(screen.getByText("Select…"));
-      await user.click(await screen.findByRole("option", { name: "Pets" }));
-
-      await user.click(screen.getByRole("combobox", { name: "Wallet" }));
-      await user.click(await screen.findByRole("option", { name: "Investments" }));
-
-      await user.click(screen.getByRole("button", { name: "Create rule" }));
-
-      expect(createCounterpartyRuleMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          matchType: "ACCOUNT",
-          matchValue: "123456",
-          appCategoryId: "cat-pets",
-          wallet: "Investments",
-          walletId: "wallet-investments",
-          autoRecord: true,
-          recurring: false,
-        })
-      );
-    },
-    10000
-  );
-
-  it("shows a visible hint (not just a disabled button) while no wallet is selected", async () => {
+  it("creating a rule calls createCounterpartyRule with the form shape", async () => {
     const user = userEvent.setup();
     render(<RuleList rules={[]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await user.click(screen.getByRole("button", { name: /add rule/i }));
+    await user.type(screen.getByLabelText("Account number"), "123456");
+    await user.selectOptions(nativeSelect("Category"), "Pets");
+    await user.selectOptions(nativeSelect("Wallet"), "Investments");
+    await user.click(screen.getByRole("button", { name: "Create rule" }));
 
-    expect(screen.getByText("Select a wallet to save")).toBeInTheDocument();
+    expect(createCounterpartyRuleMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        matchType: "ACCOUNT",
+        matchValue: "123456",
+        appCategoryId: "cat-pets",
+        wallet: "Investments",
+        walletId: "wallet-investments",
+        autoRecord: true,
+        recurring: false,
+      })
+    );
+  });
+
+  it("says what's missing (not just a disabled button) until a wallet is picked", async () => {
+    const user = userEvent.setup();
+    render(<RuleList rules={[]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
+
+    await user.click(screen.getByRole("button", { name: /add rule/i }));
+    await user.type(screen.getByLabelText("Account number"), "123456");
+    await user.selectOptions(nativeSelect("Category"), "Pets");
+
+    expect(screen.getByText("Pick a wallet.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create rule" })).toBeDisabled();
 
-    await user.click(screen.getByRole("combobox", { name: "Wallet" }));
-    await user.click(await screen.findByRole("option", { name: "Investments" }));
+    await user.selectOptions(nativeSelect("Wallet"), "Investments");
 
-    expect(screen.queryByText("Select a wallet to save")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pick a wallet.")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create rule" })).not.toBeDisabled();
   });
 
@@ -154,11 +148,11 @@ describe("RuleList — create", () => {
 
     await user.click(screen.getByRole("button", { name: /add rule/i }));
 
-    expect(screen.queryByPlaceholderText("Expected amount")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Expected amount/)).not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText("Recurring"));
+    await user.click(screen.getByText("Recurring"));
 
-    expect(screen.getByPlaceholderText("Expected amount")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Expected amount/)).toBeInTheDocument();
   });
 });
 
@@ -204,19 +198,31 @@ describe("RuleList — edit", () => {
     await user.click(screen.getByRole("button", { name: "Edit rule" }));
 
     // Expected amount input is visible and pre-filled while recurring.
-    expect(screen.getByDisplayValue("50000")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("50.000")).toBeInTheDocument();
 
     // Uncheck recurring — the input disappears but its stale value stays in
     // local state.
-    await user.click(screen.getByLabelText("Recurring"));
-    expect(screen.queryByPlaceholderText("Expected amount")).not.toBeInTheDocument();
+    await user.click(within(screen.getByRole("dialog")).getByText("Recurring"));
+    expect(screen.queryByLabelText(/Expected amount/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Save rule" }));
 
     expect(updateCounterpartyRuleMock).toHaveBeenCalledWith(
       "rule-1",
-      expect.objectContaining({ recurring: false, expectedAmount: undefined })
+      // null clears the stored amount (undefined used to leave it in place).
+      expect.objectContaining({ recurring: false, expectedAmount: null })
     );
+  });
+
+  it("emptying the notes clears them (null, not undefined)", async () => {
+    const user = userEvent.setup();
+    render(<RuleList rules={[makeRule({ notes: "Vet" })]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
+
+    await user.click(screen.getByRole("button", { name: "Edit rule" }));
+    await user.clear(screen.getByDisplayValue("Vet"));
+    await user.click(screen.getByRole("button", { name: "Save rule" }));
+
+    expect(updateCounterpartyRuleMock).toHaveBeenCalledWith("rule-1", expect.objectContaining({ notes: null }));
   });
 });
 
