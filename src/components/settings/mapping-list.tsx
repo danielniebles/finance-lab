@@ -1,15 +1,9 @@
 "use client";
 
 import { useTransition } from "react";
+import { OptionSelect, SectionHeader } from "@/components/ds";
+import { categorySelectOptions } from "@/components/shared/category-option";
 import { saveCategoryMapping, deleteCategoryMapping } from "@/lib/actions/categories";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
 
 type MLCategory = {
   id: string;
@@ -17,8 +11,13 @@ type MLCategory = {
   mapping: { appCategory: { id: string; name: string } } | null;
 };
 
-type AppCategory = { id: string; name: string };
+type AppCategory = { id: string; name: string; icon?: string | null; color?: string | null };
 
+/**
+ * Legacy MoneyLover → app category mappings. Each row is a dropdown; "Not
+ * mapped" removes the mapping (those imported transactions drop out of the
+ * analysis), so there's no separate one-tap unmap button any more.
+ */
 export function MappingList({
   mlCategories,
   appCategories,
@@ -27,104 +26,47 @@ export function MappingList({
   appCategories: AppCategory[];
 }) {
   const [isPending, startTransition] = useTransition();
-
+  const options = categorySelectOptions(appCategories);
   const unmapped = mlCategories.filter((c) => !c.mapping);
   const mapped = mlCategories.filter((c) => c.mapping);
 
-  return (
-    <div className="space-y-4">
-      {unmapped.length > 0 && (
-        <div className="rounded-md border border-warning/30 bg-warning/10 p-1">
-          <p className="px-3 py-2 text-xs font-medium text-warning">
-            {unmapped.length} unmapped — these are excluded from analysis
-          </p>
-          <div className="divide-y divide-warning/20">
-            {unmapped.map((cat) => (
-              <MappingRow
-                key={cat.id}
-                cat={cat}
-                appCategories={appCategories}
-                isPending={isPending}
-                onMap={(appCategoryId) =>
-                  startTransition(() => saveCategoryMapping(cat.id, appCategoryId))
-                }
-                onUnmap={() => startTransition(() => deleteCategoryMapping(cat.id))}
+  function change(cat: MLCategory, appCategoryId: string | null) {
+    startTransition(async () => {
+      if (appCategoryId) await saveCategoryMapping(cat.id, appCategoryId);
+      else await deleteCategoryMapping(cat.id);
+    });
+  }
+
+  const group = (title: string, cats: MLCategory[], trailing?: React.ReactNode) =>
+    cats.length > 0 && (
+      <section className="flex flex-col gap-3">
+        <SectionHeader title={title} trailing={trailing} />
+        <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/60 bg-card">
+          {cats.map((cat) => (
+            <li key={cat.id} className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] sm:items-center sm:gap-4">
+              <span className="truncate text-sm font-medium">{cat.name}</span>
+              <OptionSelect
+                ariaLabel={`App category for ${cat.name}`}
+                value={cat.mapping?.appCategory.id ?? null}
+                onChange={(v) => change(cat, v)}
+                noneLabel="Not mapped"
+                options={options}
+                disabled={isPending}
               />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {mapped.length > 0 && (
-        <div className="rounded-md border divide-y">
-          {mapped.map((cat) => (
-            <MappingRow
-              key={cat.id}
-              cat={cat}
-              appCategories={appCategories}
-              isPending={isPending}
-              onMap={(appCategoryId) =>
-                startTransition(() => saveCategoryMapping(cat.id, appCategoryId))
-              }
-              onUnmap={() => startTransition(() => deleteCategoryMapping(cat.id))}
-            />
+            </li>
           ))}
-        </div>
-      )}
-    </div>
-  );
-}
+        </ul>
+      </section>
+    );
 
-function MappingRow({
-  cat,
-  appCategories,
-  isPending,
-  onMap,
-  onUnmap,
-}: {
-  cat: MLCategory;
-  appCategories: AppCategory[];
-  isPending: boolean;
-  onMap: (id: string) => void;
-  onUnmap: () => void;
-}) {
   return (
-    <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-      <span className="text-sm font-medium w-48 shrink-0">{cat.name}</span>
-      <span className="text-muted-foreground text-sm">→</span>
-      <div className="flex items-center gap-2 flex-1">
-        <Select
-          value={cat.mapping?.appCategory.id ?? ""}
-          onValueChange={(v) => v && onMap(v)}
-          disabled={isPending}
-        >
-          <SelectTrigger className="h-8 flex-1">
-            <span className="flex flex-1 text-left text-sm">
-              {cat.mapping?.appCategory.name ?? (
-                <span className="text-muted-foreground">Select category…</span>
-              )}
-            </span>
-          </SelectTrigger>
-          <SelectContent>
-            {appCategories.map((a) => (
-              <SelectItem key={a.id} value={a.id}>
-                {a.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {cat.mapping && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7 text-muted-foreground hover:text-destructive"
-            onClick={onUnmap}
-            disabled={isPending}
-          >
-            <X className="size-4" />
-          </Button>
-        )}
-      </div>
+    <div className="flex flex-col gap-8">
+      {group(
+        "Not mapped",
+        unmapped,
+        <span className="text-xs text-muted-foreground">Their imported transactions are left out of the analysis.</span>,
+      )}
+      {group("Mapped", mapped)}
     </div>
   );
 }

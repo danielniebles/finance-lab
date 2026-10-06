@@ -25,7 +25,8 @@ function getEffectiveType(items: BudgetItemData[]): EffectiveType {
 const TYPE_CHIP: Record<EffectiveType, { tone: Tone; label: string }> = {
   FIXED: { tone: "info", label: "Fixed" },
   VARIABLE: { tone: "neutral", label: "Variable" },
-  MIXED: { tone: "caution", label: "Mixed" },
+  // Neutral: a category with both kinds of items isn't a warning.
+  MIXED: { tone: "neutral", label: "Mixed" },
 };
 
 function TypeChip({ type }: { type: EffectiveType }) {
@@ -208,7 +209,6 @@ function EmptyRow({ children }: { children: React.ReactNode }) {
 }
 
 export function CategoryList({ categories }: { categories: SettingsCategory[] }) {
-  const [adding, setAdding] = useState(false);
   const [filter, setFilter] = useState<FilterType>("ALL");
   const [sortBy, setSortBy] = useState<SortBy>("name");
   const sorted = visibleCategories(categories, filter, sortBy);
@@ -240,11 +240,6 @@ export function CategoryList({ categories }: { categories: SettingsCategory[] })
 
       {categories.length > 0 && <Totals categories={categories} />}
 
-      <Button variant="outline" size="sm" className="w-fit" onClick={() => setAdding(true)}>
-        <Plus className="size-4" />
-        Add category
-      </Button>
-      <CategoryDialog open={adding} onClose={() => setAdding(false)} />
     </div>
   );
 }

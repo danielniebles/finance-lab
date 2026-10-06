@@ -191,8 +191,6 @@ function TagRow({ tag, categories }: { tag: TagSettingsRow; categories: Category
 }
 
 export function TagList({ tags, categories }: { tags: TagSettingsRow[]; categories: CategoryOption[] }) {
-  const [adding, setAdding] = useState(false);
-
   return (
     <div className="flex flex-col gap-3">
       <div className="overflow-hidden rounded-2xl border border-border/60 bg-card">
@@ -203,11 +201,20 @@ export function TagList({ tags, categories }: { tags: TagSettingsRow[]; categori
           {tags.length === 0 && <li className="px-4 py-6 text-center text-sm text-muted-foreground">No tags yet.</li>}
         </ul>
       </div>
-      <Button variant="outline" size="sm" className="w-fit" onClick={() => setAdding(true)}>
-        <Plus className="size-4" />
+    </div>
+  );
+}
+
+/** The page's main action: opens a new-tag dialog. */
+export function AddTagButton({ categories }: { categories: CategoryOption[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>
+        <Plus aria-hidden />
         Add tag
       </Button>
-      <TagDialog categories={categories} open={adding} onClose={() => setAdding(false)} />
-    </div>
+      <TagDialog categories={categories} open={open} onClose={() => setOpen(false)} />
+    </>
   );
 }

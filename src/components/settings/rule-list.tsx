@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CheckField, Field, FormDialog, FormFooter, MoneyInput, OptionSelect, SegmentedControl, StatusChip } from "@/components/ds";
 import { CategoryIconTile, categorySelectOptions } from "@/components/shared/category-option";
-import { amountToDigits } from "@/lib/form-format";
+import { amountToDigits, formatDateLabel, localISODate } from "@/lib/form-format";
 import { MATCH_TYPE_LABELS, MATCH_VALUE_FIELD, ruleMissingHint } from "@/lib/settings-forms";
 import { TONE_CLASSES } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -50,9 +50,10 @@ const DIRECTION_OPTIONS: { value: RuleDirection; label: string }[] = [
 
 const DIRECTION_LABELS: Record<RuleDirection, string> = { EXPENSE: "Expense", INCOME: "Income", ANY: "Any" };
 
+/** "Today, Oct 6" · "Aug 24" · "Mar 2, 2025": the short form used across the app. */
 function formatLastMatched(date: Date | null): string {
   if (!date) return "Never";
-  return new Date(date).toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "numeric" });
+  return formatDateLabel(localISODate(new Date(date)));
 }
 
 export type RuleFormValues = {
@@ -376,8 +377,6 @@ export function RuleList({
   categories: CategoryOption[];
   walletOptions: WalletOption[];
 }) {
-  const [adding, setAdding] = useState(false);
-
   return (
     <div className="flex flex-col gap-3">
       <div className="overflow-hidden rounded-2xl border border-border/60 bg-card">
@@ -396,11 +395,20 @@ export function RuleList({
           {rules.length === 0 && <li className="px-4 py-6 text-center text-sm text-muted-foreground">No rules yet.</li>}
         </ul>
       </div>
-      <Button variant="outline" size="sm" className="w-fit" onClick={() => setAdding(true)}>
-        <Plus className="size-4" />
+    </div>
+  );
+}
+
+/** The page's main action: opens a new-rule dialog. */
+export function AddRuleButton({ categories, walletOptions }: { categories: CategoryOption[]; walletOptions: WalletOption[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>
+        <Plus aria-hidden />
         Add rule
       </Button>
-      <RuleDialog categories={categories} walletOptions={walletOptions} open={adding} onClose={() => setAdding(false)} />
-    </div>
+      <RuleDialog categories={categories} walletOptions={walletOptions} open={open} onClose={() => setOpen(false)} />
+    </>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FormDialog, FormFooter } from "@/components/ds";
@@ -157,5 +158,19 @@ export function CategoryDialog({ cat, open, onClose }: { cat?: SettingsCategory;
         <Input id="category-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bills & Utilities" autoFocus required disabled={pending} />
       </Field>
     </FormDialog>
+  );
+}
+
+/** The page's main action: opens a new-category dialog. */
+export function AddCategoryButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>
+        <Plus aria-hidden />
+        Add category
+      </Button>
+      <CategoryDialog open={open} onClose={() => setOpen(false)} />
+    </>
   );
 }

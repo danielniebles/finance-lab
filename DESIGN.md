@@ -301,6 +301,7 @@ Domain states never pick classes themselves. Map the state to a `Tone` (`positiv
 | `Meter` | Inline progress bars; supports a target tick and is a real `role="meter"` |
 | `StatCard` | Overview `KpiCard`, the StatCard spec in §5 |
 | `SectionHeader` | Uppercase section labels + "View …" links |
+| `PageHeader` | Page title (display style), one-line description and the page's main action on the right ("Add category"). The main action never sits at the bottom of a long list. |
 | `ListRow` | Icon tile + title/subtitle + trailing rows (vaults, installments, debtors) |
 | `ReadingGrid` | Label + amount readings that wrap instead of overflowing with long COP values |
 | `ColorDot` | Dot in a user-chosen colour (account, card); muted token when there's none |

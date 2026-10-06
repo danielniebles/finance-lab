@@ -11,7 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { RuleList, type CounterpartyRuleRowData } from "./rule-list";
+import { AddRuleButton, RuleList, type CounterpartyRuleRowData } from "./rule-list";
 
 const createCounterpartyRuleMock = vi.fn();
 const updateCounterpartyRuleMock = vi.fn();
@@ -104,7 +104,7 @@ function nativeSelect(label: string) {
 describe("RuleList — create", () => {
   it("creating a rule calls createCounterpartyRule with the form shape", async () => {
     const user = userEvent.setup();
-    render(<RuleList rules={[]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
+    render(<AddRuleButton categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await user.click(screen.getByRole("button", { name: /add rule/i }));
     await user.type(screen.getByLabelText("Account number"), "123456");
@@ -127,7 +127,7 @@ describe("RuleList — create", () => {
 
   it("says what's missing (not just a disabled button) until a wallet is picked", async () => {
     const user = userEvent.setup();
-    render(<RuleList rules={[]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
+    render(<AddRuleButton categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await user.click(screen.getByRole("button", { name: /add rule/i }));
     await user.type(screen.getByLabelText("Account number"), "123456");
@@ -144,7 +144,7 @@ describe("RuleList — create", () => {
 
   it("recurring gates the expectedAmount field's visibility", async () => {
     const user = userEvent.setup();
-    render(<RuleList rules={[]} categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
+    render(<AddRuleButton categories={CATEGORIES} walletOptions={WALLET_OPTIONS} />);
 
     await user.click(screen.getByRole("button", { name: /add rule/i }));
 
