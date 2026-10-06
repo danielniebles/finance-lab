@@ -3,18 +3,10 @@
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
-import { WalletSelect, type WalletOption } from "@/components/shared/wallet-select";
-import { formatCOP, dateInputValue } from "@/lib/format";
+import { DateField, Field, FormDialog, FormFooter, FormReadout, Money, OptionSelect } from "@/components/ds";
+import { categorySelectOptions } from "@/components/shared/category-option";
+import type { WalletOption } from "@/components/shared/wallet-select";
+import { localISODate } from "@/lib/form-format";
 import { payInstallmentsBulk } from "@/lib/actions/installments";
 import type { CategoryOption } from "@/lib/queries/expenses";
 import type { DueThisMonth } from "@/lib/queries/installments";
@@ -39,24 +31,25 @@ type Props = {
 
 export function PayAllButton({ items, walletOptions, categories, onPaid }: Props) {
   const [open, setOpen] = useState(false);
-  const [walletId, setWalletId] = useState("");
-  const [appCategoryId, setAppCategoryId] = useState("");
-  const [date, setDate] = useState(() => dateInputValue(new Date()));
+  const [walletId, setWalletId] = useState<string | null>(null);
+  const [appCategoryId, setAppCategoryId] = useState<string | null>(null);
+  const [date, setDate] = useState(() => localISODate(new Date()));
   const [note, setNote] = useState("");
   const [pending, startTransition] = useTransition();
 
   const total = useMemo(() => items.reduce((s, d) => s + d.amount, 0), [items]);
-  const canSubmit = walletId !== "" && appCategoryId !== "" && date !== "" && items.length > 0;
+  const canSubmit = !!walletId && !!appCategoryId && date !== "" && items.length > 0;
+  const missing = !appCategoryId && !walletId ? "Pick a category and a wallet." : !appCategoryId ? "Pick a category." : !walletId ? "Pick a wallet." : "";
 
   function openDialog() {
     setNote(defaultNote(items));
-    setDate(dateInputValue(new Date()));
+    setDate(localISODate(new Date()));
     setOpen(true);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || !walletId || !appCategoryId) return;
     const walletName = walletOptions.find((w) => w.id === walletId)?.name ?? "";
     const slots = items.map((d) => ({
       installmentId: d.installment.id,
@@ -90,91 +83,46 @@ export function PayAllButton({ items, walletOptions, categories, onPaid }: Props
         Pay all ({items.length})
       </Button>
 
-      <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Pay {items.length} installments</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Category</Label>
-                <CategorySelect
-                  value={appCategoryId}
-                  categories={categories}
-                  onChange={setAppCategoryId}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Wallet</Label>
-                <WalletSelect value={walletId} options={walletOptions} onChange={setWalletId} />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="pay-all-date">Date</Label>
-              <Input
-                id="pay-all-date"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="pay-all-note">Note</Label>
-              <textarea
-                id="pay-all-note"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={3}
-                className="w-full min-w-0 resize-none rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-              />
-            </div>
-
-            <div className="flex items-center justify-between rounded-lg bg-muted/30 px-3 py-2">
-              <span className="text-xs text-muted-foreground">Total</span>
-              <span className="font-mono text-sm font-semibold">{formatCOP(total)}</span>
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={pending || !canSubmit}>
-                Confirm payment
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <FormDialog
+        open={open}
+        onOpenChange={(o) => !o && setOpen(false)}
+        title={`Pay ${items.length} ${items.length === 1 ? "installment" : "installments"}`}
+        onSubmit={handleSubmit}
+        footer={
+          <FormFooter hint={pending ? "" : missing}>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending || !canSubmit}>
+              Pay <Money value={total} />
+            </Button>
+          </FormFooter>
+        }
+      >
+        <FormReadout label={`Total · ${items.length} ${items.length === 1 ? "cuota" : "cuotas"}`}>
+          <Money value={total} />
+        </FormReadout>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Category">
+            <OptionSelect ariaLabel="Category" value={appCategoryId} onChange={setAppCategoryId} options={categorySelectOptions(categories.filter((c) => !c.isTransfer))} />
+          </Field>
+          <Field label="Wallet">
+            <OptionSelect ariaLabel="Wallet" value={walletId} onChange={setWalletId} options={walletOptions.map((w) => ({ value: w.id, label: w.name }))} />
+          </Field>
+        </div>
+        <Field label="Date" htmlFor="pay-all-date">
+          <DateField id="pay-all-date" value={date} onChange={setDate} quickPicks={["today", "yesterday"]} required />
+        </Field>
+        <Field label="Note" htmlFor="pay-all-note" hint="Prefilled with what's being paid; edit it if you like.">
+          <textarea
+            id="pay-all-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            className="w-full min-w-0 resize-none rounded-lg border border-input bg-transparent px-3 py-2 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+          />
+        </Field>
+      </FormDialog>
     </>
-  );
-}
-
-function CategorySelect({
-  value,
-  categories,
-  onChange,
-}: {
-  value: string;
-  categories: CategoryOption[];
-  onChange: (v: string) => void;
-}) {
-  const selectedName = categories.find((c) => c.id === value)?.name ?? "Category";
-  return (
-    <Select value={value || undefined} onValueChange={(v) => v && onChange(v)}>
-      <SelectTrigger className="w-full" aria-label="Category">
-        <span className="text-sm truncate">{selectedName}</span>
-      </SelectTrigger>
-      <SelectContent>
-        {categories.map((c) => (
-          <SelectItem key={c.id} value={c.id}>
-            {c.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }

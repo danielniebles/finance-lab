@@ -654,7 +654,7 @@ describe("resolveCreateInstallment", () => {
 
   it("resolves an existing card by case-insensitive exact name match", async () => {
     vi.mocked(getCardSummaries).mockResolvedValue([
-      { id: "card-1", name: "Nu", color: null, creditLimit: null, paymentDueDay: null, outstandingDebt: 0, monthlyObligation: 0, installmentCount: 0 },
+      { id: "card-1", name: "Nu", color: null, creditLimit: null, billingClosingDay: null, paymentDueDay: null, outstandingDebt: 0, monthlyObligation: 0, installmentCount: 0 },
     ]);
 
     const result = await resolveCreateInstallment({ ...baseInput, cardName: "nu" }, 7, 2026);

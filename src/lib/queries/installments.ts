@@ -124,6 +124,7 @@ export type CreditCardSummary = {
   name: string;
   color: string | null;
   creditLimit: number | null;
+  billingClosingDay: number | null;
   paymentDueDay: number | null;
   /** Sum of remaining capital across active installments on this card (ADR-006: never stored). */
   outstandingDebt: number;
@@ -182,6 +183,7 @@ export async function getCardSummaries(
       name: card.name,
       color: card.color,
       creditLimit: card.creditLimit,
+      billingClosingDay: card.billingClosingDay,
       paymentDueDay: card.paymentDueDay,
       outstandingDebt,
       monthlyObligation,
