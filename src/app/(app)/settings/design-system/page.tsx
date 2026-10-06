@@ -4,6 +4,7 @@ import { PRESET_COLORS } from "@/lib/color-presets";
 import { ColorDot, ListRow, Meter, Money, ReadingGrid, SectionHeader, StatCard, StatusChip } from "@/components/ds";
 import { SAVINGS_RATE_TARGET, TONE_CLASSES, type Tone } from "@/lib/status";
 import { cn } from "@/lib/utils";
+import { FormsShowcase } from "./forms-showcase";
 
 // Living reference for the design system: every token and ds/ component in
 // every state. Toggle light/dark from the sidebar (and THEME_FAMILY=signal
@@ -48,7 +49,7 @@ export default function DesignSystemPage() {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Design system</h1>
         <p className="text-sm text-muted-foreground">
-          Tokens from globals.css and components from components/ds. See DESIGN.md §7.
+          Tokens from globals.css, components from components/ds and the form kit from components/ds/form. See DESIGN.md §7.
         </p>
       </div>
 
@@ -162,6 +163,7 @@ export default function DesignSystemPage() {
       </section>
 
       <ReadingsAndDots />
+      <FormsShowcase />
     </div>
   );
 }
