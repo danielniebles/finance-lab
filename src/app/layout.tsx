@@ -1,27 +1,30 @@
 import type { Metadata, Viewport } from "next";
-import { Sora, DM_Sans, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { cookies } from "next/headers";
 import { Toaster } from "sonner";
 import "./globals.css";
 
-const sora = Sora({
+// Self-hosted (src/app/fonts) rather than next/font/google: the Google
+// variant downloads the files at build time, and a failed download broke the
+// Vercel build. Variable fonts, so one file covers every weight we use.
+const sora = localFont({
+  src: "./fonts/sora-latin-wght.woff2",
   variable: "--font-sora",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: "100 800",
   display: "swap",
 });
 
-const dmSans = DM_Sans({
+const dmSans = localFont({
+  src: "./fonts/dm-sans-latin-wght.woff2",
   variable: "--font-dm-sans",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: "100 1000",
   display: "swap",
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const jetbrainsMono = localFont({
+  src: "./fonts/jetbrains-mono-latin-wght.woff2",
   variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: "100 800",
   display: "swap",
 });
 
