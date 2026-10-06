@@ -54,7 +54,7 @@ src/
 │       ├── chat/                 # Advisor (agent)
 │       └── settings/             # categories, rules, tags, mappings (legacy), design-system (dev only)
 ├── components/
-│   ├── ds/                       # Design system: Money, StatusChip, Meter, StatCard, SectionHeader, ListRow, ReadingGrid, ColorDot; ds/form: FormDialog, Field, MoneyInput, DateField, OptionSelect, SegmentedControl, TagInput
+│   ├── ds/                       # Design system: Money, StatusChip, Meter, StatCard, SectionHeader, ListRow, ReadingGrid, ColorDot; ds/form: FormDialog, Field, MoneyInput, DateField, OptionSelect, SegmentedControl, TagInput, ColorPicker, CheckField
 │   ├── ui/                       # shadcn primitives (don't restyle here)
 │   └── <module>/                 # One folder per screen; big screens split into subfolders (overview/home, expenses/analysis, loans/debtors)
 └── lib/

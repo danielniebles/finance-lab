@@ -7,6 +7,7 @@ import {
   submitLoan,
 } from "../lib/use-loan-form.helpers";
 import { useLoanForm } from "./use-loan-form";
+import { localISODate } from "@/lib/form-format";
 import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/lib/queries/loans";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -138,7 +139,7 @@ describe("toDateObj", () => {
 
 describe("fieldsFromEditing", () => {
   it("returns empty amount and today's date when editing is null", () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localISODate(new Date());
     const fields = fieldsFromEditing(null, undefined, "acc-1");
     expect(fields.amount).toBe("");
     expect(fields.date).toBe(today);
@@ -207,7 +208,7 @@ describe("fieldsFromEditing", () => {
   });
 
   it("handles undefined editing the same as null", () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localISODate(new Date());
     const fields = fieldsFromEditing(undefined, undefined, "acc-1");
     expect(fields.amount).toBe("");
     expect(fields.date).toBe(today);
@@ -310,6 +311,14 @@ describe("submitLoan", () => {
     await submitLoan(null, { ...fields, debtorId: "debtor-42" });
     expect(createLoan).toHaveBeenCalledWith(
       expect.objectContaining({ debtorId: "debtor-42" }),
+    );
+  });
+
+  it("passes null (clears) for an emptied expectedBy and notes when editing", async () => {
+    await submitLoan(BASE_LOAN, { ...fields, expectedBy: "", notes: "  " });
+    expect(updateLoan).toHaveBeenCalledWith(
+      "loan-1",
+      expect.objectContaining({ expectedBy: null, notes: null }),
     );
   });
 
@@ -530,5 +539,34 @@ describe("useLoanForm — handleSubmit wiring", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(updateLoan).toHaveBeenCalledWith("loan-1", expect.any(Object));
     expect(createLoan).not.toHaveBeenCalled();
+  });
+});
+
+describe("useLoanForm — reopen and errors", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("starts a new loan clean each time the dialog opens", () => {
+    const { result, rerender } = renderHook(
+      ({ open }) => useLoanForm({ accounts: ACCOUNTS, debtors: DEBTORS, editing: null, onClose: vi.fn(), open }),
+      { initialProps: { open: true } },
+    );
+    act(() => result.current.setAmount("750000"));
+    rerender({ open: false });
+    rerender({ open: true });
+    expect(result.current.amount).toBe("");
+  });
+
+  it("keeps the dialog open and shows the error when saving fails", async () => {
+    vi.mocked(createLoan).mockRejectedValueOnce(new Error("Account not found"));
+    const onClose = vi.fn();
+    const { result } = renderHook(() =>
+      useLoanForm({ accounts: ACCOUNTS, debtors: DEBTORS, defaultDebtorId: "debtor-1", editing: null, onClose }),
+    );
+    act(() => result.current.setAmount("1000"));
+    act(() => result.current.handleSubmit({ preventDefault: vi.fn() } as unknown as React.FormEvent));
+    await waitFor(() => expect(result.current.error).toBe("Account not found"));
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

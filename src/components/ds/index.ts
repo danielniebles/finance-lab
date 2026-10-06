@@ -16,3 +16,4 @@ export { OptionSelect, type SelectOption } from "./form/option-select";
 export { TagInput } from "./form/tag-input";
 export { FormDialog, FormFooter } from "./form/form-dialog";
 export { ColorPicker } from "./form/color-picker";
+export { CheckField } from "./form/check-field";

@@ -315,10 +315,13 @@ Every modal form is built from these; no hand-rolled label or dialog styles.
 | `Field` | Label, muted "optional", hint or error. It also sizes the shadcn input/select inside it (40px, full width). |
 | `FieldGroupLabel` / `FormReadout` | A group heading inside a form ("Optional links") / a read-only computed value ("Monthly payment $ 350.000"). |
 | `MoneyInput` | Peso amounts. Holds a digit string and shows "$ 1.200.000" while typing, with the numeric keypad on phones. |
-| `DateField` | Shows "Today, Oct 6" / "Mar 12, 2027" and opens the browser's own picker (`showPicker()`). No date library. Optional quick picks (Today / Yesterday). |
+| `DateField` | Shows "Today, Oct 6" / "Mar 12, 2027" and opens the browser's own picker (`showPicker()`). No date library. Optional quick picks (Today / Yesterday); `clearable` adds an × for optional dates. |
 | `OptionSelect` | Dropdown that always shows the option label (base-ui otherwise shows the raw value), with an optional leading icon or dot and an optional "None" → `null`. |
 | `SegmentedControl` | 2–4 exclusive options. The selection is neutral, never a status colour. |
 | `TagInput` | Tags as chips. The value is the same comma-separated string as before. |
+| `ColorPicker` | Preset colours for something the user owns (vault, account, card); optional "No colour". |
+| `CheckField` | A yes/no option: checkbox, label and hint, the whole row tappable. |
+| `RowDeleteButton` (`components/shared`) | Delete inside a log list: first tap arms "Delete?", the second deletes. Never `window.confirm`. |
 
 Labels are sentence case; uppercase is only for group headings. Primary actions are named for what they do ("Add expense", "Create expense", "Save changes").
 

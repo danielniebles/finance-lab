@@ -3,179 +3,124 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger,
-} from "@/components/ui/select";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
+import { DateField, Field, FormDialog, FormFooter, Money, MoneyInput, OptionSelect } from "@/components/ds";
 import { deleteLoan } from "@/lib/actions/loans";
+import { loanAmountError, loanMissingHint } from "@/lib/loan-forms";
+import { TONE_CLASSES } from "@/lib/status";
 import type { AccountWithBalance, DebtorWithLoans, LoanWithRemaining } from "@/lib/queries/loans";
 import { useLoanForm } from "./hooks/use-loan-form";
-import { ColorDot } from "@/components/ds";
+import { accountOptions } from "./lib/account-options";
 
-function AccountDot({ color }: { color: string | null }) {
-  return <ColorDot color={color} className="size-2.5" />;
-}
+type LoanFormState = ReturnType<typeof useLoanForm>;
 
-function AccountTriggerLabel({ name, color }: { name: string; color: string | null }) {
-  return (
-    <span className="text-sm flex items-center gap-2">
-      <AccountDot color={color} />
-      {name}
-    </span>
-  );
-}
-
-function AccountSelectItem({ id, name, color }: { id: string; name: string; color: string | null }) {
-  return (
-    <SelectItem value={id}>
-      <span className="flex items-center gap-2">
-        <ColorDot color={color} />
-        {name}
-      </span>
-    </SelectItem>
-  );
-}
-
-function LoanDeleteConfirm({
-  pending,
-  onConfirm,
-  onCancel,
+function LoanFields({
+  form,
+  editing,
+  accounts,
+  debtors,
 }: {
-  pending: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-destructive">
-        Delete this loan? All payment records will also be removed.
-      </p>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel} autoFocus>
-          Cancel
-        </Button>
-        <Button type="button" variant="destructive" disabled={pending} onClick={onConfirm}>
-          Confirm delete
-        </Button>
-      </DialogFooter>
-    </div>
-  );
-}
-
-type LoanFormFieldsProps = {
+  form: LoanFormState;
   editing?: LoanWithRemaining | null;
   accounts: AccountWithBalance[];
   debtors: DebtorWithLoans[];
-  debtorId: string; setDebtorId: (v: string) => void;
-  accountId: string; setAccountId: (v: string) => void;
-  amount: string; setAmount: (v: string) => void;
-  date: string; setDate: (v: string) => void;
-  expectedBy: string; setExpectedBy: (v: string) => void;
-  notes: string; setNotes: (v: string) => void;
-  pending: boolean;
-  selectedDebtor?: DebtorWithLoans;
-  selectedAccount?: AccountWithBalance;
-  onSubmit: (e: React.FormEvent) => void;
-  onClose: () => void;
-  onDeleteRequest: () => void;
-};
-
-function LoanFormFields({
-  editing, accounts, debtors,
-  debtorId, setDebtorId, accountId, setAccountId,
-  amount, setAmount, date, setDate,
-  expectedBy, setExpectedBy, notes, setNotes,
-  pending, selectedDebtor, selectedAccount,
-  onSubmit, onClose, onDeleteRequest,
-}: LoanFormFieldsProps) {
+}) {
+  const amountError = loanAmountError(parseFloat(form.amount), editing);
+  const disabled = form.pending;
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div className="space-y-1.5">
-        <Label>Debtor</Label>
-        {editing ? (
-          <p className="text-sm px-3 py-2 rounded-md border border-border bg-muted/30 text-muted-foreground">
-            {selectedDebtor?.name ?? debtorId}
-          </p>
-        ) : (
-          <Select value={debtorId} onValueChange={(v) => v && setDebtorId(v)}>
-            <SelectTrigger className="h-9">
-              <span className="text-sm">{selectedDebtor?.name ?? "Select debtor…"}</span>
-            </SelectTrigger>
-            <SelectContent>
-              {debtors.map((d) => (
-                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-
-      <div className="space-y-1.5">
-        <Label>From account</Label>
-        <Select value={accountId} onValueChange={(v) => v && setAccountId(v)}>
-          <SelectTrigger className="h-9">
-            {selectedAccount
-              ? <AccountTriggerLabel name={selectedAccount.name} color={selectedAccount.color} />
-              : <span className="text-sm">Select account…</span>
-            }
-          </SelectTrigger>
-          <SelectContent>
-            {accounts.map((a) => (
-              <AccountSelectItem key={a.id} id={a.id} name={a.name} color={a.color} />
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
+    <>
+      <Field label="Lent to" hint={editing ? "A loan stays with the person it was lent to." : undefined}>
+        <OptionSelect
+          ariaLabel="Lent to"
+          value={form.debtorId || null}
+          onChange={(v) => form.setDebtorId(v ?? "")}
+          placeholder="Pick a person…"
+          options={debtors.map((d) => ({ value: d.id, label: d.name }))}
+          disabled={disabled || !!editing}
+        />
+      </Field>
+      <Field label="From account">
+        <OptionSelect
+          ariaLabel="From account"
+          value={form.accountId || null}
+          onChange={(v) => form.setAccountId(v ?? "")}
+          placeholder="Pick an account…"
+          options={accountOptions(accounts, { withBalance: true })}
+          disabled={disabled}
+        />
+      </Field>
+      <Field
+        label="Amount"
+        htmlFor="loan-amount"
+        error={amountError}
+        hint={
+          editing && editing.paid > 0 ? (
+            <>
+              Repaid so far: <Money value={editing.paid} className="text-foreground" />
+            </>
+          ) : undefined
+        }
+      >
+        <MoneyInput id="loan-amount" size="lg" value={form.amount} onValueChange={form.setAmount} invalid={!!amountError} required disabled={disabled} />
+      </Field>
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label>Amount (COP)</Label>
-          <Input
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="5000000"
-            min={1}
-            required
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Date</Label>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-        </div>
+        <Field label="Date" htmlFor="loan-date">
+          <DateField id="loan-date" value={form.date} onChange={form.setDate} required disabled={disabled} />
+        </Field>
+        <Field label="Pay back by" htmlFor="loan-expected" optional>
+          <DateField id="loan-expected" value={form.expectedBy} onChange={form.setExpectedBy} min={form.date} clearable disabled={disabled} />
+        </Field>
       </div>
+      <Field label="Notes" htmlFor="loan-notes" optional>
+        <Input id="loan-notes" value={form.notes} onChange={(e) => form.setNotes(e.target.value)} placeholder="What it was for" disabled={disabled} />
+      </Field>
+    </>
+  );
+}
 
-      <div className="space-y-1.5">
-        <Label>Expected repayment (optional)</Label>
-        <Input type="date" value={expectedBy} onChange={(e) => setExpectedBy(e.target.value)} />
-      </div>
+function footerHint(error: string | null, pending: boolean, missing: string): React.ReactNode {
+  if (error) return <span className={TONE_CLASSES.danger.text}>{error}</span>;
+  return pending ? "" : missing;
+}
 
-      <div className="space-y-1.5">
-        <Label>Notes</Label>
-        <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
-      </div>
-
-      <DialogFooter>
-        {editing && (
-          <Button
-            type="button"
-            variant="destructive"
-            className="sm:mr-auto"
-            disabled={pending}
-            onClick={onDeleteRequest}
-          >
-            Delete
+function DeleteLoanStep({
+  open,
+  onClose,
+  loan,
+  debtorName,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  loan: LoanWithRemaining;
+  debtorName?: string;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const n = loan.payments.length;
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title="Delete loan?"
+      footer={
+        <FormFooter>
+          <Button type="button" variant="outline" onClick={onCancel} autoFocus>
+            Cancel
           </Button>
-        )}
-        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-        <Button type="submit" disabled={pending || !debtorId || !accountId}>
-          {editing ? "Save" : "Record loan"}
-        </Button>
-      </DialogFooter>
-    </form>
+          <Button type="button" variant="destructive" disabled={pending} onClick={onConfirm}>
+            Delete loan
+          </Button>
+        </FormFooter>
+      }
+    >
+      <p className="text-sm text-muted-foreground">
+        <Money value={loan.amount} className="text-foreground" /> to {debtorName ?? "this person"}.{" "}
+        {n > 0 ? `Its ${n} ${n === 1 ? "payment is" : "payments are"} deleted too.` : "It has no payments."}
+      </p>
+    </FormDialog>
   );
 }
 
@@ -194,23 +139,11 @@ export function LoanForm({
   defaultDebtorId?: string;
   editing?: LoanWithRemaining | null;
 }) {
-  const {
-    debtorId, setDebtorId,
-    accountId, setAccountId,
-    amount, setAmount,
-    date, setDate,
-    expectedBy, setExpectedBy,
-    notes, setNotes,
-    pending,
-    handleSubmit,
-    selectedDebtor,
-    selectedAccount,
-  } = useLoanForm({ accounts, debtors, defaultDebtorId, editing, onClose });
-
+  const form = useLoanForm({ accounts, debtors, defaultDebtorId, editing, onClose, open });
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deletePending, startDelete] = useTransition();
 
-  // Reset the delete-confirm sub-view whenever the dialog (re)opens.
+  // Reset the delete-confirm step whenever the dialog (re)opens.
   const [lastOpen, setLastOpen] = useState(open);
   if (open !== lastOpen) {
     setLastOpen(open);
@@ -225,40 +158,52 @@ export function LoanForm({
     });
   }
 
+  if (confirmingDelete && editing) {
+    return (
+      <DeleteLoanStep
+        open={open}
+        onClose={onClose}
+        loan={editing}
+        debtorName={form.selectedDebtor?.name}
+        pending={deletePending}
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={handleDelete}
+      />
+    );
+  }
+
+  const missing = loanMissingHint(form.fields);
+  const blocked = !!missing || !!loanAmountError(parseFloat(form.amount), editing);
+
   return (
-    <Dialog open={open} onOpenChange={(o: boolean) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>
-            {confirmingDelete ? "Delete loan?" : editing ? "Edit loan" : "Record new loan"}
-          </DialogTitle>
-        </DialogHeader>
-        {confirmingDelete ? (
-          <LoanDeleteConfirm
-            pending={deletePending}
-            onConfirm={handleDelete}
-            onCancel={() => setConfirmingDelete(false)}
-          />
-        ) : (
-          <LoanFormFields
-            editing={editing}
-            accounts={accounts}
-            debtors={debtors}
-            debtorId={debtorId} setDebtorId={setDebtorId}
-            accountId={accountId} setAccountId={setAccountId}
-            amount={amount} setAmount={setAmount}
-            date={date} setDate={setDate}
-            expectedBy={expectedBy} setExpectedBy={setExpectedBy}
-            notes={notes} setNotes={setNotes}
-            pending={pending}
-            selectedDebtor={selectedDebtor}
-            selectedAccount={selectedAccount}
-            onSubmit={handleSubmit}
-            onClose={onClose}
-            onDeleteRequest={() => setConfirmingDelete(true)}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={editing ? "Edit loan" : "New loan"}
+      onSubmit={form.handleSubmit}
+      footer={
+        <FormFooter hint={footerHint(form.error, form.pending, missing)}>
+          {editing && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive sm:mr-auto"
+              onClick={() => setConfirmingDelete(true)}
+              disabled={form.pending}
+            >
+              Delete
+            </Button>
+          )}
+          <Button type="button" variant="outline" onClick={onClose} disabled={form.pending}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={form.pending || blocked}>
+            {form.pending ? "Saving…" : editing ? "Save changes" : "Record loan"}
+          </Button>
+        </FormFooter>
+      }
+    >
+      <LoanFields form={form} editing={editing} accounts={accounts} debtors={debtors} />
+    </FormDialog>
   );
 }

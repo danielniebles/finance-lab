@@ -1,259 +1,223 @@
 "use client";
 
-import { useState, useActionState, useMemo } from "react";
-import { useFormStatus } from "react-dom";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger,
-} from "@/components/ui/select";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
+import { ColorDot, DateField, Field, FormDialog, FormFooter, Money, MoneyInput, OptionSelect } from "@/components/ds";
 import { recordPayment } from "@/lib/actions/loans";
 import { formatCOP } from "@/lib/format";
+import { localISODate, parseISODate } from "@/lib/form-format";
+import { accountsWithOpenLoans, allocatePayment, paymentMissingHint, type PaymentSplit } from "@/lib/loan-forms";
+import { TONE_CLASSES } from "@/lib/status";
 import type { AccountWithBalance, DebtorWithLoans } from "@/lib/queries/loans";
-import { ColorDot } from "@/components/ds";
+import { accountOptions } from "./lib/account-options";
 
-type FormState = { error?: string } | null;
-type FifoEntry = { loan: DebtorWithLoans["loans"][0]; apply: number };
+type FormState = {
+  debtorId: string;
+  accountId: string; // "" = all accounts
+  amount: string; // digits
+  date: string; // YYYY-MM-DD
+  notes: string;
+};
 
-// ─── Pure helper ──────────────────────────────────────────────────────────────
+const emptyForm = (debtorId?: string): FormState => ({
+  debtorId: debtorId ?? "",
+  accountId: "",
+  amount: "",
+  date: localISODate(new Date()),
+  notes: "",
+});
 
-function computeFifoPreview(
-  debtor: DebtorWithLoans | undefined,
-  accountId: string,
-  amount: string,
-): FifoEntry[] {
-  if (!debtor || !amount) return [];
-  const total = parseFloat(amount);
-  if (isNaN(total) || total <= 0) return [];
-  const activeLoans = debtor.loans
-    .filter((l) => l.isActive && (!accountId || l.accountId === accountId))
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  let left = total;
-  return activeLoans.map((l) => {
-    if (left <= 0) return null;
-    const apply = Math.min(left, l.remaining);
-    left -= apply;
-    return { loan: l, apply };
-  }).filter(Boolean) as FifoEntry[];
-}
-
-// ─── Submit button ────────────────────────────────────────────────────────────
-
-function SubmitButton({ disabled }: { disabled: boolean }) {
-  const { pending } = useFormStatus();
+/** Which loans the payment goes to, newest first — the same split recordPayment makes. */
+function AllocationPreview({ splits }: { splits: PaymentSplit[] }) {
+  if (splits.length === 0) return null;
   return (
-    <Button type="submit" disabled={pending || disabled}>
-      {pending ? "Saving…" : "Record payment"}
-    </Button>
-  );
-}
-
-// ─── Account select field ─────────────────────────────────────────────────────
-
-function AccountSelectField({
-  accounts,
-  accountId,
-  onValueChange,
-}: {
-  accounts: AccountWithBalance[];
-  accountId: string;
-  onValueChange: (v: string) => void;
-}) {
-  const selected = accounts.find((a) => a.id === accountId);
-
-  return (
-    <div className="space-y-1.5">
-      <Label>Account <span className="text-muted-foreground font-normal">(optional — leave blank for all)</span></Label>
-      <Select value={accountId} onValueChange={(v) => onValueChange(v ?? "")}>
-        <SelectTrigger className="h-9">
-          <span className="text-sm flex items-center gap-2">
-            {selected ? (
-              <>
-                <ColorDot color={selected.color} />
-                {selected.name}
-              </>
-            ) : (
-              <span className="text-muted-foreground">All accounts</span>
-            )}
-          </span>
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="">All accounts</SelectItem>
-          {accounts.map((a) => (
-            <SelectItem key={a.id} value={a.id}>
-              <span className="flex items-center gap-2">
-                <ColorDot color={a.color} />
-                {a.name}
+    <div className="flex flex-col gap-1.5 rounded-lg bg-muted px-3 py-2.5">
+      <span className="text-xs text-muted-foreground">Goes to · newest loan first</span>
+      <ul className="flex flex-col gap-1">
+        {splits.map(({ loan, apply }) => (
+          <li key={loan.id} className="flex items-center justify-between gap-3 text-xs">
+            <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+              <ColorDot color={loan.accountColor} />
+              <span className="truncate">
+                {new Date(loan.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })} ·{" "}
+                {loan.notes ?? loan.accountName}
               </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+            </span>
+            <span className="flex shrink-0 items-baseline gap-1.5">
+              <Money value={apply} signed tone="positive" className="font-medium" />
+              {apply >= loan.remaining && <span className="text-muted-foreground">settles it</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
-// ─── FIFO preview ─────────────────────────────────────────────────────────────
-
-function FifoPreview({
-  preview,
-  selectedAccount,
-}: {
-  preview: FifoEntry[];
-  selectedAccount: AccountWithBalance | undefined;
-}) {
-  if (preview.length === 0) return null;
-
-  return (
-    <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-1.5">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-        Allocation preview — {selectedAccount ? selectedAccount.name : "all accounts"}, newest first
-      </p>
-      {preview.map(({ loan, apply }) => (
-        <div key={loan.id} className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">
-            {new Date(loan.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "numeric" })}
-            <span className="text-muted-foreground/50 ml-1">· {loan.accountName}</span>
-          </span>
-          <span className="font-mono text-success">+{formatCOP(apply)}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── Payment form ─────────────────────────────────────────────────────────────
-
-export function PaymentForm({
-  open,
-  onClose,
-  accounts,
-  debtors,
-  defaultDebtorId,
-}: {
+type PaymentFormArgs = {
   open: boolean;
   onClose: () => void;
   accounts: AccountWithBalance[];
   debtors: DebtorWithLoans[];
   defaultDebtorId?: string;
-}) {
-  const [debtorId, setDebtorId] = useState(defaultDebtorId ?? "");
-  const [accountId, setAccountId] = useState("");
-  const [amount, setAmount] = useState("");
+};
 
-  const debtor = debtors.find((d) => d.id === debtorId);
+function usePaymentForm({ open, onClose, accounts, debtors, defaultDebtorId }: PaymentFormArgs) {
+  const [form, setForm] = useState<FormState>(() => emptyForm(defaultDebtorId));
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
-  const relevantAccounts = useMemo(() => {
-    if (!debtor) return [];
-    const ids = new Set(debtor.loans.filter((l) => l.isActive).map((l) => l.accountId));
-    return accounts.filter((a) => ids.has(a.id));
-  }, [debtor, accounts]);
+  // Stays mounted between opens: start clean each time (the old form kept
+  // the last amount after recording a payment).
+  const [lastOpen, setLastOpen] = useState(open);
+  if (open !== lastOpen) {
+    setLastOpen(open);
+    if (open) {
+      setForm(emptyForm(defaultDebtorId));
+      setError(null);
+    }
+  }
 
-  const selectedAccount = accounts.find((a) => a.id === accountId);
+  const setField = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((p) => ({ ...p, [k]: v }));
+  // A new debtor has different loans: the account filter starts over.
+  const setDebtor = (id: string) => setForm((p) => ({ ...p, debtorId: id, accountId: "" }));
 
-  const preview = useMemo(
-    () => computeFifoPreview(debtor, accountId, amount),
-    [debtor, accountId, amount],
-  );
+  const debtor = debtors.find((d) => d.id === form.debtorId);
+  const amount = parseFloat(form.amount);
+  const allocation = allocatePayment(debtor, form.accountId, amount);
+  const missing = paymentMissingHint(form.debtorId, amount, allocation);
 
-  const [state, action] = useActionState(
-    async (_prev: FormState, formData: FormData): Promise<FormState> => {
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const date = parseISODate(form.date);
+    if (missing || !date) return;
+    setError(null);
+    startTransition(async () => {
       try {
-        const date = formData.get("date") as string;
-        const notes = (formData.get("notes") as string).trim() || undefined;
         await recordPayment({
-          debtorId,
-          accountId: accountId || undefined,
-          totalAmount: parseFloat(amount),
-          date: new Date(date + "T12:00:00"),
-          notes,
+          debtorId: form.debtorId,
+          accountId: form.accountId || undefined,
+          totalAmount: amount,
+          date,
+          notes: form.notes.trim() || undefined,
         });
         onClose();
-        return null;
-      } catch (e) {
-        return { error: e instanceof Error ? e.message : "Something went wrong" };
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong.");
       }
-    },
-    null
+    });
+  }
+
+  return {
+    form, setField, setDebtor, debtor, allocation, missing, pending, error, handleSubmit,
+    debtorAccounts: accountsWithOpenLoans(debtor, accounts),
+  };
+}
+
+type PaymentFormModel = ReturnType<typeof usePaymentForm>;
+
+function AmountField({ m, autoFocus }: { m: PaymentFormModel; autoFocus: boolean }) {
+  const { allocation, form, setField, pending } = m;
+  const over = allocation.unallocated > 0;
+  return (
+    <Field
+      label="Amount received"
+      htmlFor="pay-amount"
+      error={over ? "More than they owe." : undefined}
+      aside={
+        allocation.owed > 0 ? (
+          <button
+            type="button"
+            onClick={() => setField("amount", String(Math.floor(allocation.owed)))}
+            disabled={pending}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            All of it
+          </button>
+        ) : undefined
+      }
+      hint={
+        m.debtor ? (
+          <>
+            Owes <Money value={allocation.owed} className="text-foreground" />
+            {form.accountId ? " on this account" : ""}
+          </>
+        ) : undefined
+      }
+    >
+      <MoneyInput id="pay-amount" size="lg" value={form.amount} onValueChange={(v) => setField("amount", v)} invalid={over} autoFocus={autoFocus} required disabled={pending} />
+    </Field>
   );
+}
+
+function WhoFields({ m, debtors, askDebtor }: { m: PaymentFormModel; debtors: DebtorWithLoans[]; askDebtor: boolean }) {
+  return (
+    <>
+      {askDebtor && (
+        <Field label="From">
+          <OptionSelect
+            ariaLabel="Who paid"
+            value={m.form.debtorId || null}
+            onChange={(v) => m.setDebtor(v ?? "")}
+            placeholder="Pick a person…"
+            options={debtors.filter((d) => d.totalOwed > 0).map((d) => ({ value: d.id, label: `${d.name} — owes ${formatCOP(d.totalOwed)}` }))}
+            disabled={m.pending}
+          />
+        </Field>
+      )}
+      {m.debtorAccounts.length > 1 && (
+        <Field label="Loans from" hint="Only loans from this account are paid down.">
+          <OptionSelect
+            ariaLabel="Loans from"
+            value={m.form.accountId || null}
+            onChange={(v) => m.setField("accountId", v ?? "")}
+            noneLabel="All accounts"
+            options={accountOptions(m.debtorAccounts)}
+            disabled={m.pending}
+          />
+        </Field>
+      )}
+    </>
+  );
+}
+
+function footerHint(m: PaymentFormModel): React.ReactNode {
+  if (m.error) return <span className={TONE_CLASSES.danger.text}>{m.error}</span>;
+  return m.pending ? "" : m.missing;
+}
+
+export function PaymentForm(props: PaymentFormArgs) {
+  const { open, onClose, debtors, defaultDebtorId } = props;
+  const m = usePaymentForm(props);
+  const { form, setField, pending } = m;
 
   return (
-    <Dialog open={open} onOpenChange={(o: boolean) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Record payment</DialogTitle>
-        </DialogHeader>
-        <form action={action} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Debtor</Label>
-            <Select value={debtorId} onValueChange={(v) => v && setDebtorId(v)}>
-              <SelectTrigger className="h-9">
-                <span className="text-sm">
-                  {debtor ? `${debtor.name} — owes ${formatCOP(debtor.totalOwed)}` : "Select debtor…"}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                {debtors.filter((d) => d.totalOwed > 0).map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    {d.name} — {formatCOP(d.totalOwed)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {relevantAccounts.length > 1 && (
-            <AccountSelectField
-              accounts={relevantAccounts}
-              accountId={accountId}
-              onValueChange={setAccountId}
-            />
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Amount received (COP)</Label>
-              <Input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="800000"
-                min={1}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Date</Label>
-              <Input
-                name="date"
-                type="date"
-                defaultValue={new Date().toISOString().slice(0, 10)}
-                required
-              />
-            </div>
-          </div>
-
-          <FifoPreview preview={preview} selectedAccount={selectedAccount} />
-
-          <div className="space-y-1.5">
-            <Label>Notes</Label>
-            <Input name="notes" placeholder="Optional notes" />
-          </div>
-
-          {state?.error && (
-            <p className="text-destructive text-sm">{state.error}</p>
-          )}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <SubmitButton disabled={!debtorId || !amount} />
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={m.debtor && defaultDebtorId ? `Payment from ${m.debtor.name}` : "Record payment"}
+      onSubmit={m.handleSubmit}
+      footer={
+        <FormFooter hint={footerHint(m)}>
+          <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={pending || !!m.missing}>
+            {pending ? "Saving…" : "Record payment"}
+          </Button>
+        </FormFooter>
+      }
+    >
+      <WhoFields m={m} debtors={debtors} askDebtor={!defaultDebtorId} />
+      <AmountField m={m} autoFocus={!!defaultDebtorId} />
+      <AllocationPreview splits={m.allocation.splits} />
+      <Field label="Date" htmlFor="pay-date">
+        <DateField id="pay-date" value={form.date} onChange={(v) => setField("date", v)} quickPicks={["today", "yesterday"]} required disabled={pending} />
+      </Field>
+      <Field label="Notes" htmlFor="pay-notes" optional>
+        <Input id="pay-notes" value={form.notes} onChange={(e) => setField("notes", e.target.value)} placeholder="e.g. Nequi transfer" disabled={pending} />
+      </Field>
+    </FormDialog>
   );
 }

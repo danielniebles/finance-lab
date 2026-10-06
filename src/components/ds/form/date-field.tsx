@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, X } from "lucide-react";
 import { formatDateLabel, localISODate, shiftISODate } from "@/lib/form-format";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,8 @@ function resolvePick(pick: QuickPick, today: string): { label: string; value: st
  * (iOS ignores scripted `showPicker()`), and on desktop a click also calls
  * `showPicker()` so the calendar opens wherever you click, not only on the
  * icon. No date library. Holds the same "YYYY-MM-DD" string as before.
+ *
+ * `clearable` (optional dates) adds an × that sets the value back to "".
  */
 export function DateField({
   id,
@@ -31,6 +33,7 @@ export function DateField({
   disabled,
   min,
   max,
+  clearable = false,
 }: {
   id?: string;
   value: string;
@@ -42,9 +45,10 @@ export function DateField({
   disabled?: boolean;
   min?: string;
   max?: string;
+  clearable?: boolean;
 }) {
-  const today = localISODate(new Date());
   const label = formatDateLabel(value);
+  const showClear = canClear(clearable, value, disabled);
 
   function openPicker(e: React.MouseEvent<HTMLInputElement>) {
     try {
@@ -66,7 +70,7 @@ export function DateField({
         <span aria-hidden className={cn("truncate", !label && "text-muted-foreground")}>
           {label || placeholder}
         </span>
-        <CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        {!showClear && <CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
         <input
           id={id}
           type="date"
@@ -82,32 +86,66 @@ export function DateField({
           // receive the tap and stay focusable for keyboards.
           className="absolute inset-0 h-full w-full cursor-pointer appearance-none opacity-0 disabled:cursor-not-allowed [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
         />
+        {showClear && <ClearButton onClear={() => onChange("")} />}
       </div>
-      {quickPicks && quickPicks.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {quickPicks.map((p) => {
-            const pick = resolvePick(p, today);
-            const active = pick.value === value;
-            return (
-              <button
-                key={pick.label}
-                type="button"
-                disabled={disabled}
-                aria-pressed={active}
-                onClick={() => onChange(pick.value)}
-                className={cn(
-                  "h-8 rounded-full border px-3 text-xs font-medium transition-colors",
-                  active
-                    ? "border-transparent bg-foreground/10 text-foreground"
-                    : "border-dashed border-border text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {pick.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {quickPicks && quickPicks.length > 0 && <QuickPicks picks={quickPicks} value={value} onChange={onChange} disabled={disabled} />}
     </div>
+  );
+}
+
+function QuickPicks({
+  picks,
+  value,
+  onChange,
+  disabled,
+}: {
+  picks: QuickPick[];
+  value: string;
+  onChange: (iso: string) => void;
+  disabled?: boolean;
+}) {
+  const today = localISODate(new Date());
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {picks.map((p) => {
+        const pick = resolvePick(p, today);
+        const active = pick.value === value;
+        return (
+          <button
+            key={pick.label}
+            type="button"
+            disabled={disabled}
+            aria-pressed={active}
+            onClick={() => onChange(pick.value)}
+            className={cn(
+              "h-8 rounded-full border px-3 text-xs font-medium transition-colors",
+              active
+                ? "border-transparent bg-foreground/10 text-foreground"
+                : "border-dashed border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {pick.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function canClear(clearable: boolean, value: string, disabled?: boolean): boolean {
+  return clearable && !!value && !disabled;
+}
+
+/** Above the invisible input, so the tap clears instead of opening the picker. */
+function ClearButton({ onClear }: { onClear: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label="Clear date"
+      onClick={onClear}
+      className="relative z-10 -mr-2 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+    >
+      <X className="size-4" />
+    </button>
   );
 }

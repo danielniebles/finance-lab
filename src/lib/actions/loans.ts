@@ -94,9 +94,31 @@ export async function updateAccount(
   revalidatePath(PATH);
 }
 
-export async function deleteAccount(id: string) {
-  await db.savingsAccount.delete({ where: { id } });
+/**
+ * Entries and wallets go with the account (cascade). Loans and transfers
+ * don't: while any exist the database refuses, so this checks first and
+ * says why instead of failing silently. Returns `{ error }` rather than
+ * throwing, since thrown messages are hidden from the client in production.
+ */
+export async function deleteAccount(id: string): Promise<{ error?: string }> {
+  const [loans, transfers] = await Promise.all([
+    db.loan.count({ where: { accountId: id } }),
+    db.transfer.count({ where: { OR: [{ fromAccountId: id }, { toAccountId: id }] } }),
+  ]);
+  if (loans > 0 || transfers > 0) {
+    const parts = [
+      loans > 0 ? `${loans} ${loans === 1 ? "loan" : "loans"}` : null,
+      transfers > 0 ? `${transfers} ${transfers === 1 ? "transfer" : "transfers"}` : null,
+    ].filter(Boolean);
+    return { error: `It still has ${parts.join(" and ")}. Delete or move those first.` };
+  }
+  try {
+    await db.savingsAccount.delete({ where: { id } });
+  } catch {
+    return { error: "Its wallets are still used by transactions or vaults, so it can't be deleted." };
+  }
   revalidatePath(PATH);
+  return {};
 }
 
 // ─── Account entries (initial / adjustments) ─────────────────────────────────
@@ -145,7 +167,8 @@ export async function createDebtor(data: { name: string; notes?: string }) {
   return created;
 }
 
-export async function updateDebtor(id: string, data: { name: string; notes?: string }) {
+/** `notes: null` clears them (undefined would leave the old notes in place). */
+export async function updateDebtor(id: string, data: { name: string; notes: string | null }) {
   await db.debtor.update({ where: { id }, data });
   revalidatePath(PATH);
 }
@@ -182,9 +205,10 @@ export async function createLoan(data: {
 }
 
 /** Re-resolves walletId (ADR-036/037) to the (possibly new) account's savingsWalletId. */
+/** `expectedBy: null` / `notes: null` clear the field; undefined would keep the old value. */
 export async function updateLoan(
   id: string,
-  data: { accountId: string; amount: number; date: Date; expectedBy?: Date; notes?: string }
+  data: { accountId: string; amount: number; date: Date; expectedBy: Date | null; notes: string | null }
 ) {
   const account = await db.savingsAccount.findUniqueOrThrow({
     where: { id: data.accountId },

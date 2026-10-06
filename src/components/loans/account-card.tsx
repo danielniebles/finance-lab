@@ -1,23 +1,21 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, Plus, Trash2, ScrollText, Trash, MoreHorizontal } from "lucide-react";
+import { Pencil, Plus, Trash2, ScrollText, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { TONE_CLASSES } from "@/lib/status";
 import { formatCOP } from "@/lib/format";
-import { deleteAccount, deleteEntry } from "@/lib/actions/loans";
+import { deleteAccount } from "@/lib/actions/loans";
 import { AccountForm } from "./account-form";
 import { EntryForm } from "./account-entry-form";
+import { AccountLogDialog } from "./account-log-dialog";
 import type { AccountWithBalance } from "@/lib/queries/loans";
 import { MASK } from "./lib/constants";
-import { ColorDot } from "@/components/ds";
+import { ColorDot, FormDialog, FormFooter } from "@/components/ds";
 
 // ─── Badge sub-components ─────────────────────────────────────────────────────
 
@@ -32,198 +30,6 @@ function AccountTypeBadge({ type }: { type: string }) {
     <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", map[type] ?? map.BANK)}>
       {label[type] ?? type}
     </span>
-  );
-}
-
-function EntryTypeBadge({ type }: { type: string }) {
-  return type === "INITIAL" ? (
-    <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium w-fit", TONE_CLASSES.info.soft)}>Opening</span>
-  ) : (
-    <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium w-fit", TONE_CLASSES.neutral.soft)}>Adjustment</span>
-  );
-}
-
-function VaultBadge() {
-  return (
-    <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium w-fit", TONE_CLASSES.positive.soft)}>
-      Vault
-    </span>
-  );
-}
-
-// ─── Entry log types and helpers ──────────────────────────────────────────────
-
-type EntryLogRow = { kind: "entry"; id: string; type: string; amount: number; date: Date; notes: string | null };
-type VaultLogRow = { kind: "vault"; id: string; amount: number; date: Date; notes: string | null; vaultName: string };
-type LogRow = EntryLogRow | VaultLogRow;
-
-function buildLogRows(account: AccountWithBalance): LogRow[] {
-  return [
-    ...account.entries.map((e) => ({ kind: "entry" as const, ...e })),
-    ...account.vaultEntries.map((e) => ({ kind: "vault" as const, ...e })),
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-}
-
-// ─── Log row sub-components ───────────────────────────────────────────────────
-
-function amountColorClass(amount: number): string {
-  return amount < 0 ? "text-destructive" : "text-success";
-}
-
-function EntryLogRowItem({
-  row,
-  onDelete,
-  deletePending,
-}: {
-  row: EntryLogRow;
-  onDelete: (id: string) => void;
-  deletePending: boolean;
-}) {
-  const dateLabel = new Date(row.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" });
-
-  return (
-    <div className="group/row hover:bg-muted/20">
-      {/* Mobile: stacked row — the 5-column fixed grid needs ~400px minimum
-          and forces horizontal scroll below that. */}
-      <div className="flex flex-col gap-1 px-6 py-2.5 sm:hidden">
-        <div className="flex items-center justify-between gap-2">
-          <EntryTypeBadge type={row.type} />
-          <span className={cn("font-mono text-xs font-medium shrink-0", amountColorClass(row.amount))}>
-            {row.amount >= 0 ? "+" : ""}{formatCOP(row.amount)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-xs text-muted-foreground">
-            {dateLabel}
-            {row.notes ? ` · ${row.notes}` : ""}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6 shrink-0 text-muted-foreground hover:text-destructive"
-            onClick={() => onDelete(row.id)}
-            disabled={deletePending}
-          >
-            <Trash className="size-3.5" />
-          </Button>
-        </div>
-      </div>
-
-      <div className="hidden sm:grid grid-cols-[5rem_6.5rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5">
-        <span className="text-xs text-muted-foreground">{dateLabel}</span>
-        <EntryTypeBadge type={row.type} />
-        <span className={cn("font-mono text-xs font-medium", amountColorClass(row.amount))}>
-          {row.amount >= 0 ? "+" : ""}{formatCOP(row.amount)}
-        </span>
-        <span className="text-xs text-muted-foreground truncate">{row.notes ?? ""}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-5 opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-destructive"
-          onClick={() => onDelete(row.id)}
-          disabled={deletePending}
-        >
-          <Trash className="size-3.5" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function VaultLogRowItem({ row }: { row: VaultLogRow }) {
-  const displayAmount = -row.amount;
-  const direction = row.amount > 0 ? "→" : "←";
-  const label = row.notes ? `${row.notes} · ${direction} ${row.vaultName}` : `${direction} ${row.vaultName}`;
-  const dateLabel = new Date(row.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" });
-
-  return (
-    <div className="hover:bg-muted/20">
-      <div className="flex flex-col gap-1 px-6 py-2.5 sm:hidden">
-        <div className="flex items-center justify-between gap-2">
-          <VaultBadge />
-          <span className={cn("font-mono text-xs font-medium shrink-0", amountColorClass(displayAmount))}>
-            {displayAmount >= 0 ? "+" : ""}{formatCOP(displayAmount)}
-          </span>
-        </div>
-        <span className="truncate text-xs text-muted-foreground">
-          {dateLabel} · {label}
-        </span>
-      </div>
-
-      <div className="hidden sm:grid grid-cols-[5rem_6.5rem_8rem_1fr_1.25rem] items-center gap-x-3 px-6 py-2.5">
-        <span className="text-xs text-muted-foreground">{dateLabel}</span>
-        <VaultBadge />
-        <span className={cn("font-mono text-xs font-medium", amountColorClass(displayAmount))}>
-          {displayAmount >= 0 ? "+" : ""}{formatCOP(displayAmount)}
-        </span>
-        <span className="text-xs text-muted-foreground truncate">{label}</span>
-        <span />
-      </div>
-    </div>
-  );
-}
-
-// ─── Entry log dialog ─────────────────────────────────────────────────────────
-
-function AccountEntryLog({
-  open,
-  onClose,
-  account,
-  onAddEntry,
-  onDeleteEntry,
-  deleteEntryPending,
-}: {
-  open: boolean;
-  onClose: () => void;
-  account: AccountWithBalance;
-  onAddEntry: () => void;
-  onDeleteEntry: (id: string) => void;
-  deleteEntryPending: boolean;
-}) {
-  const logRows = buildLogRows(account);
-
-  return (
-    <Dialog open={open} onOpenChange={(o: boolean) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ColorDot color={account.color} className="size-3" />
-            {account.name} — Entry log
-          </DialogTitle>
-        </DialogHeader>
-
-        {logRows.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">No entries yet.</p>
-        ) : (
-          <div className="max-h-[60vh] overflow-y-auto -mx-6 divide-y divide-border/40">
-            {logRows.map((row) =>
-              row.kind === "entry" ? (
-                <EntryLogRowItem
-                  key={row.id}
-                  row={row}
-                  onDelete={onDeleteEntry}
-                  deletePending={deleteEntryPending}
-                />
-              ) : (
-                <VaultLogRowItem key={row.id} row={row} />
-              )
-            )}
-          </div>
-        )}
-
-        <div className="pt-2 border-t border-border/40">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full gap-1.5"
-            onClick={onAddEntry}
-          >
-            <Plus className="size-3.5" />
-            Add entry
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -245,27 +51,62 @@ function ExclusionBadges({ isExcluded, isExcludedFromTotal }: { isExcluded: bool
   );
 }
 
+// ─── Delete confirm ───────────────────────────────────────────────────────────
+
+function DeleteAccountDialog({ open, onClose, account }: { open: boolean; onClose: () => void; account: AccountWithBalance }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const [lastOpen, setLastOpen] = useState(open);
+  if (open !== lastOpen) {
+    setLastOpen(open);
+    if (open) setError(null);
+  }
+
+  function handleDelete() {
+    startTransition(async () => {
+      const result = await deleteAccount(account.id);
+      if (result.error) setError(result.error);
+      else onClose();
+    });
+  }
+
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={`Delete ${account.name}?`}
+      footer={
+        <FormFooter hint={error ? <span className={TONE_CLASSES.danger.text}>{error}</span> : undefined}>
+          <Button type="button" variant="outline" onClick={onClose} autoFocus>
+            Cancel
+          </Button>
+          <Button type="button" variant="destructive" disabled={pending || !!error} onClick={handleDelete}>
+            {pending ? "Deleting…" : "Delete account"}
+          </Button>
+        </FormFooter>
+      }
+    >
+      <p className="text-sm text-muted-foreground">
+        Its {account.entries.length} {account.entries.length === 1 ? "entry is" : "entries are"} deleted with it. An
+        account that still has loans or transfers can&apos;t be deleted.
+      </p>
+    </FormDialog>
+  );
+}
+
 // ─── Account card ─────────────────────────────────────────────────────────────
 
 export function AccountCard({ account, masked }: { account: AccountWithBalance; masked?: boolean }) {
   const [editOpen, setEditOpen] = useState(false);
   const [entryOpen, setEntryOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
-  const [deletePending, startDelete] = useTransition();
-  const [deleteEntryPending, startDeleteEntry] = useTransition();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const isNegative = account.balance < 0;
   const isExcluded = !account.includeInAvailable;
   const isExcludedFromTotal = !account.includeInOverviewTotal;
 
-  function handleDelete() {
-    if (!confirm(`Delete "${account.name}"? This will also remove all its entries and loans.`)) return;
-    startDelete(async () => { await deleteAccount(account.id); });
-  }
-
-  function handleDeleteEntry(id: string) {
-    startDeleteEntry(async () => { await deleteEntry(id); });
-  }
 
   return (
     <>
@@ -325,7 +166,7 @@ export function AccountCard({ account, masked }: { account: AccountWithBalance; 
                   <Pencil className="size-3.5" />
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem variant="destructive" onClick={handleDelete} disabled={deletePending}>
+                <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
                   <Trash2 className="size-3.5" />
                   Delete
                 </DropdownMenuItem>
@@ -337,14 +178,13 @@ export function AccountCard({ account, masked }: { account: AccountWithBalance; 
 
       <AccountForm open={editOpen} onClose={() => setEditOpen(false)} editing={account} />
       <EntryForm open={entryOpen} onClose={() => setEntryOpen(false)} account={account} />
-      <AccountEntryLog
+      <AccountLogDialog
         open={logOpen}
         onClose={() => setLogOpen(false)}
         account={account}
         onAddEntry={() => { setLogOpen(false); setEntryOpen(true); }}
-        onDeleteEntry={handleDeleteEntry}
-        deleteEntryPending={deleteEntryPending}
       />
+      <DeleteAccountDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} account={account} />
     </>
   );
 }
