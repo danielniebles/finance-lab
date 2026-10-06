@@ -40,6 +40,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#1a2030",
+  // Android Chrome: the on-screen keyboard shrinks the page instead of
+  // covering it, so bottom sheets stay above it (iOS: see FormDialog).
+  interactiveWidget: "resizes-content",
 };
 
 export default async function RootLayout({

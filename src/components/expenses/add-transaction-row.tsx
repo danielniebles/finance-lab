@@ -24,7 +24,6 @@ import {
   suggestTransactionFields,
   setTransactionTags,
 } from "@/lib/actions/transactions";
-import { WalletSelect } from "@/components/shared/wallet-select";
 import { categorySelectOptions } from "@/components/shared/category-option";
 import { parseTagNames } from "@/lib/tag-utils";
 import type { CategoryOption } from "@/lib/queries/expenses";
@@ -98,6 +97,9 @@ export function missingFieldsHint(values: FormValues): string {
   const list = missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(", ")} and ${missing.at(-1)}`;
   return `Add ${list} to save.`;
 }
+
+const walletSelectOptions = (wallets: { id: string; name: string }[]) =>
+  wallets.map((w) => ({ value: w.id, label: w.name }));
 
 const TYPE_OPTIONS: SegmentOption<TxnType>[] = [
   { value: "expense", label: "Expense" },
@@ -414,23 +416,21 @@ function CategoryOrTransferFields({
     return (
       <div className="grid grid-cols-2 gap-3">
         <Field label="From">
-          <WalletSelect
-            value={values.walletId}
-            options={walletOptions}
-            onChange={(v) =>
-              onChange({ walletId: v, toWalletId: v === values.toWalletId ? "" : values.toWalletId })
-            }
+          <OptionSelect
             ariaLabel="From wallet"
-            placeholder="Choose…"
+            value={values.walletId || null}
+            onChange={(v) =>
+              onChange({ walletId: v ?? "", toWalletId: v === values.toWalletId ? "" : values.toWalletId })
+            }
+            options={walletSelectOptions(walletOptions)}
           />
         </Field>
         <Field label="To">
-          <WalletSelect
-            value={values.toWalletId}
-            options={walletOptions.filter((w) => w.id !== values.walletId)}
-            onChange={(v) => onChange({ toWalletId: v })}
+          <OptionSelect
             ariaLabel="To wallet"
-            placeholder="Choose…"
+            value={values.toWalletId || null}
+            onChange={(v) => onChange({ toWalletId: v ?? "" })}
+            options={walletSelectOptions(walletOptions.filter((w) => w.id !== values.walletId))}
           />
         </Field>
       </div>
@@ -450,7 +450,12 @@ function CategoryOrTransferFields({
         />
       </Field>
       <Field label="Wallet">
-        <WalletSelect value={values.walletId} options={walletOptions} onChange={(v) => onChange({ walletId: v })} placeholder="Choose…" />
+        <OptionSelect
+          ariaLabel="Wallet"
+          value={values.walletId || null}
+          onChange={(v) => onChange({ walletId: v ?? "" })}
+          options={walletSelectOptions(walletOptions)}
+        />
       </Field>
     </div>
   );
