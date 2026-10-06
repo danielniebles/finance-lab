@@ -4,6 +4,28 @@ import { useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
+const NO_KEYBOARD_INPUTS = new Set(["checkbox", "radio", "date", "file", "range", "color", "button", "submit", "reset"]);
+
+/** Whether focusing this element brings up the on-screen keyboard. */
+export function opensKeyboard(el: Element | null): el is HTMLElement {
+  if (!el) return false;
+  if (el instanceof HTMLTextAreaElement) return true;
+  if (el instanceof HTMLInputElement) return !NO_KEYBOARD_INPUTS.has(el.type);
+  return el instanceof HTMLElement && el.isContentEditable === true;
+}
+
+/**
+ * Scrolls the focused field (with its label) into the visible part of the
+ * sheet. Runs after the sheet has finished resizing for the keyboard
+ * (its max-height transition is 150ms).
+ */
+function revealFocusedField(sheet: HTMLElement | null) {
+  const active = document.activeElement;
+  if (!sheet || !opensKeyboard(active) || !sheet.contains(active)) return;
+  const target = active.closest("[data-slot=field]") ?? active;
+  target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
 /**
  * Keeps a bottom sheet above the on-screen keyboard. iOS Safari doesn't
  * resize the page when the keyboard opens: it lays the keyboard over it, so
@@ -13,6 +35,9 @@ import { cn } from "@/lib/utils";
  * visible, so its body scrolls and its buttons stay reachable. (Android
  * Chrome resizes the page itself thanks to `interactiveWidget` in the root
  * layout; the inset is then 0.)
+ *
+ * Once the keyboard is up, the focused field is scrolled into view: a field
+ * near the bottom of the form would otherwise stay focused but hidden.
  */
 function useKeyboardAwareSheet(open: boolean) {
   const ref = useRef<HTMLDivElement>(null);
@@ -20,6 +45,11 @@ function useKeyboardAwareSheet(open: boolean) {
     const vv = typeof window === "undefined" ? undefined : window.visualViewport;
     if (!open || !vv) return;
     let frame = 0;
+    let reveal: ReturnType<typeof setTimeout> | undefined;
+    const scheduleReveal = () => {
+      clearTimeout(reveal);
+      reveal = setTimeout(() => revealFocusedField(ref.current), 200);
+    };
     const update = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
@@ -30,13 +60,23 @@ function useKeyboardAwareSheet(open: boolean) {
         el.style.setProperty("--vv-height", `${Math.round(vv.height)}px`);
       });
     };
+    const onResize = () => {
+      update();
+      scheduleReveal(); // keyboard opened/closed: the visible area changed
+    };
+    // Moving to another field while the keyboard is already up doesn't
+    // resize anything, so focus changes trigger the reveal too.
+    const onFocusIn = () => scheduleReveal();
     update();
-    vv.addEventListener("resize", update);
+    vv.addEventListener("resize", onResize);
     vv.addEventListener("scroll", update);
+    document.addEventListener("focusin", onFocusIn);
     return () => {
       cancelAnimationFrame(frame);
-      vv.removeEventListener("resize", update);
+      clearTimeout(reveal);
+      vv.removeEventListener("resize", onResize);
       vv.removeEventListener("scroll", update);
+      document.removeEventListener("focusin", onFocusIn);
     };
   }, [open]);
   return ref;
@@ -46,7 +86,8 @@ function useKeyboardAwareSheet(open: boolean) {
  * The one modal layout for forms: title, scrolling body, and a footer band
  * that stays put. On phones it becomes a bottom sheet (full width, anchored
  * to the bottom, body scrolls, buttons always reachable), on wider screens a
- * centred dialog. Pure CSS — no viewport hooks, so no hydration flicker.
+ * centred dialog. The phone/desktop switch is pure CSS (no hydration
+ * flicker); only the keyboard offset is measured at runtime.
  *
  * Pass `onSubmit` to wrap body + footer in a <form> (submit buttons in the
  * footer then work with Enter).

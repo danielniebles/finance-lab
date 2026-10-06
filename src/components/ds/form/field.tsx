@@ -34,7 +34,7 @@ export function Field({
     <div
       data-slot="field"
       className={cn(
-        "flex min-w-0 flex-col gap-1.5",
+        "flex min-w-0 scroll-my-4 flex-col gap-1.5",
         "[&_[data-slot=input]]:min-h-10 [&_[data-slot=select-trigger]]:min-h-10 [&_[data-slot=select-trigger]]:w-full",
         className,
       )}
