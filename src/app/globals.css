@@ -81,6 +81,7 @@
   --surface-glow: none; /* decorative wash on hero cards; "none" turns it off for a theme */
   --unplanned: oklch(0.62 0.15 60); /* same as --warning — default theme keeps Unplanned on the warning scale */
   --border: oklch(0.88 0.005 250);
+  --scrollbar: oklch(0.80 0.005 250);
   --input: oklch(0.88 0.005 250);
   --ring: oklch(0.52 0.18 155);
   --chart-1: oklch(0.52 0.18 155);
@@ -126,6 +127,7 @@
   --surface-glow: radial-gradient(circle at 100% 0%, oklch(0.72 0.18 155 / 9%), transparent 55%); /* decorative wash on hero cards; "none" turns it off for a theme */
   --unplanned: oklch(0.80 0.15 80); /* same as --warning — default theme keeps Unplanned on the warning scale */
   --border: oklch(0.28 0.01 250 / 70%);
+  --scrollbar: oklch(0.40 0.01 250);
   --input: oklch(0.28 0.01 250 / 80%);
   --ring: oklch(0.72 0.18 155);
   --chart-1: oklch(0.72 0.18 155);
@@ -180,6 +182,7 @@
   --surface-glow: radial-gradient(circle at 100% 0%, rgb(13 148 136 / 7%), transparent 55%); /* decorative wash on hero cards; "none" turns it off for a theme */
   --unplanned: #4f46e5;
   --border: #e2e8f0;
+  --scrollbar: #cbd5e1;
   --input: #e2e8f0;
   --ring: #0d9488;
   --chart-1: #0d9488;
@@ -224,6 +227,7 @@
   --surface-glow: radial-gradient(circle at 100% 0%, rgb(61 214 196 / 14%), transparent 60%); /* decorative wash on hero cards; "none" turns it off for a theme */
   --unplanned: #7c86ff;
   --border: #252a30;
+  --scrollbar: #3a424b;
   --input: #252a30;
   --ring: #3dd6c4;
   --chart-1: #3dd6c4;
@@ -268,5 +272,32 @@
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* Scrollbars: thin, token-coloured thumb on a transparent track, so they
+     follow every theme. Chrome/Edge/Firefox use the standard properties;
+     Safari (no scrollbar-color) uses the ::-webkit-scrollbar rules below. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background-color: var(--scrollbar);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }

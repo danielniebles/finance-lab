@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DateField, Field, FieldGroupLabel, FormDialog, FormFooter, FormReadout, Money, MoneyInput, OptionSelect, StatusChip } from "@/components/ds";
+import { DateField, Field, FormDialog, FormFooter, FormReadout, Money, MoneyInput, OptionSelect, StatusChip } from "@/components/ds";
 import { CategoryIconTile } from "@/components/shared/category-option";
 import type { WalletOption } from "@/components/shared/wallet-select";
 import { payBills } from "@/lib/actions/bills";
@@ -31,6 +31,8 @@ function BillName({ bill }: { bill: BillStatus }) {
           <span className="truncate">{bill.name}</span>
           {bill.budgetType === "VARIABLE" && <StatusChip tone="neutral">Variable</StatusChip>}
         </span>
+        {/* Screen readers read the label as one name: "Internet, Services". */}
+        <span className="sr-only">, </span>
         <span className="truncate text-xs text-muted-foreground">{bill.category.name}</span>
       </span>
     </span>
@@ -53,7 +55,7 @@ function UnpaidRow({ bill, row, onChange, disabled }: { bill: BillStatus; row: R
     <li className={cn("grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 border-t border-border/60 py-3 sm:grid-cols-[auto_minmax(0,1fr)_11rem]", !row.checked && "opacity-60")}>
       {/* Wrapped: base-ui's Checkbox renders a hidden <input> sibling that would take a grid cell. */}
       <span className="flex pt-1.5">
-        <Checkbox id={id} checked={row.checked} onCheckedChange={(v) => onChange({ ...row, checked: v === true })} disabled={disabled} aria-label={`Pay ${bill.name}`} />
+        <Checkbox id={id} checked={row.checked} onCheckedChange={(v) => onChange({ ...row, checked: v === true })} disabled={disabled} />
       </span>
       <label htmlFor={id} className="cursor-pointer pt-0.5">
         <BillName bill={bill} />
@@ -81,6 +83,34 @@ function PaidRow({ bill }: { bill: BillStatus }) {
   );
 }
 
+function setAllChecked(rows: Record<string, RowState>, checked: boolean): Record<string, RowState> {
+  return Object.fromEntries(Object.entries(rows).map(([id, r]) => [id, { ...r, checked }]));
+}
+
+/** Header of the bills list: ticks or unticks every unpaid bill (minus sign when only some are). */
+function SelectAll({ checkedCount, total, onChange, disabled }: { checkedCount: number; total: number; onChange: (checked: boolean) => void; disabled: boolean }) {
+  const all = total > 0 && checkedCount === total;
+  return (
+    <div className="flex items-center gap-3 border-t border-border/60">
+      <label htmlFor="pay-bills-all" className="flex min-h-11 cursor-pointer items-center gap-3 has-disabled:cursor-not-allowed">
+        <span className="flex">
+          <Checkbox
+            id="pay-bills-all"
+            checked={all}
+            indeterminate={checkedCount > 0 && !all}
+            onCheckedChange={(v) => onChange(v === true)}
+            disabled={disabled}
+          />
+        </span>
+        <span className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">All bills</span>
+      </label>
+      <span className="ml-auto text-xs text-muted-foreground">
+        {checkedCount} of {total} ticked
+      </span>
+    </div>
+  );
+}
+
 function UnlinkedNote({ data }: { data: BillsForMonth }) {
   if (data.unlinked.length === 0) return null;
   return (
@@ -90,7 +120,9 @@ function UnlinkedNote({ data }: { data: BillsForMonth }) {
         {data.unlinked.map((u, i) => (
           <span key={u.categoryId}>
             {i > 0 && " "}
-            {u.categoryName} already has <Money value={u.amount} /> logged this month that isn&apos;t tied to a bill.
+            {/* Explicit space: Next's client build dropped the one after <Money> here (this text has an &apos; entity; the tests' transform keeps it). */}
+            {u.categoryName} already has <Money value={u.amount} />{" "}
+            logged this month that isn&apos;t tied to a bill.
           </span>
         ))}{" "}
         Untick any bill it paid.
@@ -194,8 +226,13 @@ export function PayBills({
         </FormReadout>
         <UnlinkedNote data={data} />
         <div className="flex flex-col">
-          <FieldGroupLabel>Bills</FieldGroupLabel>
-          <ul className="mt-2 flex flex-col">
+          <SelectAll
+            checkedCount={selected.length}
+            total={unpaid.length}
+            onChange={(checked) => setRows((prev) => setAllChecked(prev, checked))}
+            disabled={pending || unpaid.length === 0}
+          />
+          <ul className="flex flex-col">
             {unpaid.map((b) => (
               <UnpaidRow
                 key={b.id}
