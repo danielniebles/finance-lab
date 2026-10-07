@@ -301,3 +301,12 @@
     background: transparent;
   }
 }
+
+/* Sideways-scrolling chip rows on phones (wallet and category chips): the row
+   scrolls by swipe, a scrollbar under it would only add noise. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

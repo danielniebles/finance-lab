@@ -2,17 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { buildLedgerUrl } from "@/components/expenses/ledger-controls";
+import type { LedgerFilters } from "@/lib/queries/transactions";
 
 type Props = {
   hasActiveFilters: boolean;
   month: number;
   year: number;
+  filters: LedgerFilters;
 };
 
 // Two distinct empty-state copy variants per the design spec: nothing at all
 // this month vs. filters narrowing an otherwise non-empty month. Only the
-// latter gets a recovery action (reset to groupBy=day, no filters).
-export function LedgerEmptyState({ hasActiveFilters, month, year }: Props) {
+// latter gets a recovery action (clear the filters, keep the wallet).
+export function LedgerEmptyState({ hasActiveFilters, month, year, filters }: Props) {
   const router = useRouter();
 
   if (!hasActiveFilters) {
@@ -30,7 +33,9 @@ export function LedgerEmptyState({ hasActiveFilters, month, year }: Props) {
         type="button"
         variant="ghost"
         size="sm"
-        onClick={() => router.push(`/expenses?view=ledger&month=${month}&year=${year}`)}
+        onClick={() =>
+          router.push(buildLedgerUrl(month, year, filters, { category: "", type: "", search: "", tagId: "" }))
+        }
       >
         Clear filters
       </Button>

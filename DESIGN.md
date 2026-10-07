@@ -311,7 +311,8 @@ Domain states never pick classes themselves. Map the state to a `Tone` (`positiv
 - **One primary action per page, top right of the `PageHeader`**: a `HeaderAction` (teal, 36px, plus icon, verb + noun: "Add transaction", "Add installment", "New vault"). Never at the bottom of a list or inside a section.
 - **Page controls sit to its left, in outline** (`controls`): month navigation, `PrivacyToggle`, a secondary action such as Transfer. Nothing else in the header is teal.
 - **Section actions stay in that section's `SectionHeader`** as small outline buttons (Manage cards, Add recurring, Add account, Add debtor); row actions stay on the row (Pay, Add entry).
-- **Phones:** the action stays on the title row, with `shortLabel` when the title is long ("Add", "Loan"); the controls get their own full-width row (the month navigation stretches, Privacy becomes an icon button).
+- **Phones:** the global "+" next to the bottom nav is Add transaction, on every screen (it never changes meaning; it prefills the current wallet). The header keeps the page's own primary action, on the title row with `shortLabel` when the title is long ("Add", "Loan"); where that action *is* Add transaction (Overview, Expenses) it is hidden on phones (`AddTransactionButton className="max-sm:hidden"`). The controls get their own full-width row (the month navigation stretches, Privacy becomes an icon button).
+- **Add transaction** is one dialog for the whole shell (`AddTransactionProvider` in the `(app)` layout); triggers call `useAddTransaction().openAddTransaction(walletId?)` instead of loading their own form data.
 
 ### Forms (`src/components/ds/form`)
 

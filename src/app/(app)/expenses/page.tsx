@@ -1,16 +1,18 @@
 export const dynamic = "force-dynamic";
 
 import { Suspense } from "react";
+import { cookies } from "next/headers";
 import { AnalysisDashboard } from "@/components/expenses/analysis-dashboard";
 import { PeriodSelector } from "@/components/expenses/period-selector";
 import { ViewTabs } from "@/components/expenses/view-tabs";
 import { TransactionLedgerPage } from "@/components/expenses/transaction-ledger";
-import { getAvailableMonths, getCategories } from "@/lib/queries/expenses";
-import { getTags } from "@/lib/queries/tags";
-import { getWalletBalances } from "@/lib/queries/wallets";
+import { RememberLedgerWallet, WalletQuickFilter } from "@/components/expenses/wallet-quick-filter";
+import { getAvailableMonths } from "@/lib/queries/expenses";
+import { getWalletActivity } from "@/lib/queries/transactions";
+import { getWalletBalances, type WalletBalancesResult } from "@/lib/queries/wallets";
 import { PageHeader } from "@/components/ds";
 import { AddTransactionButton } from "@/components/expenses/add-transaction-button";
-import type { LedgerGroupBy } from "@/lib/queries/transactions";
+import { LEDGER_WALLET_COOKIE, resolveLedgerWallet, type WalletChipOption } from "@/lib/expenses-ledger-display";
 
 type Props = {
   searchParams: Promise<{
@@ -40,10 +42,6 @@ function currentFinancialMonth(startDay: number) {
   return { month, year };
 }
 
-function parseGroupBy(value?: string): LedgerGroupBy {
-  return value === "category" || value === "wallet" ? value : "day";
-}
-
 function parseType(value?: string): "expense" | "income" | undefined {
   return value === "expense" || value === "income" ? value : undefined;
 }
@@ -52,20 +50,23 @@ function parseGroupFilter(value?: string): "FIXED" | "VARIABLE" | undefined {
   return value === "FIXED" || value === "VARIABLE" ? value : undefined;
 }
 
-/** What the header's Add transaction dialog needs, on both views. */
-async function loadAddTransactionData() {
-  const [categories, tags, walletBalances] = await Promise.all([getCategories(), getTags(), getWalletBalances()]);
-  const walletOptions = walletBalances.accounts.flatMap((account) =>
-    account.wallets.map((wallet) => ({ id: wallet.id, name: wallet.name })),
+/**
+ * Every wallet, account by account in sortOrder — the quick-filter chips'
+ * base order. The dot takes the bank's colour, so a bank's wallets read as
+ * one family (the wallet's own colour only when the bank has none).
+ */
+function walletChipOptions(walletBalances: WalletBalancesResult): WalletChipOption[] {
+  return walletBalances.accounts.flatMap((account) =>
+    account.wallets.map((wallet) => ({ id: wallet.id, name: wallet.name, color: account.color ?? wallet.color })),
   );
-  return { categories, tags, walletOptions };
 }
 
-function ledgerFilters(params: Awaited<Props["searchParams"]>) {
+// ?groupBy= is no longer read: the ledger always groups by day (old URLs still load).
+function ledgerFilters(params: Awaited<Props["searchParams"]>, walletId: string | undefined) {
   return {
     category: params.category || undefined,
     wallet: params.wallet || undefined,
-    walletId: params.walletId || undefined,
+    walletId,
     type: parseType(params.type),
     search: params.search || undefined,
     tagId: params.tagId || undefined,
@@ -81,10 +82,21 @@ export default async function ExpensesPage({ searchParams }: Props) {
   const selectedYear = params.year ? parseInt(params.year) : fallback.year;
   const view = params.view === "analysis" ? "analysis" : "ledger";
 
-  const [importedMonths, { categories, tags, walletOptions }] = await Promise.all([
+  const [importedMonths, walletBalances, walletActivity, cookieStore] = await Promise.all([
     getAvailableMonths(),
-    loadAddTransactionData(),
+    getWalletBalances(),
+    getWalletActivity(selectedMonth, selectedYear),
+    cookies(),
   ]);
+  const wallets = walletChipOptions(walletBalances);
+  const walletOptions = wallets.map(({ id, name }) => ({ id, name }));
+  // The URL wins (`all` = every wallet), else the wallet picked last time.
+  const walletId = resolveLedgerWallet(
+    params.walletId,
+    cookieStore.get(LEDGER_WALLET_COOKIE)?.value,
+    wallets.map((w) => w.id),
+  );
+  const walletName = wallets.find((w) => w.id === walletId)?.name;
 
   return (
     <div className="space-y-6">
@@ -99,15 +111,24 @@ export default async function ExpensesPage({ searchParams }: Props) {
             currentParams={params}
           />
         }
-        action={
-          <AddTransactionButton
-            categories={categories}
-            walletOptions={walletOptions}
-            tags={tags}
-            activeWalletId={params.walletId || undefined}
-          />
-        }
+        action={<AddTransactionButton activeWalletId={walletId} className="max-sm:hidden" />}
       />
+
+      <RememberLedgerWallet walletId={walletId} />
+      <div className="flex items-center gap-4">
+        <WalletQuickFilter
+          wallets={wallets}
+          activity={walletActivity}
+          selectedId={walletId}
+          month={selectedMonth}
+          year={selectedYear}
+          currentParams={params}
+          className="min-w-0 flex-1 max-sm:-mx-6 max-sm:px-6"
+        />
+        <span className="shrink-0 text-xs text-muted-foreground max-sm:hidden">
+          Opens on <span className="font-semibold text-foreground">{walletName ?? "All wallets"}</span>
+        </span>
+      </div>
 
       <ViewTabs view={view} month={selectedMonth} year={selectedYear} currentParams={params} />
 
@@ -120,8 +141,11 @@ export default async function ExpensesPage({ searchParams }: Props) {
           <TransactionLedgerPage
             month={selectedMonth}
             year={selectedYear}
-            groupBy={parseGroupBy(params.groupBy)}
-            filters={ledgerFilters(params)}
+            filters={ledgerFilters(params, walletId)}
+            walletBalances={walletBalances}
+            wallets={wallets}
+            walletActivity={walletActivity}
+            currentParams={params}
           />
         </Suspense>
       ) : (
@@ -133,7 +157,7 @@ export default async function ExpensesPage({ searchParams }: Props) {
           <AnalysisDashboard
             month={selectedMonth}
             year={selectedYear}
-            walletId={params.walletId || undefined}
+            walletId={walletId}
             groupFilter={parseGroupFilter(params.groupFilter)}
             walletOptions={walletOptions}
           />

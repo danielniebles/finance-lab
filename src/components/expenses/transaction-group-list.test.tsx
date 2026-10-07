@@ -34,6 +34,7 @@ const GROUPS: LedgerGroup[] = [
         wallet: "Nequi",
         walletId: null,
         walletName: null,
+        walletColor: null,
         note: "Groceries run",
         categoryName: "Groceries",
         categoryIcon: null,
@@ -94,5 +95,21 @@ describe("TransactionGroupList — redundant-column suppression", () => {
     expect(subtotal?.textContent).toMatch(/^-\$\s?50[.,]000$/);
     expect(subtotal).toHaveClass("text-foreground");
     expect(subtotal).not.toHaveClass("text-destructive");
+  });
+});
+
+describe("TransactionGroupList — wallet tag", () => {
+  const WITH_WALLET: LedgerGroup[] = [
+    { ...GROUPS[0], items: [{ ...GROUPS[0].items[0], walletId: "wlt_daily", walletName: "Daily", walletColor: null }] },
+  ];
+
+  it("shows each row's wallet under All wallets", () => {
+    render(<TransactionGroupList groups={WITH_WALLET} showWallet categories={CATEGORIES} walletOptions={[]} tags={[]} />);
+    expect(screen.getByText("Daily")).toBeInTheDocument();
+  });
+
+  it("hides it when a wallet is selected", () => {
+    render(<TransactionGroupList groups={WITH_WALLET} categories={CATEGORIES} walletOptions={[]} tags={[]} />);
+    expect(screen.queryByText("Daily")).not.toBeInTheDocument();
   });
 });

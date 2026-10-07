@@ -54,6 +54,7 @@ function makeItem(overrides: Partial<LedgerItem> = {}): LedgerItem {
     wallet: "Nequi",
     walletId: "wallet-nequi",
     walletName: "Nequi",
+    walletColor: null,
     note: "Groceries run",
     categoryName: "Groceries",
     categoryIcon: null,

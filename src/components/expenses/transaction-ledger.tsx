@@ -1,16 +1,15 @@
-import {
-  getTransactionList,
-  type LedgerGroupBy,
-  type LedgerFilters,
-} from "@/lib/queries/transactions";
+import { getTransactionList, type LedgerFilters } from "@/lib/queries/transactions";
 import { getCategories } from "@/lib/queries/expenses";
-import { getWalletBalances } from "@/lib/queries/wallets";
+import type { WalletBalancesResult } from "@/lib/queries/wallets";
 import { getTags } from "@/lib/queries/tags";
 import { getMonthlyAnalysis } from "@/lib/queries/expenses";
 import { getFinancialPeriodBounds } from "@/lib/financial-period-utils";
 import { periodProgress } from "@/lib/forecast-utils";
+import type { ExpensesSearchParams } from "@/lib/build-expenses-url";
+import type { WalletChipOption } from "@/lib/expenses-ledger-display";
 import { LedgerSummary } from "@/components/expenses/ledger-summary";
 import { LedgerControls } from "@/components/expenses/ledger-controls";
+import { LedgerStickyBar } from "@/components/expenses/ledger-sticky-bar";
 import { TransactionGroupList } from "@/components/expenses/transaction-group-list";
 import { LedgerEmptyState } from "@/components/expenses/ledger-empty-state";
 import { CategorySummaryPanel } from "@/components/expenses/category-summary-panel";
@@ -18,28 +17,24 @@ import { CategorySummaryPanel } from "@/components/expenses/category-summary-pan
 type Props = {
   month: number;
   year: number;
-  groupBy: LedgerGroupBy;
   filters: LedgerFilters;
+  walletBalances: WalletBalancesResult;
+  wallets: WalletChipOption[];
+  walletActivity: Record<string, number>;
+  currentParams: ExpensesSearchParams;
 };
 
+// Filters that narrow the list inside the wallet scope. filters.wallet (the
+// legacy label field) is filtering-inert (see transactions.ts's
+// matchesWallet) and walletId is the scope itself, so neither counts.
 function hasAnyFilter(filters: LedgerFilters): boolean {
-  // filters.wallet (the legacy label field) is intentionally NOT checked here
-  // — it's filtering-inert (see transactions.ts's matchesWallet, which only
-  // compares walletId) and no longer written by ledger-controls.tsx, so
-  // counting it would let a stale ?wallet= bookmark param report "active
-  // filters" on an unfiltered result set.
-  return Boolean(
-    filters.category || filters.walletId || filters.type || filters.search || filters.tagId,
-  );
+  return Boolean(filters.category || filters.type || filters.search || filters.tagId);
 }
 
 // Total Balance = the filtered wallet's current balance, or the
 // household-wide grand total (same includeInOverviewTotal-gated number the
 // Overview page shows) when no single wallet is selected.
-function ledgerBalance(
-  walletBalances: Awaited<ReturnType<typeof getWalletBalances>>,
-  walletId: string | undefined,
-): number {
+function ledgerBalance(walletBalances: WalletBalancesResult, walletId: string | undefined): number {
   if (!walletId) return walletBalances.grandTotal;
   const wallet = walletBalances.accounts.flatMap((a) => a.wallets).find((w) => w.id === walletId);
   return wallet?.balance ?? walletBalances.grandTotal;
@@ -56,79 +51,83 @@ function progressProps(p: ReturnType<typeof currentProgress>) {
   return { daysElapsed: p?.daysElapsed ?? null, daysInPeriod: p?.daysInPeriod ?? null };
 }
 
+const SUMMARY_ID = "ledger-summary";
+
 // The Ledger tab's server entry point (rendered by expenses/page.tsx behind
-// ?view=ledger). Fetches getTransactionList once for the CURRENT
-// groupBy/filters (what's actually displayed) and getWalletBalances()
-// separately to derive WalletSelect's full option list.
-//
-// NOTE (wallet-ledger-filter-fix, .scratch/wallet-ledger-filter-fix.md, 4th
-// pass): walletOptions used to come from a month-scoped
-// getTransactionList(month, year, "wallet") call, which only surfaced
-// wallets with >= 1 transaction in the CURRENT month. AccountsCard links to a
-// wallet by id regardless of monthly activity (it reads from
-// getWalletBalances(), scoped to ALL wallets), so clicking a wallet with a
-// real balance but zero transactions this month correctly filtered the
-// ledger to an empty list, but WalletSelect's trigger fell back to "All
-// wallets" — no option in the month-scoped list matched that id. Fixed by
-// sourcing walletOptions from getWalletBalances() instead: every account's
-// wallets, regardless of transaction activity. This also naturally excludes
-// the "Sin asignar" pseudo-bucket (walletId: null) from the dropdown, since
-// it isn't a real Wallet row — same exclusion behavior as before, no longer
-// needing a sentinel-based filter to enforce it.
-export async function TransactionLedgerPage({ month, year, groupBy, filters }: Props) {
-  const [result, walletBalances, categories, tags, analysis] = await Promise.all([
-    getTransactionList(month, year, groupBy, filters),
-    getWalletBalances(),
+// ?view=ledger), always grouped by day. Everything here is scoped by the
+// wallet the page resolved (URL, else the remembered cookie); the month
+// budget stays household-wide (getMonthlyAnalysis without a wallet).
+export async function TransactionLedgerPage({
+  month,
+  year,
+  filters,
+  walletBalances,
+  wallets,
+  walletActivity,
+  currentParams,
+}: Props) {
+  const [result, categories, tags, analysis] = await Promise.all([
+    getTransactionList(month, year, "day", filters),
     getCategories(),
     getTags(),
-    // Only for the budget total in the summary — budgets are household-wide,
-    // so skipped when a single wallet is selected.
-    filters.walletId ? Promise.resolve(null) : getMonthlyAnalysis(month, year),
+    getMonthlyAnalysis(month, year),
   ]);
   const progress = currentProgress(month, year);
 
-  const walletOptions = walletBalances.accounts.flatMap((account) =>
-    account.wallets.map((wallet) => ({ id: wallet.id, name: wallet.name })),
-  );
-  const activeFilters = hasAnyFilter(filters);
-  const activeWalletName = walletOptions.find((w) => w.id === filters.walletId)?.name;
-
-  const totalBalance = ledgerBalance(walletBalances, filters.walletId);
+  const walletOptions = wallets.map(({ id, name }) => ({ id, name }));
+  const walletName = wallets.find((w) => w.id === filters.walletId)?.name;
+  const filtered = hasAnyFilter(filters);
+  const balance = ledgerBalance(walletBalances, filters.walletId);
 
   return (
     <div className="space-y-5">
+      <LedgerStickyBar
+        summaryId={SUMMARY_ID}
+        month={month}
+        year={year}
+        expenses={result.monthTotalExpense}
+        net={result.monthTotalIncome - result.monthTotalExpense}
+        balance={balance}
+        wallets={wallets}
+        walletActivity={walletActivity}
+        selectedWalletId={filters.walletId}
+        currentParams={currentParams}
+      />
+
       <LedgerSummary
+        id={SUMMARY_ID}
+        walletName={walletName}
         income={result.monthTotalIncome}
         expenses={result.monthTotalExpense}
-        balance={totalBalance}
-        balanceLabel={activeWalletName ?? "Wallets"}
-        budget={analysis?.totalBudget ?? null}
+        balance={balance}
+        budget={analysis.totalBudget}
+        budgetSpent={analysis.totalExpenses}
         {...progressProps(progress)}
       />
 
       <CategorySummaryPanel
         rows={result.categorySummary}
+        walletName={walletName}
         month={month}
         year={year}
-        groupBy={groupBy}
         filters={filters}
       />
 
       <LedgerControls
         month={month}
         year={year}
-        groupBy={groupBy}
         filters={filters}
-        categories={categories}
-        walletOptions={walletOptions}
         tags={tags}
+        groups={result.groups}
+        scopeCount={result.scopeCount}
+        filtered={filtered}
       >
         {result.groups.length === 0 ? (
-          <LedgerEmptyState hasActiveFilters={activeFilters} month={month} year={year} />
+          <LedgerEmptyState hasActiveFilters={filtered} month={month} year={year} filters={filters} />
         ) : (
           <TransactionGroupList
             groups={result.groups}
-            groupBy={groupBy}
+            showWallet={!filters.walletId}
             categories={categories}
             walletOptions={walletOptions}
             tags={tags}

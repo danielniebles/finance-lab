@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
-import { HeaderAction, PageHeader } from "@/components/ds";
+import { PageHeader } from "@/components/ds";
+import { AddTransactionButton } from "@/components/expenses/add-transaction-button";
 import { BalanceCard } from "@/components/overview/home/balance-card";
 import { MonthSnapshot } from "@/components/overview/home/month-snapshot";
 import { WalletsStrip } from "@/components/overview/home/wallets-strip";
@@ -50,7 +51,7 @@ export default async function OverviewPage() {
       <PageHeader
         title="Overview"
         description={`${monthLabel} ${year}${progress ? ` · day ${progress.daysElapsed} of ${progress.daysInPeriod}` : ""}`}
-        action={<HeaderAction label="Add transaction" href="/expenses?view=ledger" />}
+        action={<AddTransactionButton className="max-sm:hidden" />}
       />
 
       <div className="grid gap-4 lg:grid-cols-2">

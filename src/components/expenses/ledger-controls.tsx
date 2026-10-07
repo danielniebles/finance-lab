@@ -2,32 +2,22 @@
 
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Filter } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { Field, FormDialog, FormFooter, Money, OptionSelect, SegmentedControl, type SegmentOption } from "@/components/ds";
 import { cn } from "@/lib/utils";
-import { WalletSelect } from "@/components/shared/wallet-select";
-import type { LedgerGroupBy, LedgerFilters } from "@/lib/queries/transactions";
-import type { CategoryOption } from "@/lib/queries/expenses";
+import { OPEN_LEDGER_SEARCH } from "@/components/expenses/ledger-sticky-bar";
+import {
+  ALL_WALLETS,
+  activeFilters,
+  moreFiltersCount,
+  transactionCountLabel,
+} from "@/lib/expenses-ledger-display";
+import type { LedgerFilters, LedgerGroup } from "@/lib/queries/transactions";
 import type { TagOption } from "@/lib/queries/tags";
 
-const GROUP_BY_OPTIONS: { value: LedgerGroupBy; label: string }[] = [
-  { value: "day", label: "Day" },
-  { value: "category", label: "Category" },
-  { value: "wallet", label: "Wallet" },
-];
-
-const ALL_SENTINEL = "all";
-
 type FilterPatch = Partial<{
-  groupBy: LedgerGroupBy;
   category: string;
   walletId: string;
   type: string;
@@ -42,357 +32,267 @@ function resolvePatchedValue(patchValue: string | undefined, currentValue: strin
   return (patchValue !== undefined ? patchValue : currentValue) ?? "";
 }
 
-function resolveNextLedgerState(groupBy: LedgerGroupBy, filters: LedgerFilters, patch: FilterPatch) {
-  return {
-    groupBy: patch.groupBy ?? groupBy,
-    category: resolvePatchedValue(patch.category, filters.category),
-    walletId: resolvePatchedValue(patch.walletId, filters.walletId),
-    type: resolvePatchedValue(patch.type, filters.type),
-    search: resolvePatchedValue(patch.search, filters.search),
-    tagId: resolvePatchedValue(patch.tagId, filters.tagId),
-  };
-}
-
-// Every control on this bar (groupBy + all four filters) drives the SAME
-// router.push mechanism PeriodSelector already established — one re-query
-// path, not two. Pure so it's easy to reason about / test independent of the
-// component.
-export function buildLedgerUrl(
-  month: number,
-  year: number,
-  groupBy: LedgerGroupBy,
-  filters: LedgerFilters,
-  patch: FilterPatch,
-): string {
-  const next = resolveNextLedgerState(groupBy, filters, patch);
+// Every control on the Ledger (wallet and category chips, search, More
+// filters, the active-filters line) drives the SAME router.push mechanism
+// PeriodSelector already established — one re-query path, not two. The
+// ledger always groups by day, so groupBy is never written. The wallet is
+// always explicit (`all` when none) so the remembered wallet cookie never
+// overrides what's on screen. Pure so it's easy to test.
+export function buildLedgerUrl(month: number, year: number, filters: LedgerFilters, patch: FilterPatch): string {
   const params = new URLSearchParams({ view: "ledger", month: String(month), year: String(year) });
-  if (next.groupBy !== "day") params.set("groupBy", next.groupBy);
-  if (next.category) params.set("category", next.category);
-  if (next.walletId) params.set("walletId", next.walletId);
-  if (next.type) params.set("type", next.type);
-  if (next.search) params.set("search", next.search);
-  if (next.tagId) params.set("tagId", next.tagId);
+  params.set("walletId", resolvePatchedValue(patch.walletId, filters.walletId) || ALL_WALLETS);
+  for (const key of ["category", "type", "search", "tagId"] as const) {
+    const value = resolvePatchedValue(patch[key], filters[key]);
+    if (value) params.set(key, value);
+  }
   return `/expenses?${params.toString()}`;
 }
+
+const CLEAR_ALL: FilterPatch = { category: "", type: "", search: "", tagId: "" };
 
 type Props = {
   month: number;
   year: number;
-  groupBy: LedgerGroupBy;
   filters: LedgerFilters;
-  categories: CategoryOption[];
-  walletOptions: { id: string; name: string }[];
   tags: TagOption[];
+  groups: LedgerGroup[];
+  /** Transactions in the wallet scope before the other filters ("of N"). */
+  scopeCount: number;
+  /** A category, type, tag or search narrows the list. */
+  filtered: boolean;
   children: ReactNode;
 };
 
-export function LedgerControls({
-  month,
-  year,
-  groupBy,
-  filters,
-  categories,
-  walletOptions,
-  tags,
-  children,
-}: Props) {
+export function LedgerControls({ month, year, filters, tags, groups, scopeCount, filtered, children }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const items = groups.flatMap((g) => g.items);
 
   function navigate(patch: FilterPatch) {
-    const url = buildLedgerUrl(month, year, groupBy, filters, patch);
+    const url = buildLedgerUrl(month, year, filters, patch);
     startTransition(() => router.push(url));
   }
 
   return (
     <div className="space-y-3">
-      <GroupByToggle value={groupBy} onChange={(v) => navigate({ groupBy: v })} />
-      {/* Desktop: every filter inline, as before. */}
-      <div className="hidden sm:block">
-        <FilterBar
-          filters={filters}
-          categories={categories}
-          walletOptions={walletOptions}
-          tags={tags}
-          onChange={navigate}
-        />
-      </div>
-      {/* Mobile: same filters, condensed behind a single trigger — four
-          stacked/wrapping selects ate too much vertical space above the
-          ledger itself. */}
-      <div className="sm:hidden">
-        <MobileFilters
-          filters={filters}
-          categories={categories}
-          walletOptions={walletOptions}
-          tags={tags}
-          onChange={navigate}
-        />
-      </div>
+      <LedgerToolbar
+        count={transactionCountLabel(items.length, scopeCount, filtered)}
+        filters={filters}
+        tags={tags}
+        onChange={navigate}
+      />
+      <ActiveFiltersLine filters={filters} tags={tags} onChange={navigate} />
       {/* Whole-region dim during re-query — no spinner, no skeleton (matches
           category-breakdown-table.tsx's restraint). */}
-      <div className={cn("transition-opacity", isPending && "opacity-50 pointer-events-none")}>
+      <div className={cn("space-y-3 transition-opacity", isPending && "opacity-50 pointer-events-none")}>
         {children}
+        {filtered && items.length > 0 && (
+          <p className="text-center text-xs text-muted-foreground">
+            {items.length} transaction{items.length === 1 ? "" : "s"} ·{" "}
+            <Money value={items.reduce((sum, item) => sum + item.amount, 0)} signed className="text-foreground" />
+          </p>
+        )}
       </div>
     </div>
   );
 }
 
-function GroupByToggle({
-  value,
-  onChange,
-}: {
-  value: LedgerGroupBy;
-  onChange: (v: LedgerGroupBy) => void;
-}) {
-  return (
-    <div className="flex items-center gap-1">
-      {GROUP_BY_OPTIONS.map((opt) => {
-        const active = value === opt.value;
-        return (
-          <Button
-            key={opt.value}
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-pressed={active}
-            onClick={() => onChange(opt.value)}
-            className={cn(active && "bg-muted text-primary hover:bg-muted hover:text-primary")}
-          >
-            {opt.label}
-          </Button>
-        );
-      })}
-    </div>
-  );
-}
-
-function FilterBar({
+// "Transactions · 2 of 17" · search · More filters. On phones the search is
+// an icon button that opens the input on its own row.
+function LedgerToolbar({
+  count,
   filters,
-  categories,
-  walletOptions,
   tags,
   onChange,
 }: {
+  count: string;
   filters: LedgerFilters;
-  categories: CategoryOption[];
-  walletOptions: { id: string; name: string }[];
   tags: TagOption[];
   onChange: (patch: FilterPatch) => void;
 }) {
+  const [searchOpen, setSearchOpen] = useState(Boolean(filters.search));
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // The phone's collapsed sticky bar asks for the search: open it, bring it
+  // into view and focus it.
+  useEffect(() => {
+    function openSearch() {
+      setSearchOpen(true);
+      requestAnimationFrame(() => {
+        searchRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        searchRef.current?.focus({ preventScroll: true });
+      });
+    }
+    window.addEventListener(OPEN_LEDGER_SEARCH, openSearch);
+    return () => window.removeEventListener(OPEN_LEDGER_SEARCH, openSearch);
+  }, []);
+
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <CategorySelect
-        value={filters.category}
-        categories={categories}
-        onChange={(v) => onChange({ category: v ?? "" })}
-      />
-      <WalletSelect
-        value={filters.walletId || ALL_SENTINEL}
-        options={[{ id: ALL_SENTINEL, name: "All wallets" }, ...walletOptions]}
-        onChange={(v) => onChange({ walletId: v === ALL_SENTINEL ? "" : v })}
-        className="h-8 w-32"
-        ariaLabel="Filter by wallet"
-      />
-      <TypeSelect
-        value={filters.type}
-        onChange={(v) => onChange({ type: v ?? "" })}
-      />
-      <TagSelect
-        value={filters.tagId}
-        tags={tags}
-        onChange={(v) => onChange({ tagId: v ?? "" })}
-      />
+    <div className="flex flex-wrap items-center gap-2">
+      <h2 className="mr-auto font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Transactions · {count}
+      </h2>
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-lg"
+        className="sm:hidden"
+        aria-label="Search"
+        aria-expanded={searchOpen}
+        onClick={() => setSearchOpen((open) => !open)}
+      >
+        <Search aria-hidden />
+      </Button>
+      <MoreFilters filters={filters} tags={tags} onChange={onChange} />
       <SearchInput
         value={filters.search}
         onChange={(v) => onChange({ search: v ?? "" })}
+        inputRef={searchRef}
+        autoFocus={searchOpen && !filters.search}
+        className={cn("h-9 max-sm:order-last max-sm:h-10 max-sm:w-full sm:w-56", !searchOpen && "max-sm:hidden")}
       />
     </div>
   );
 }
 
-function MobileFilters({
+// "Showing [Supermarket ×] [Expenses only ×] [#meat ×] · Clear all". The
+// wallet isn't listed (its chip row shows it) and Clear all keeps it.
+function ActiveFiltersLine({
   filters,
-  categories,
-  walletOptions,
   tags,
   onChange,
 }: {
   filters: LedgerFilters;
-  categories: CategoryOption[];
-  walletOptions: { id: string; name: string }[];
+  tags: TagOption[];
+  onChange: (patch: FilterPatch) => void;
+}) {
+  const list = activeFilters(filters, tags);
+  if (list.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <span>Showing</span>
+      {list.map((filter) => (
+        <button
+          key={filter.key}
+          type="button"
+          onClick={() => onChange({ [filter.key]: "" })}
+          aria-label={`Remove filter ${filter.label}`}
+          className="flex h-7 items-center gap-1 rounded-full border border-primary bg-primary/10 px-2.5 font-medium text-foreground"
+        >
+          {filter.label}
+          <X className="size-3" aria-hidden />
+        </button>
+      ))}
+      <span aria-hidden>·</span>
+      <button
+        type="button"
+        onClick={() => onChange(CLEAR_ALL)}
+        className="font-medium underline-offset-4 hover:text-foreground hover:underline"
+      >
+        Clear all
+      </button>
+    </div>
+  );
+}
+
+type TypeValue = "all" | "expense" | "income";
+
+const TYPE_OPTIONS: SegmentOption<TypeValue>[] = [
+  { value: "all", label: "All" },
+  { value: "expense", label: "Expenses" },
+  { value: "income", label: "Income" },
+];
+
+// The less-used filters (type, tag) behind one button that shows how many
+// are on. FormDialog: a centred dialog from sm, a bottom sheet on phones.
+function MoreFilters({
+  filters,
+  tags,
+  onChange,
+}: {
+  filters: LedgerFilters;
   tags: TagOption[];
   onChange: (patch: FilterPatch) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const hasActiveFilters = !!(
-    filters.category ||
-    filters.walletId ||
-    filters.type ||
-    filters.search ||
-    filters.tagId
-  );
+  const [type, setType] = useState<TypeValue>("all");
+  const [tagId, setTagId] = useState<string | null>(null);
+  const count = moreFiltersCount(filters);
+
+  function openSheet() {
+    setType(filters.type ?? "all");
+    setTagId(filters.tagId ?? null);
+    setOpen(true);
+  }
+
+  function apply(e: React.FormEvent) {
+    e.preventDefault();
+    onChange({ type: type === "all" ? "" : type, tagId: tagId ?? "" });
+    setOpen(false);
+  }
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex h-9 w-full items-center justify-between rounded-lg border border-border bg-card px-3 text-sm">
-        <span className="flex items-center gap-1.5">
-          <Filter className="size-3.5 text-muted-foreground" />
-          Filters
-          {hasActiveFilters && <span className="size-1.5 rounded-full bg-primary" />}
-        </span>
-        <span className="text-xs text-muted-foreground">{open ? "Hide" : "Show"}</span>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-2 space-y-2 rounded-lg border border-border bg-card p-3">
-        <div className="grid grid-cols-2 gap-2">
-          <CategorySelect
-            value={filters.category}
-            categories={categories}
-            onChange={(v) => onChange({ category: v ?? "" })}
-            className="h-8 w-full"
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        onClick={openSheet}
+        className={cn(count > 0 && "border-primary bg-primary/10 font-semibold")}
+      >
+        <SlidersHorizontal aria-hidden />
+        {/* "More" drops on phones so the toolbar stays on one line. */}
+        <span className="max-sm:hidden">More filters</span>
+        <span className="sm:hidden">Filters</span>
+        {count > 0 && <span className="font-mono tabular-nums">· {count}</span>}
+      </Button>
+      <FormDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="More filters"
+        onSubmit={apply}
+        footer={
+          <FormFooter>
+            <Button type="button" variant="outline" onClick={() => { setType("all"); setTagId(null); }}>
+              Reset
+            </Button>
+            <Button type="submit">Show transactions</Button>
+          </FormFooter>
+        }
+      >
+        <Field label="Type">
+          <SegmentedControl ariaLabel="Type" value={type} onChange={setType} options={TYPE_OPTIONS} />
+        </Field>
+        <Field label="Tag">
+          <OptionSelect
+            ariaLabel="Tag"
+            value={tagId}
+            onChange={setTagId}
+            noneLabel="Any tag"
+            options={tags.map((t) => ({ value: t.id, label: `#${t.name}` }))}
           />
-          <WalletSelect
-            value={filters.walletId || ALL_SENTINEL}
-            options={[{ id: ALL_SENTINEL, name: "All wallets" }, ...walletOptions]}
-            onChange={(v) => onChange({ walletId: v === ALL_SENTINEL ? "" : v })}
-            className="h-8 w-full"
-            ariaLabel="Filter by wallet"
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <TypeSelect
-            value={filters.type}
-            onChange={(v) => onChange({ type: v ?? "" })}
-            className="h-8 w-full"
-          />
-          <TagSelect
-            value={filters.tagId}
-            tags={tags}
-            onChange={(v) => onChange({ tagId: v ?? "" })}
-            className="h-8 w-full"
-          />
-        </div>
-        <SearchInput
-          value={filters.search}
-          onChange={(v) => onChange({ search: v ?? "" })}
-          className="h-8 w-full"
-        />
-      </CollapsibleContent>
-    </Collapsible>
+        </Field>
+      </FormDialog>
+    </>
   );
 }
 
-function CategorySelect({
-  value,
-  categories,
-  onChange,
-  className = "h-8 w-36",
-}: {
-  value?: string;
-  categories: CategoryOption[];
-  onChange: (v?: string) => void;
-  className?: string;
-}) {
-  return (
-    <Select
-      value={value ?? ALL_SENTINEL}
-      onValueChange={(v) => v && onChange(v === ALL_SENTINEL ? undefined : v)}
-    >
-      <SelectTrigger className={className} aria-label="Filter by category">
-        <span className="text-sm truncate">{value ?? "All categories"}</span>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={ALL_SENTINEL}>All categories</SelectItem>
-        {categories.map((c) => (
-          <SelectItem key={c.id} value={c.name}>
-            {c.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-// Filters by Tag.id, not name (unlike CategorySelect) — tag names can be
-// renamed/reused across rows and id is what getTransactionList's
-// matchesTag() actually compares against.
-function TagSelect({
-  value,
-  tags,
-  onChange,
-  className = "h-8 w-32",
-}: {
-  value?: string;
-  tags: TagOption[];
-  onChange: (v?: string) => void;
-  className?: string;
-}) {
-  const selectedName = tags.find((t) => t.id === value)?.name;
-  return (
-    <Select
-      value={value ?? ALL_SENTINEL}
-      onValueChange={(v) => v && onChange(v === ALL_SENTINEL ? undefined : v)}
-    >
-      <SelectTrigger className={className} aria-label="Filter by tag">
-        <span className="text-sm truncate">{selectedName ? `#${selectedName}` : "All tags"}</span>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={ALL_SENTINEL}>All tags</SelectItem>
-        {tags.map((t) => (
-          <SelectItem key={t.id} value={t.id}>
-            #{t.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-const TYPE_LABELS: Record<"all" | "expense" | "income", string> = {
-  all: "All",
-  expense: "Expense",
-  income: "Income",
-};
-
-function TypeSelect({
-  value,
-  onChange,
-  className = "h-8 w-24",
-}: {
-  value?: "expense" | "income";
-  onChange: (v?: "expense" | "income") => void;
-  className?: string;
-}) {
-  const current = value ?? "all";
-  return (
-    <Select
-      value={current}
-      onValueChange={(v) => v && onChange(v === "all" ? undefined : (v as "expense" | "income"))}
-    >
-      <SelectTrigger className={className} aria-label="Filter by type">
-        <span className="text-sm">{TYPE_LABELS[current]}</span>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">All</SelectItem>
-        <SelectItem value="expense">Expense</SelectItem>
-        <SelectItem value="income">Income</SelectItem>
-      </SelectContent>
-    </Select>
-  );
-}
-
-// Only control on this bar that doesn't fire immediately — debounced ~300ms
-// so the ledger doesn't re-query on every keystroke. Tracks the last value it
-// itself emitted so an EXTERNAL change (e.g. the "Clear filters" action, or
-// browser back/forward) correctly resets the local draft, without the
-// debounce echoing its own emission back into a reset.
+// Doesn't fire immediately — debounced ~300ms so the ledger doesn't
+// re-query on every keystroke. Tracks the last value it itself emitted so an
+// EXTERNAL change (e.g. "Clear all", or browser back/forward) correctly
+// resets the local draft, without the debounce echoing its own emission back
+// into a reset.
 function SearchInput({
   value,
   onChange,
-  className = "h-8 w-48 text-sm",
+  inputRef,
+  autoFocus,
+  className,
 }: {
   value?: string;
   onChange: (v?: string) => void;
+  inputRef?: React.Ref<HTMLInputElement>;
+  autoFocus?: boolean;
   className?: string;
 }) {
   const [text, setText] = useState(value ?? "");
@@ -407,13 +307,11 @@ function SearchInput({
     onChangeRef.current = onChange;
   }, [onChange]);
 
-  // Reset the local draft only when an EXTERNAL value change arrives (e.g.
-  // "Clear filters", browser back/forward) — adjusted during render (React's
-  // documented "adjusting state when a prop changes" pattern) rather than
-  // inside an effect, since setState synchronously inside an effect body
-  // triggers an avoidable extra render-then-commit cascade. Guarded by
-  // lastEmitted so the debounce's own emission — echoed back down once the
-  // URL/props update — doesn't stomp a newer local edit made in the meantime.
+  // Reset the local draft only when an EXTERNAL value change arrives —
+  // adjusted during render (React's "adjusting state when a prop changes"
+  // pattern) rather than inside an effect. Guarded by lastEmitted so the
+  // debounce's own emission — echoed back down once the URL/props update —
+  // doesn't stomp a newer local edit made in the meantime.
   if ((value ?? "") !== prevValue) {
     setPrevValue(value ?? "");
     if ((value ?? "") !== lastEmitted) {
@@ -434,10 +332,13 @@ function SearchInput({
 
   return (
     <Input
+      ref={inputRef}
+      type="search"
       value={text}
       onChange={(e) => setText(e.target.value)}
-      placeholder="Buscar por nota…"
-      aria-label="Buscar por nota"
+      placeholder="Search notes or #tags"
+      aria-label="Search notes or tags"
+      autoFocus={autoFocus}
       className={className}
     />
   );

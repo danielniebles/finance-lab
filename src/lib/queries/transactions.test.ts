@@ -8,15 +8,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/db", () => ({
   db: {
-    transaction: { findMany: vi.fn() },
+    transaction: { findMany: vi.fn(), groupBy: vi.fn() },
   },
 }));
 
 import { db } from "@/lib/db";
-import { getTransactionList, type TransactionListResult } from "./transactions";
+import { getTransactionList, getWalletActivity, type TransactionListResult } from "./transactions";
 
 const dbMock = db as unknown as {
-  transaction: { findMany: ReturnType<typeof vi.fn> };
+  transaction: { findMany: ReturnType<typeof vi.fn>; groupBy: ReturnType<typeof vi.fn> };
 };
 
 // Extracted to a top-level helper (not an inline callback) so filter tests
@@ -24,6 +24,8 @@ const dbMock = db as unknown as {
 function itemIds(result: TransactionListResult): string[] {
   return result.groups.flatMap((g) => g.items.map((i) => i.id));
 }
+
+const walletColorOfItem = (item: { walletColor: string | null }) => item.walletColor;
 
 const GROCERIES = { name: "Groceries" };
 const TRANSPORT = { name: "Transport" };
@@ -212,6 +214,13 @@ describe("getTransactionList — filters", () => {
     expect(itemIds(result)).toEqual(["t2"]);
   });
 
+  it("search matches tag names too, and #name searches tags only", async () => {
+    const tagged = await getTransactionList(7, 2026, "day", { search: "#UBER" });
+    expect(itemIds(tagged)).toEqual(["t2"]);
+    const hashed = await getTransactionList(7, 2026, "day", { search: "#run" });
+    expect(itemIds(hashed)).toEqual([]);
+  });
+
   it("narrows by tagId", async () => {
     const result = await getTransactionList(7, 2026, "day", { tagId: "tag-uber" });
     expect(itemIds(result)).toEqual(["t2"]);
@@ -220,6 +229,26 @@ describe("getTransactionList — filters", () => {
   it("categorySummary reflects the filtered set, not the whole month", async () => {
     const result = await getTransactionList(7, 2026, "day", { walletId: "wlt_nequi" });
     expect(result.categorySummary).toEqual([{ name: "Transport", total: -10_000, count: 1 }]);
+  });
+
+  it("walletColor is the bank's colour, else the wallet's own", async () => {
+    dbMock.transaction.findMany.mockResolvedValue([
+      txn({ id: "a", walletId: "w1", walletRef: { name: "Daily", color: "#111111", account: { color: "#EAB308" } } }),
+      txn({ id: "b", walletId: "w2", walletRef: { name: "Nu", color: "#8B5CF6", account: { color: null } } }),
+    ]);
+    const result = await getTransactionList(7, 2026, "day");
+    expect(result.groups[0].items.map(walletColorOfItem)).toEqual(["#EAB308", "#8B5CF6"]);
+  });
+
+  it("categorySummary ignores the category filter so the other chips stay visible", async () => {
+    const result = await getTransactionList(7, 2026, "day", { category: "Transport" });
+    expect(itemIds(result)).toEqual(["t2"]);
+    expect(result.categorySummary.map((r) => r.name)).toEqual(["Groceries", "Transport"]);
+  });
+
+  it("categorySummary still honours the other filters alongside a category", async () => {
+    const result = await getTransactionList(7, 2026, "day", { category: "Transport", walletId: "wlt_bancolombia" });
+    expect(result.categorySummary).toEqual([{ name: "Groceries", total: -20_000, count: 1 }]);
   });
 
   it("monthTotalExpense/monthTotalIncome stay whole-month when walletId is not set, regardless of category/type/search", async () => {
@@ -274,5 +303,18 @@ describe("getTransactionList — date-range selection", () => {
     expect(call.where.date.gte).toEqual(new Date(2026, 1, 25));
     expect(call.where.date.lt).toEqual(new Date(2026, 2, 25));
     expect(call.where.batch).toBeUndefined();
+  });
+});
+
+describe("getWalletActivity", () => {
+  it("maps each wallet id to its transaction count for the period", async () => {
+    dbMock.transaction.groupBy.mockResolvedValue([
+      { walletId: "wlt_daily", _count: { _all: 12 } },
+      { walletId: "wlt_nequi", _count: { _all: 3 } },
+    ]);
+    expect(await getWalletActivity(7, 2026)).toEqual({ wlt_daily: 12, wlt_nequi: 3 });
+    const where = dbMock.transaction.groupBy.mock.calls[0][0].where;
+    expect(where.walletId).toEqual({ not: null });
+    expect(where.date.gte).toEqual(new Date(2026, 6, 1));
   });
 });

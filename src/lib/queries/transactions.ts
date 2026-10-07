@@ -30,7 +30,10 @@ export type LedgerItem = {
   wallet: string;
   walletId: string | null;
   // Resolved Wallet.name via walletId's relation; null iff walletId is null.
+  // walletColor is the bank's (SavingsAccount) colour, else the wallet's own —
+  // same rule as the ledger's wallet chips; null when neither is set.
   walletName: string | null;
+  walletColor: string | null;
   note: string | null;
   categoryName: string | null;
   // Effective category's style overrides (Category icon & color picker).
@@ -61,6 +64,9 @@ export type TransactionListResult = {
   monthTotalExpense: number;
   monthTotalIncome: number;
   categorySummary: CategorySummaryRow[];
+  // Transactions in the wallet scope (walletId only, no other filter) — the
+  // "of N" in the ledger toolbar's "2 of 17".
+  scopeCount: number;
 };
 
 const UNCATEGORIZED_KEY = "uncategorized";
@@ -76,7 +82,7 @@ type RawTransaction = {
   amount: number;
   wallet: string;
   walletId: string | null;
-  walletRef: { name: string } | null;
+  walletRef: { name: string; color: string | null; account: { color: string | null } | null } | null;
   note: string | null;
   source: TransactionSource;
   appCategory: RawAppCategory | null;
@@ -95,6 +101,11 @@ function resolveAppCategory(t: RawTransaction): RawAppCategory | null {
   return t.appCategory ?? t.moneyLoverCategory?.mapping?.appCategory ?? null;
 }
 
+// Bank (SavingsAccount) colour first, then the wallet's own — see LedgerItem.walletColor.
+function walletColorOf(t: RawTransaction): string | null {
+  return t.walletRef?.account?.color ?? t.walletRef?.color ?? null;
+}
+
 function toLedgerItem(t: RawTransaction): LedgerItem {
   const category = resolveAppCategory(t);
   return {
@@ -104,6 +115,7 @@ function toLedgerItem(t: RawTransaction): LedgerItem {
     wallet: t.wallet,
     walletId: t.walletId,
     walletName: t.walletRef?.name ?? null,
+    walletColor: walletColorOf(t),
     note: t.note,
     categoryName: category?.name ?? null,
     categoryIcon: category?.icon ?? null,
@@ -154,9 +166,14 @@ function matchesType(item: LedgerItem, type?: "expense" | "income"): boolean {
   return true;
 }
 
+// Note or tag name, case-insensitive; a leading "#" searches tags only.
 function matchesSearch(item: LedgerItem, search?: string): boolean {
   const needle = search?.trim().toLowerCase();
-  return !needle || (item.note ?? "").toLowerCase().includes(needle);
+  if (!needle) return true;
+  const tagNeedle = needle.replace(/^#/, "");
+  const inTags = item.tags.some((t) => t.name.toLowerCase().includes(tagNeedle));
+  if (needle.startsWith("#")) return inTags;
+  return inTags || (item.note ?? "").toLowerCase().includes(needle);
 }
 
 function matchesTag(item: LedgerItem, tagId?: string): boolean {
@@ -235,10 +252,10 @@ function buildGroups(items: LedgerItem[], groupBy: LedgerGroupBy): LedgerGroup[]
   );
 }
 
-// Flat per-category totals across the CURRENT (filtered) item set — deliberately
-// affected by active filters (per the handoff), unlike monthTotalExpense/Income
-// below which stay whole-month so the ledger's header band always agrees with
-// getMonthlyAnalysis regardless of what the user is currently filtering to.
+// Flat per-category totals across the items matching every filter EXCEPT
+// category (see getTransactionList) — selecting a category must not hide the
+// other chips. Unlike monthTotalExpense/Income below, wallet/type/search/tag
+// do narrow it.
 // Uncategorized transactions are excluded here (this panel lists named
 // categories only); groupBy="category" mode still buckets them separately.
 function computeCategorySummary(items: LedgerItem[]): CategorySummaryRow[] {
@@ -286,7 +303,7 @@ export async function getTransactionList(
     include: {
       appCategory: true,
       moneyLoverCategory: { include: { mapping: { include: { appCategory: true } } } },
-      walletRef: { select: { name: true } },
+      walletRef: { select: { name: true, color: true, account: { select: { color: true } } } },
       tags: { select: { id: true, name: true, color: true } },
     },
     orderBy: { date: "desc" },
@@ -306,11 +323,34 @@ export async function getTransactionList(
     .reduce((sum, item) => sum + Math.abs(item.amount), 0);
 
   const filteredItems = allItems.filter((item) => matchesFilters(item, filters));
+  const summaryItems = filters?.category
+    ? allItems.filter((item) => matchesFilters(item, { ...filters, category: undefined }))
+    : filteredItems;
 
   return {
     groups: buildGroups(filteredItems, groupBy),
     monthTotalExpense,
     monthTotalIncome,
-    categorySummary: computeCategorySummary(filteredItems),
+    categorySummary: computeCategorySummary(summaryItems),
+    scopeCount: walletScopedItems.length,
   };
+}
+
+/**
+ * Transactions per wallet id over one financial month, ignoring every ledger
+ * filter — drives which wallets get a quick-filter chip (walletChips).
+ */
+export async function getWalletActivity(month: number, year: number): Promise<Record<string, number>> {
+  const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
+  const { start, end } = getFinancialPeriodBounds(month, year, startDay);
+  const rows = await db.transaction.groupBy({
+    by: ["walletId"],
+    where: { date: { gte: start, lt: end }, walletId: { not: null } },
+    _count: { _all: true },
+  });
+  const activity: Record<string, number> = {};
+  for (const row of rows) {
+    if (row.walletId) activity[row.walletId] = row._count._all;
+  }
+  return activity;
 }

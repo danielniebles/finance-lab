@@ -4,6 +4,7 @@ import { useId, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  ColorDot,
   DateField,
   Field,
   FormDialog,
@@ -86,12 +87,14 @@ function formValuesFromItem(item: LedgerItem, categories: CategoryOption[]): Row
 type Props = {
   item: LedgerItem;
   groupBy: LedgerGroupBy;
+  /** Show the row's wallet after its category (the ledger is on All wallets). */
+  showWallet?: boolean;
   categories: CategoryOption[];
   walletOptions: { id: string; name: string }[];
   tags: TagOption[];
 };
 
-export function TransactionRow({ item, groupBy, categories, walletOptions, tags }: Props) {
+export function TransactionRow({ item, groupBy, showWallet = false, categories, walletOptions, tags }: Props) {
   const [mode, setMode] = useState<Mode>("default");
   const [values, setValues] = useState<RowFormValues>(() => formValuesFromItem(item, categories));
   const [pending, startTransition] = useTransition();
@@ -139,6 +142,7 @@ export function TransactionRow({ item, groupBy, categories, walletOptions, tags 
       <TransactionDefaultRow
         item={item}
         groupBy={groupBy}
+        showWallet={showWallet}
         onEdit={() => {
           setValues(formValuesFromItem(item, categories));
           setMode("edit");
@@ -166,10 +170,12 @@ export function TransactionRow({ item, groupBy, categories, walletOptions, tags 
 function TransactionDefaultRow({
   item,
   groupBy,
+  showWallet,
   onEdit,
 }: {
   item: LedgerItem;
   groupBy: LedgerGroupBy;
+  showWallet: boolean;
   onEdit: () => void;
 }) {
   const { icon: CategoryIcon, badge, iconWrap } = resolveEffectiveCategoryStyle(
@@ -180,6 +186,7 @@ function TransactionDefaultRow({
   // Grouped by category, every row in the group shares the heading's
   // category, so the chip would just repeat it.
   const showCategory = groupBy !== "category";
+  const walletName = showWallet ? item.walletName : null;
 
   return (
     <button
@@ -211,25 +218,7 @@ function TransactionDefaultRow({
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="truncate text-sm font-medium">{item.note || "—"}</span>
-          {((showCategory && item.categoryName) || item.tags.length > 0) && (
-            <span className="flex min-w-0 items-center gap-1.5">
-              {showCategory && item.categoryName && (
-                <span
-                  className={cn(
-                    "inline-flex w-fit shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-                    badge
-                  )}
-                >
-                  {item.categoryName}
-                </span>
-              )}
-              {item.tags.map((t) => (
-                <span key={t.id} className="shrink-0 text-xs text-muted-foreground">
-                  #{t.name}
-                </span>
-              ))}
-            </span>
-          )}
+          <RowMeta item={item} category={showCategory ? item.categoryName : null} badge={badge} walletName={walletName} />
         </span>
         <span
           className={cn(
@@ -242,6 +231,46 @@ function TransactionDefaultRow({
         </span>
       </div>
     </button>
+  );
+}
+
+// Second line of a row: category chip · wallet (under All wallets) · tags.
+function RowMeta({
+  item,
+  category,
+  badge,
+  walletName,
+}: {
+  item: LedgerItem;
+  category: string | null;
+  badge: string;
+  walletName: string | null;
+}) {
+  if (!category && !walletName && item.tags.length === 0) return null;
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      {category && (
+        <span
+          className={cn(
+            "inline-flex w-fit shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+            badge
+          )}
+        >
+          {category}
+        </span>
+      )}
+      {walletName && (
+        <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+          <ColorDot color={item.walletColor} />
+          <span className="truncate">{walletName}</span>
+        </span>
+      )}
+      {item.tags.map((t) => (
+        <span key={t.id} className="shrink-0 text-xs text-muted-foreground">
+          #{t.name}
+        </span>
+      ))}
+    </span>
   );
 }
 

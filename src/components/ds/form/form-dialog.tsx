@@ -116,7 +116,9 @@ export function FormDialog({
     <>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-5 pt-1 pb-5">{children}</div>
       {footer && (
-        <div className="shrink-0 touch-none border-t border-border/60 bg-muted/40 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:rounded-b-2xl">
+        // Phones: extra room under the buttons so the screen's rounded
+        // corners don't clip them (more on top of the home-indicator inset).
+        <div className="shrink-0 touch-none border-t border-border/60 bg-muted/40 px-5 py-3 pb-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.75rem))] sm:rounded-b-2xl sm:pb-3">
           {footer}
         </div>
       )}
