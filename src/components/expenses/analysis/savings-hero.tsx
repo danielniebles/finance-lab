@@ -62,7 +62,7 @@ export function SavingsHero({
           {pendingFixed > 0 && (
             <>
               {" "}
-              <Money value={pendingFixed} /> of fixed bills not paid yet.
+              <Money value={pendingFixed} /> of bills not paid yet.
             </>
           )}
         </span>

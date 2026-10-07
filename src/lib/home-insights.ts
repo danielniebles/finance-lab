@@ -4,8 +4,9 @@
 // Rules, in priority order (max 3 cards):
 //   1. Categories with spend and no budget ("Unplanned") — biggest first.
 //   2. Categories over budget (Critical / Issue "Higher than expected").
-//   3. Fixed bills not paid yet — informational, never an issue: fixed
-//      costs get paid during the month, so $0 on day 10 is expected.
+//   3. Bills not paid yet (ADR-052) — informational, never an issue: bills
+//      get paid during the month, so $0 on day 10 is expected. It opens Pay
+//      bills, so it always keeps its slot; 1 and 2 fill the rest.
 // The forecast is shown separately (see ForecastInsight) because it is a
 // projection, not a fact about this month's spending.
 
@@ -31,7 +32,12 @@ export type HomeInsight = {
   amount: number;
   /** Category name to filter the ledger by, when the insight is about one category. */
   category?: string;
+  /** The card opens the Pay bills dialog. */
+  action?: "pay-bills";
 };
+
+/** A bill not paid yet this period, with its budget amount (lib/bill-display unpaidBills). */
+export type UnpaidBill = { name: string; amount: number };
 
 export const MAX_INSIGHTS = 3;
 
@@ -72,29 +78,22 @@ function overBudgetInsights(categories: InsightCategory[]): HomeInsight[] {
     }));
 }
 
-function pendingInsight(categories: InsightCategory[]): HomeInsight[] {
-  const pending = categories.filter(isPendingFixed);
-  if (pending.length === 0) return [];
-  const total = pending.reduce((s, c) => s + c.budget, 0);
-  const names = pending
-    .sort((a, b) => b.budget - a.budget)
-    .map((c) => c.name)
-    .join(", ");
+function pendingBillsInsight(bills: UnpaidBill[]): HomeInsight[] {
+  if (bills.length === 0) return [];
   return [
     {
-      key: "pending-fixed",
+      key: "pending-bills",
       tone: "info",
-      title: `${pending.length} fixed ${pending.length === 1 ? "bill" : "bills"} not paid yet`,
-      detail: names,
-      amount: total,
+      title: `${bills.length} ${bills.length === 1 ? "bill" : "bills"} not paid yet`,
+      detail: bills.map((b) => b.name).join(", "),
+      amount: bills.reduce((s, b) => s + b.amount, 0),
+      action: "pay-bills",
     },
   ];
 }
 
-export function buildHomeInsights(categories: InsightCategory[]): HomeInsight[] {
-  return [
-    ...unplannedInsights(categories),
-    ...overBudgetInsights(categories),
-    ...pendingInsight(categories),
-  ].slice(0, MAX_INSIGHTS);
+export function buildHomeInsights(categories: InsightCategory[], unpaidBills: UnpaidBill[] = []): HomeInsight[] {
+  const bills = pendingBillsInsight(unpaidBills);
+  const others = [...unplannedInsights(categories), ...overBudgetInsights(categories)];
+  return [...others.slice(0, MAX_INSIGHTS - bills.length), ...bills];
 }

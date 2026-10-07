@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { AlertTriangle, CircleDashed, Clock, TrendingDown, TrendingUp } from "lucide-react";
 import { Money, SectionHeader } from "@/components/ds";
+import { PayBills } from "@/components/bills/pay-bills";
+import type { WalletOption } from "@/components/shared/wallet-select";
 import type { HomeInsight } from "@/lib/home-insights";
+import type { BillsForMonth } from "@/lib/queries/bills";
 import type { ForecastResult } from "@/lib/queries/forecast";
 import { TONE_CLASSES, toneForSavingsRate, type Tone } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -13,7 +16,9 @@ function InsightIcon({ tone }: { tone: Tone }) {
   return <AlertTriangle className="size-4" aria-hidden />;
 }
 
-function InsightCard({ insight }: { insight: HomeInsight }) {
+type PayBillsProps = { bills: BillsForMonth; walletOptions: WalletOption[] };
+
+function InsightCard({ insight, payBills }: { insight: HomeInsight; payBills: PayBillsProps }) {
   const body = (
     <>
       <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", TONE_CLASSES[insight.tone].soft)}>
@@ -25,10 +30,18 @@ function InsightCard({ insight }: { insight: HomeInsight }) {
           <Money value={insight.amount} className="text-sm" />
         </span>
         <span className="text-xs leading-relaxed text-muted-foreground">{insight.detail}</span>
+        {insight.action === "pay-bills" && <span className="text-xs font-semibold text-primary">Pay bills →</span>}
       </span>
     </>
   );
   const classes = "flex gap-3.5 rounded-xl border border-border/60 bg-card p-4";
+  if (insight.action === "pay-bills") {
+    return (
+      <PayBills data={payBills.bills} walletOptions={payBills.walletOptions} className={cn(classes, "w-full cursor-pointer text-left transition-colors hover:bg-muted/40")}>
+        {body}
+      </PayBills>
+    );
+  }
   return insight.category ? (
     <Link href={ledgerCategoryHref(insight.category)} className={cn(classes, "transition-colors hover:bg-muted/40")}>
       {body}
@@ -74,12 +87,20 @@ function ForecastCard({ forecast }: { forecast: ForecastResult }) {
   );
 }
 
-export function InsightsPanel({ insights, forecast }: { insights: HomeInsight[]; forecast: ForecastResult }) {
+export function InsightsPanel({
+  insights,
+  forecast,
+  payBills,
+}: {
+  insights: HomeInsight[];
+  forecast: ForecastResult;
+  payBills: PayBillsProps;
+}) {
   return (
     <section className="flex flex-col gap-3">
       <SectionHeader title="Insights" href="/chat" linkLabel="Ask Advisor" />
       {insights.map((i) => (
-        <InsightCard key={i.key} insight={i} />
+        <InsightCard key={i.key} insight={i} payBills={payBills} />
       ))}
       {insights.length === 0 && (
         <p className="rounded-xl border border-border/60 bg-card p-4 text-sm text-muted-foreground">

@@ -5,6 +5,8 @@ export type BudgetItemData = {
   name: string;
   amount: number;
   budgetType: BudgetType;
+  /** Paid once a month — listed in Pay bills (ADR-052). */
+  isBill: boolean;
 };
 
 /** A category as the Settings page loads it (findMany with budget items + mapping count). */

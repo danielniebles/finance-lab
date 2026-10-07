@@ -68,7 +68,10 @@ function BudgetItemRow({ item, onOpen }: { item: BudgetItemData; onOpen: () => v
       <button type="button" onClick={onOpen} className={cn(ROW_GRID, "w-full text-left transition-colors hover:bg-muted/40")}>
         <span />
         <span className="flex min-w-0 flex-col pl-3 sm:pl-12">
-          <span className="truncate text-sm">{item.name}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-sm">{item.name}</span>
+            {item.isBill && <StatusChip tone="neutral">Bill</StatusChip>}
+          </span>
           <span className="text-xs text-muted-foreground sm:hidden">{TYPE_CHIP[item.budgetType].label}</span>
         </span>
         <span className="hidden sm:block">

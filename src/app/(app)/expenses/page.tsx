@@ -135,6 +135,7 @@ export default async function ExpensesPage({ searchParams }: Props) {
             year={selectedYear}
             walletId={params.walletId || undefined}
             groupFilter={parseGroupFilter(params.groupFilter)}
+            walletOptions={walletOptions}
           />
         </Suspense>
       )}

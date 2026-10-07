@@ -4,11 +4,6 @@
       "count": 1
     }
   },
-  "src/components/expenses/analysis-dashboard.tsx": {
-    "complexity": {
-      "count": 1
-    }
-  },
   "src/components/expenses/import-form.tsx": {
     "complexity": {
       "count": 1

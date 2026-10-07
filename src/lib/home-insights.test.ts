@@ -26,21 +26,37 @@ const october: InsightCategory[] = [
   cat({ name: "Credit Cards", spent: 913_359, budget: 1_500_000, percentUsed: 61 }),
 ];
 
+const octoberBills = [
+  { name: "Gym", amount: 131_000 },
+  { name: "Family", amount: 1_000_000 },
+  { name: "Phone", amount: 60_000 },
+];
+
 describe("buildHomeInsights", () => {
-  it("lists unplanned spend first, biggest first", () => {
-    const out = buildHomeInsights(october);
+  it("lists unplanned spend first, biggest first, then unpaid bills", () => {
+    const out = buildHomeInsights(october, octoberBills);
     expect(out.map((i) => i.title)).toEqual([
       "Travel has no budget",
       "Personal Care has no budget",
-      "3 fixed bills not paid yet",
+      "3 bills not paid yet",
     ]);
   });
 
-  it("treats unpaid fixed bills as pending info, never as an issue", () => {
-    const pending = buildHomeInsights(october).find((i) => i.key === "pending-fixed");
-    expect(pending?.tone).toBe("info");
-    expect(pending?.amount).toBe(2_191_000);
-    expect(pending?.detail).toBe("Health & Fitness, Family, Phone Bill");
+  it("treats unpaid bills as pending info that opens Pay bills", () => {
+    const pending = buildHomeInsights(october, octoberBills).find((i) => i.key === "pending-bills");
+    expect(pending).toMatchObject({ tone: "info", amount: 1_191_000, detail: "Gym, Family, Phone", action: "pay-bills" });
+    expect(buildHomeInsights(october, [{ name: "Gym", amount: 1 }]).at(-1)?.title).toBe("1 bill not paid yet");
+  });
+
+  it("keeps the bills card when other insights would fill every slot", () => {
+    const many = Array.from({ length: 5 }, (_, i) => cat({ id: `u${i}`, name: `U${i}`, spent: 1000 + i, severity: "Unplanned" }));
+    const out = buildHomeInsights(many, octoberBills);
+    expect(out).toHaveLength(3);
+    expect(out.at(-1)?.key).toBe("pending-bills");
+  });
+
+  it("has no bills card without unpaid bills, whatever the category severities", () => {
+    expect(buildHomeInsights(october).some((i) => i.key === "pending-bills")).toBe(false);
   });
 
   it("reports over-budget categories with the overspend amount", () => {

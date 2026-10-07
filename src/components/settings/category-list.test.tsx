@@ -158,6 +158,29 @@ describe("CategoryDialog — delete", () => {
 });
 
 describe("BudgetItemDialog", () => {
+  it("ticks Monthly bill for fixed items until the user decides", async () => {
+    const user = userEvent.setup();
+    render(<CategoryList categories={[makeCategory()]} />);
+
+    await user.click(screen.getByRole("button", { name: `Show budget items for ${CATEGORY_NAME}` }));
+    await user.click(screen.getByRole("button", { name: "Add item" }));
+    const dialog = within(screen.getByRole("dialog"));
+    const bill = dialog.getByRole("checkbox", { name: /Monthly bill/ });
+    expect(bill).toBeChecked();
+    await user.click(dialog.getByRole("radio", { name: "Variable" }));
+    expect(bill).not.toBeChecked();
+    // Electricity: variable, but a bill.
+    await user.click(bill);
+    await user.click(dialog.getByRole("radio", { name: "Fixed" }));
+    await user.click(dialog.getByRole("radio", { name: "Variable" }));
+    expect(bill).toBeChecked();
+    await user.type(dialog.getByLabelText("Name"), "Electricity");
+    await user.type(dialog.getByLabelText("Per month"), "140000");
+    await user.click(dialog.getByRole("button", { name: "Add item" }));
+
+    expect(createBudgetItemMock).toHaveBeenCalledWith("cat-1", { name: "Electricity", amount: 140000, budgetType: "VARIABLE", isBill: true });
+  });
+
   it("adds a budget item with a typed amount and type", async () => {
     const user = userEvent.setup();
     render(<CategoryList categories={[makeCategory()]} />);
@@ -170,14 +193,14 @@ describe("BudgetItemDialog", () => {
     await user.click(dialog.getByRole("radio", { name: "Variable" }));
     await user.click(dialog.getByRole("button", { name: "Add item" }));
 
-    expect(createBudgetItemMock).toHaveBeenCalledWith("cat-1", { name: "Weekly market", amount: 800000, budgetType: "VARIABLE" });
+    expect(createBudgetItemMock).toHaveBeenCalledWith("cat-1", { name: "Weekly market", amount: 800000, budgetType: "VARIABLE", isBill: false });
   });
 
   it("editing loads the item and saving keeps unchanged fields", async () => {
     const user = userEvent.setup();
     render(
       <CategoryList
-        categories={[makeCategory({ budgetItems: [{ id: "bi-1", name: "Rent", amount: 1500000, budgetType: "FIXED" }] })]}
+        categories={[makeCategory({ budgetItems: [{ id: "bi-1", name: "Rent", amount: 1500000, budgetType: "FIXED", isBill: true }] })]}
       />,
     );
 
@@ -186,6 +209,6 @@ describe("BudgetItemDialog", () => {
     expect(screen.getByDisplayValue("1.500.000")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
-    expect(updateBudgetItemMock).toHaveBeenCalledWith("bi-1", { name: "Rent", amount: 1500000, budgetType: "FIXED" });
+    expect(updateBudgetItemMock).toHaveBeenCalledWith("bi-1", { name: "Rent", amount: 1500000, budgetType: "FIXED", isBill: true });
   });
 });

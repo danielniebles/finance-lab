@@ -143,3 +143,10 @@ export function toneForLiquidity(ratio: number): { tone: Tone; label: string } {
   if (ratio < 50) return { tone: "caution", label: "low" };
   return { tone: "positive", label: "healthy" };
 }
+
+/** A bill paid for more than its budget drifts; less is fine; equal has no status. */
+export function toneForBillDifference(difference: number): Tone {
+  if (difference > 0) return "caution";
+  if (difference < 0) return "positive";
+  return "neutral";
+}

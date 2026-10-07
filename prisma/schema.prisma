@@ -86,6 +86,13 @@ model BudgetItem {
   name          String
   amount        Float
   budgetType    BudgetType
+  // Paid once a month (gym, phone, electricity) — listed in Pay bills and
+  // tracked as paid/not paid per financial month (ADR-052). Backfilled true
+  // for FIXED items; independent of budgetType so a variable bill can opt in.
+  isBill        Boolean     @default(false)
+  // Expenses that paid this bill (Pay bills). SetNull on delete — removing a
+  // budget item never deletes history.
+  transactions  Transaction[]
 }
 
 model CategoryMapping {
@@ -134,8 +141,13 @@ model Transaction {
   // just a plain string) — lets deleteTransaction find and remove the paired
   // leg together, so a transfer can never be left half-applied.
   transferPairId       String?
+  // The bill this expense paid (Pay bills, ADR-052). Only counts while the
+  // row stays in the bill's category; see lib/bill-display.ts.
+  budgetItemId         String?
+  budgetItem           BudgetItem?         @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
 
   @@index([transferPairId])
+  @@index([budgetItemId])
 }
 
 enum BudgetType {

@@ -102,6 +102,7 @@ Read `DESIGN.md` before building UI; §7 maps it to code. `/settings/design-syst
 - `Transaction` — raw MoneyLover rows; positive = income, negative = expense
 - `MoneyLoverCategory` — discovered dynamically from imports (never pre-seeded)
 - `AppCategory` — user-defined simplified categories with FIXED/VARIABLE budget
+- `BudgetItem.isBill` — paid once a month; `Transaction.budgetItemId` links a payment to its bill (Pay bills, ADR-052)
 - `CategoryMapping` — links MoneyLoverCategory → AppCategory (1:1)
 
 **Module 2 — Installments**

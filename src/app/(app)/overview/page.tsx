@@ -14,6 +14,8 @@ import { getVaultObligations } from "@/lib/queries/vaults";
 import { getMonthlyAnalysis } from "@/lib/queries/expenses";
 import { getMonthSummary } from "@/lib/queries/installments";
 import { getForecast } from "@/lib/queries/forecast";
+import { getBills } from "@/lib/queries/bills";
+import { unpaidBills } from "@/lib/bill-display";
 import { financialMonthYear, getFinancialPeriodBounds } from "@/lib/financial-period-utils";
 import { periodProgress } from "@/lib/forecast-utils";
 import { buildHomeInsights } from "@/lib/home-insights";
@@ -30,15 +32,17 @@ export default async function OverviewPage() {
   const progress = periodProgress(new Date(), start, end);
   const monthLabel = MONTH_NAMES[month - 1];
 
-  const [wallets, loans, obligations, analysis, installments, forecast] = await Promise.all([
+  const [wallets, loans, obligations, analysis, installments, forecast, bills] = await Promise.all([
     getWalletBalances(),
     getLoansOverview(),
     getVaultObligations(month, year),
     getMonthlyAnalysis(month, year),
     getMonthSummary(month, year),
     getForecast(month, year),
+    getBills(month, year),
   ]);
 
+  const walletOptions = wallets.accounts.flatMap((a) => a.wallets.map((w) => ({ id: w.id, name: w.name })));
   const activeDebtors = loans.debtors.filter((d) => d.totalOwed > 0).length;
 
   return (
@@ -92,7 +96,11 @@ export default async function OverviewPage() {
           rows={analysis.categoryBreakdown}
           totalExpenses={analysis.totalExpenses}
         />
-        <InsightsPanel insights={buildHomeInsights(analysis.categoryBreakdown)} forecast={forecast} />
+        <InsightsPanel
+          insights={buildHomeInsights(analysis.categoryBreakdown, unpaidBills(bills.bills))}
+          forecast={forecast}
+          payBills={{ bills, walletOptions }}
+        />
       </div>
     </div>
   );

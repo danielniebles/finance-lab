@@ -3,10 +3,11 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Field, FormDialog, FormFooter, MoneyInput, SegmentedControl } from "@/components/ds";
+import { CheckField, Field, FormDialog, FormFooter, MoneyInput, SegmentedControl } from "@/components/ds";
 import { createBudgetItem, deleteBudgetItem, updateBudgetItem } from "@/lib/actions/categories";
 import { BudgetType } from "@/generated/prisma";
 import { amountToDigits } from "@/lib/form-format";
+import { billDefaultForType } from "@/lib/bill-display";
 import { budgetItemMissingHint } from "@/lib/settings-forms";
 import { TONE_CLASSES } from "@/lib/status";
 import type { BudgetItemData } from "./types";
@@ -17,16 +18,18 @@ const TYPE_OPTIONS = [
 ];
 
 const TYPE_HINT: Record<BudgetType, string> = {
-  FIXED: "A bill with a known amount (rent, internet). Shows as pending until it's paid each month.",
+  FIXED: "A known amount every month (rent, internet). Shows as pending until it's paid.",
   VARIABLE: "Spending that moves month to month (groceries, eating out).",
 };
 
-type FormState = { name: string; amount: string; budgetType: BudgetType };
+// `billTouched`: once the user (or a saved item) has decided, the bill box
+// stops following the type. A new item starts as Fixed + bill (ADR-052).
+type FormState = { name: string; amount: string; budgetType: BudgetType; isBill: boolean; billTouched: boolean };
 
 function initial(item?: BudgetItemData): FormState {
   return item
-    ? { name: item.name, amount: amountToDigits(item.amount), budgetType: item.budgetType }
-    : { name: "", amount: "", budgetType: BudgetType.FIXED };
+    ? { name: item.name, amount: amountToDigits(item.amount), budgetType: item.budgetType, isBill: item.isBill, billTouched: true }
+    : { name: "", amount: "", budgetType: BudgetType.FIXED, isBill: billDefaultForType(BudgetType.FIXED), billTouched: false };
 }
 
 function footerHint(error: string | null, pending: boolean, missing: string): React.ReactNode {
@@ -64,6 +67,8 @@ export function BudgetItemDialog({
   }
 
   const setField = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((p) => ({ ...p, [k]: v }));
+  const setType = (budgetType: BudgetType) =>
+    setForm((p) => ({ ...p, budgetType, isBill: p.billTouched ? p.isBill : billDefaultForType(budgetType) }));
   const missing = budgetItemMissingHint(form.name, form.amount);
 
   function run(action: () => Promise<unknown>) {
@@ -81,7 +86,7 @@ export function BudgetItemDialog({
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (missing) return;
-    const data = { name: form.name.trim(), amount: parseFloat(form.amount), budgetType: form.budgetType };
+    const data = { name: form.name.trim(), amount: parseFloat(form.amount), budgetType: form.budgetType, isBill: form.isBill };
     run(() => (item ? updateBudgetItem(item.id, data) : createBudgetItem(categoryId, data)));
   }
 
@@ -143,8 +148,16 @@ export function BudgetItemDialog({
         <MoneyInput id="bi-amount" size="lg" value={form.amount} onValueChange={(v) => setField("amount", v)} required disabled={pending} />
       </Field>
       <Field label="Type" hint={TYPE_HINT[form.budgetType]}>
-        <SegmentedControl ariaLabel="Budget type" value={form.budgetType} onChange={(v) => setField("budgetType", v)} options={TYPE_OPTIONS} />
+        <SegmentedControl ariaLabel="Budget type" value={form.budgetType} onChange={setType} options={TYPE_OPTIONS} />
       </Field>
+      <CheckField
+        id="bi-bill"
+        label="Monthly bill"
+        hint="Paid once a month. Shows in Pay bills and as not paid until it is."
+        checked={form.isBill}
+        onChange={(isBill) => setForm((p) => ({ ...p, isBill, billTouched: true }))}
+        disabled={pending}
+      />
     </FormDialog>
   );
 }

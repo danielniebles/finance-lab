@@ -77,7 +77,7 @@ export async function deleteAppCategory(id: string): Promise<{ error?: string }>
 
 export async function createBudgetItem(
   appCategoryId: string,
-  data: { name: string; amount: number; budgetType: BudgetType }
+  data: { name: string; amount: number; budgetType: BudgetType; isBill: boolean }
 ) {
   await db.budgetItem.create({ data: { appCategoryId, ...data } });
   revalidatePath(CATEGORIES_PATH);
@@ -86,7 +86,7 @@ export async function createBudgetItem(
 
 export async function updateBudgetItem(
   id: string,
-  data: { name: string; amount: number; budgetType: BudgetType }
+  data: { name: string; amount: number; budgetType: BudgetType; isBill: boolean }
 ) {
   await db.budgetItem.update({ where: { id }, data });
   revalidatePath(CATEGORIES_PATH);
