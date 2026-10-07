@@ -8,6 +8,73 @@ Going forward, add a dated entry here as part of any `/commit` that ships a
 user-facing change (new feature, fix, redesign) — skip pure internal
 refactors/chores unless they're worth remembering.
 
+## 2026-10-07
+- Share what someone owes as an image or text; fix loan date off-by-one (`98da92a`)
+- Ledger wallet quick filters, filter states and global add on phones (`e95a123`)
+- Pay bills polish: tick-all box, note spacing, themed scrollbars (`7047a6c`)
+- Pay bills: pay the month's unpaid bills in one step (ADR-052) (`80c74d7`)
+
+## 2026-10-06
+- Document the agent event log as ADR-051 and ping on recovery (`4574435`)
+- Page actions in the page header on every screen (`b8d2180`)
+- Settings pages: PageHeader, header actions, hidden transfer categories, legacy mappings (`4009867`)
+- Design-system reference page: Forms section (`3bf8ae0`)
+- Forms: Settings module on the design-system form kit (`ec5db25`)
+- Forms: Loans module on the design-system form kit (`7365d22`)
+- Forms: Installments module on the design-system form kit (`4d03e67`)
+- Forms: Expenses module on the design-system form kit (`1067c67`)
+- Forms: Vaults module on the design-system form kit (`27e754d`)
+- Forms: scroll the focused field into view when the keyboard opens (`b5e5f6b`)
+- Mobile forms: native pickers on touch, keyboard-aware sheet, no background scroll (`80ba841`)
+- Self-host fonts instead of downloading from Google at build time (`a9efcd0`)
+- Forms: design-system form kit; transaction, installment and recurring modals (`fff8dc1`)
+
+## 2026-10-05
+- Fix mobile overflow: Home vaults/obligations and vault gap tiles (`d8ea2c4`)
+- Design system: colour guard test, migrate remaining raw colours, refresh CLAUDE.md (`e10ceec`)
+- Trends: migrate to the design system; months by calendar (ADR-049) (`a1f1653`)
+- Savings & Loans: migrate to the design system (`ad050c9`)
+- Installments redesign: still-due summary, card due chips, unpaid-first list, totals in all installments (`a6a890d`)
+- Design system: ReadingGrid wraps long COP amounts instead of overflowing (`60cedab`)
+- Expenses redesign: ledger budget pace, category chips, grouped analysis, Pending fixed bills (`9c6793f`)
+- Vaults redesign: monthly summary, urgency-sorted vault carousel, due-date list (`14a6c93`)
+- Home redesign: current-month overview built on the design system (`0c96219`)
+- Forecast: pace the current month from logged transactions (`3416415`)
+- Design system phase 1: tokens, status tones, ds components; Overview uses current month (`08376a9`)
+
+## 2026-09-03
+- Use min-w-3xl instead of arbitrary min-w-[48rem] (`b6bfe46`)
+- Record agent actions as event rows instead of assistant prose (`de8358b`)
+
+## 2026-08-25
+- Center settings pages and fix rules-table mobile edit affordance (`147781b`)
+- Reclassify name-only counterparty-account values as MERCHANT (`e8eafd9`)
+- Fix counterparty-rule "remember it" nudge and add tags to rules (`b664294`)
+
+## 2026-08-21
+- Add wallet-to-wallet transfers to the transaction ledger (`07d25c3`)
+
+## 2026-08-11
+- Fix mobile ledger polish and add category quick filter (`566913a`)
+
+## 2026-08-10
+- Add transaction tags: schema, ledger filter, settings page, bot mapping (`451dbdf`)
+- Add note/amount-based field suggestions to AddTransactionRow (`bbe74ec`)
+
+## 2026-08-09
+- Add "Pay all" bulk-pay flow to installments due-this-month table (`ae533fb`)
+
+## 2026-07-31
+- Guess batch-screenshot categories from vendor; ledger UX polish (`a506a6b`)
+
+## 2026-07-25
+- Replace desktop vault grid with a responsive carousel (`62e57d6`)
+- Stop double-counting balance in RECURRING vault "still needed" (`3cdfef1`)
+- Fix RECURRING vault set-aside to net out existing balance (`160238b`)
+
+## 2026-07-22
+- Balance Overview KPI strip widths for long COP values on mobile (`88e4176`)
+
 ## 2026-07-22
 - Collapse loans account-card actions into overflow menu (`676c2d7`)
 - Document redesign/Signal-theme changes + vault wallet-funding feature (`b5da5da`)

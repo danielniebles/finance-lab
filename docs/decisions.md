@@ -1,6 +1,6 @@
 # Decisions
 
-> Last updated: 2026-07-21
+> Last updated: 2026-10-07
 
 ## ADR-001 — Next.js 15 App Router with async Server Components
 
@@ -497,3 +497,69 @@ Two supporting changes. `tool_choice: {type:"any"}` on the **first** model call 
 **Insight:** the Home/Analysis "not paid yet" card is now built from unpaid bills ("N bills not paid yet", budget amounts) instead of Pending categories, opens Pay bills, and always keeps its slot among the three insights when there are unpaid bills (it was last and could be pushed out). Shown only while the period is open. Category severity (ADR-048) is unchanged: the table's Pending chip is still per FIXED category.
 
 **Not done:** the transaction edit form, Advisor and Telegram don't set `budgetItemId`; they rely on the fallback.
+
+---
+
+## ADR-053 — App design system: theme tokens, status tones, `components/ds`, enforced by tests
+
+**Decision:** Every screen is built from a small in-repo design system documented in `DESIGN.md` (§7 maps it to code). Three layers: (1) semantic CSS tokens in `globals.css`, defined in all four theme blocks (`:root`, `.dark`, `.signal`, `.dark.signal`); (2) `src/lib/status.ts`, which maps each domain state to a `Tone` through `toneFor…` helpers and owns the only `TONE_CLASSES`; (3) presentational primitives in `src/components/ds` (`PageHeader`/`HeaderAction`, `SectionHeader`, `StatCard`, `Money`, `StatusChip`, `Meter`, `ListRow`, `ReadingGrid`, `ColorDot`). Each page has one primary `HeaderAction` in its `PageHeader`; section actions stay in their `SectionHeader`. Display rules (sorting, labels, chip choice) live in pure, tested `lib/*-display.ts` modules so components stay presentational. A dev-only `/settings/design-system` page renders every token and component.
+
+**Why:** Before this, each screen mapped its own statuses to colour classes (vault tile, goals card, recurring list, due banner…), so "behind" or "over budget" looked different from page to page, and theme work meant editing every component. One mapping from state → tone → classes gives the same meaning everywhere and makes the Signal theme a token swap.
+
+**Enforcement:** `src/lib/design-system-guard.test.ts` fails on raw palette classes, hex, `rgb()`/`hsl()`/`oklch()` in `src/components`, `src/app` and `src/lib`, with file:line (allowlist: icon, manifest, `themeColor`, user-chosen colours rendered via `ColorDot`). `src/app/theme-tokens.test.ts` fails when a token is missing from any of the four theme blocks. Chart series use `chart-1…8`, never status colours.
+
+**Rollout:** Phase 1 (tokens, tones, ds, Home on the current month) then per-screen redesigns of Home, Vaults, Expenses, Installments, Savings & Loans and Trends (2026-10-05), then the page-header action rule across all screens (2026-10-06).
+
+---
+
+## ADR-054 — MoneyLover import retired; "now" is the current financial month
+
+**Decision:** Transactions are logged only in the app (manual entry, Pay bills, vault funding, transfers, the Advisor, Telegram, Shortcut ingest). The XLSX parser, `actions/import.ts` and `import-form.tsx` are kept but marked `@deprecated`, because historical imported rows still live in the DB; `/settings/mappings` is relabelled "Legacy mappings" so that history stays categorised. Every screen derives the current month from `financialMonthYear(new Date(), startDay)` and never from the latest `ImportBatch`.
+
+**Why:** Since ADR-030 the bot was the primary capture path and the weekly import only a backfill; in practice the import stopped being used. Screens that still read "the latest FINAL batch" froze on the last imported month. ADR-047 (forecast pacing) and ADR-049 (trends by calendar) were the per-feature consequences of this decision.
+
+**Supersedes:** ADR-005 (MoneyLover XLSX as the sole import format) as the capture model. Do not build on the import path.
+
+---
+
+## ADR-055 — Form kit: `FormDialog` + `Field` controls; dates stay `YYYY-MM-DD` strings
+
+**Decision:** All create/edit modals use `components/ds/form`: `FormDialog` + `FormFooter` (a bottom sheet on phones), every control inside a `Field`, amounts in `MoneyInput` (digits only, es-CO thousands), dates in `DateField`, dropdowns in `OptionSelect`, plus `SegmentedControl`, `TagInput`, `ColorPicker`, `CheckField`. Date values stay `"YYYY-MM-DD"` strings end to end in the form; `parseISODate()` (`src/lib/form-format.ts`) turns one into a local-noon `Date`, and `localISODate()` produces today's value in local time. Validation hints come from pure `lib/*-forms.ts` helpers. Migrated module by module (Vaults, Expenses, Installments, Loans, Settings).
+
+**Why:** Hand-rolled forms per module had drifted and carried real bugs: `new Date("YYYY-MM-DD")` is UTC midnight, so due dates were saved a day early in Bogotá, and `toISOString()` made "today" become tomorrow after 7pm. One kit fixes those once.
+
+**Mobile:** on touch screens `DateField` overlays an invisible native date input (iOS ignores `showPicker()`) and `OptionSelect` uses a native `<select>`; mouse/trackpad users get the styled dropdown. `FormDialog` follows the visual viewport above the keyboard, locks background scroll, and scrolls the focused field into view.
+
+**Related:** stored loan/payment/entry dates are displayed as UTC calendar days via `formatStoredDate()` (`src/lib/format.ts`), which also keeps server and browser rendering identical (no hydration mismatch); "mark paid" stores local noon instead of now so evening payments keep their day.
+
+---
+
+## ADR-056 — Self-hosted fonts via `next/font/local`
+
+**Decision:** Sora, DM Sans and JetBrains Mono are variable woff2 files in `src/app/fonts` (Fontsource, OFL licence included), loaded with `next/font/local` in `src/app/layout.tsx`, exposing the same CSS variables as before.
+
+**Why:** `next/font/google` downloads the files at build time, and a failed download broke the Vercel build. Local files remove the network dependency; variable fonts keep it to one file per family.
+
+---
+
+## ADR-057 — Tags: soft, budget-free, many-to-many labels
+
+**Decision:** A `Tag` model (unique normalized name, optional colour, optional `defaultAppCategoryId`) with implicit many-to-many joins to `Transaction` and `CounterpartyRule`. Names are trimmed + lowercased on every write path (`actions/tags.ts`, `setTransactionTags`, `tag-utils.ts` on the client). The ledger filters by tag and searches `#tags`; tags are edited inline on rows and at creation; `/settings/tags` manages them. In the bot, `propose_add_transaction` extracts `#hashtags`; a matched tag's default category outranks the model's own guess but never overrides a confident `CounterpartyRule` match. Rules can attach tags to every transaction they auto-record, on top of any hashtags in the message.
+
+**Why:** Some groupings cut across categories (a trip, a person, a project) and must not affect budgets or severity. Making them categories would distort analysis; a lighter label with no budget semantics keeps the category model clean.
+
+---
+
+## ADR-058 — Share statements rendered in the browser
+
+**Decision:** "What you owe me" summaries (a debtor's active loans, balance and last 3 payments; or selected installments) are built by the pure `src/lib/share-statement.ts`, rendered as a card component, and turned into a PNG in the browser with `modern-screenshot` (`src/lib/share-image.ts`), then shared through the Web Share API or copied to the clipboard; a plain-text version is offered too. The copy is Spanish because the recipients read Spanish (the app UI stays English).
+
+**Why:** No server rendering or storage is needed for a one-off image sent from a phone. Constraints: clipboard image writes and file shares need HTTPS (or localhost) and a user click; capture uses layout size rather than `getBoundingClientRect` because the dialog's zoom-in transform would shrink it.
+
+---
+
+## ADR-059 — Ledger wallet quick filter remembered in a cookie
+
+**Decision:** A wallet chip row above the Expenses tabs scopes both the ledger and analysis (`?walletId=`). The last pick is stored in the `ledger_wallet` cookie (`LEDGER_WALLET_COOKIE`, `src/lib/expenses-ledger-display.ts`) and read by the server page, so the next visit opens on that wallet; an explicit `walletId=all` beats the remembered value. The ledger always groups by day (the Day/Category/Wallet group-by was dropped); category chips ignore the category filter so the others stay visible.
+
+**Why:** The user mostly looks at one wallet (daily spending), so re-picking it on every visit was friction. A cookie, unlike `localStorage`, is visible to the server component, so the first render is already scoped with no flash.

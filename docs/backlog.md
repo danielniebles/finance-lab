@@ -1,29 +1,34 @@
 # Backlog
 
-> Last updated: 2026-07-21
+> Last updated: 2026-10-07
 
 ## Known issues
 - **Import dedup misses same-transaction rows that land on different calendar dates (bot vs. MoneyLover).** The MoneyLover-import dedup (ADR-030) matches an existing MANUAL row only on exact calendar day + exact amount. A bot-captured transaction and the same transaction's later MoneyLover-sourced row can legitimately carry different dates — the bot records a bank notification the day it arrives (a posting-date), while MoneyLover sometimes attributes the same purchase to the actual transaction date one day earlier — so a 1-day drift slips through the dedup entirely and both rows get counted. Confirmed in production (2026-07-13): 3 transactions were double-counted in the `debit/daily` wallet for one financial month this way, found only because the user cross-checked Finance Lab's total against MoneyLover's own reported figure. Fixed manually for that occurrence (the 3 duplicate MANUAL rows were deleted, keeping the richer MoneyLover-sourced versions); the underlying dedup gap in `src/lib/actions/import.ts` is **not** fixed — it will recur on the next date-drifted transaction. A real fix needs a fuzzier match (e.g. a ±1 day window) rather than the current exact-day key.
-- `next-themes` is listed as a dependency (`package.json`) but is not used — theme is managed via a plain cookie mechanism instead (extended by ADR-043's `THEME_FAMILY` env var, which is a separate, independent mechanism). The package can be removed.
+- `next-themes` is listed as a dependency (`package.json`) but is not used — theme is managed via a plain cookie mechanism instead (extended by ADR-043's `THEME_FAMILY` env var, which is a separate, independent mechanism). The package can be removed. *(2026-10-07: still true — `src/components/theme-provider.tsx` wraps it but nothing imports that file; delete both.)*
 - ✅ RESOLVED — **Pre-fix noisy interest-rate values in the DB.** ADR-044 fixed the EA→monthly interest-rate conversion so newly-entered rates are rounded before storing, and fixed the display side so any already-noisy value renders cleanly (2 decimals). The two remaining unrounded rows in production ("Cuota Javier", `monthlyInterestRate: 2.088436099590463`) were cleaned up via `scripts/fix-installment-interest-rates.mjs` (rounds every `Installment.monthlyInterestRate` to 4 decimals; idempotent, supports `--dry-run` and `--prod`).
 - `@anthropic-ai/sdk` and the `@googleapis/drive` packages are production dependencies, which means they are bundled for the server but not tree-shaken. This is acceptable for a server-rendered app but worth noting if bundle size ever matters.
 - ✅ RESOLVED (ADR-029) — The chat history window loads the most-recent 20 messages (`desc + take: 20`, reversed), not the 20 oldest. Two follow-on ideas from the same investigation are still open, not yet built:
   1. **Time-bounded window** — additionally filter to messages within a recent window (e.g. ~2 hours), so a stale topic drops off instead of bleeding into a new one once 20 messages haven't yet been reached.
   2. **Reset keyword** — a `reset`/`nuevo` keyword that starts a fresh context (ignores history before it), for when the user deliberately switches topics.
 
+- **`tag-utils.ts` has no unit tests** — every other pure display/utils module in `src/lib` has a sibling `*.test.ts` (2026-10-07).
+- **Legacy string fields still carried alongside their replacements** — `Transaction.wallet` / `CounterpartyRule.wallet` (vs `walletId`) and `RecurringExpense.category` (vs `appCategoryId`, ADR-050). Kept as fallback/audit trail; a cleanup migration could drop them once every row has the FK.
+
 ## TODO items from code
-No `TODO` or `FIXME` comments were found in the source.
+No `TODO` or `FIXME` comments were found in the source (re-checked 2026-10-07).
 
 ## Unfinished features
 
 **Playwright tests**
 `@playwright/test` and `playwright` are listed as dev dependencies, suggesting E2E tests were planned. No test files were found anywhere in the project.
 
-**Trends page period selector**
+**~~Trends page period selector~~** ✅ RESOLVED — `components/trends/period-toggle.tsx` renders it in the page header (2026-10 Trends migration).
+
+**Trends page period selector (original note)**
 The trends page reads a `?period` search param (3, 6, or 12) but the `TrendsDashboard` component is the one that should expose the period toggle UI. Whether this control is already rendered inside `TrendsDashboard` or still missing is not visible from the page file alone.
 
-**`expenses.ts` actions file**
-`src/lib/actions/expenses.ts` exists but its contents were not explored — it may contain additional server actions beyond the import flow.
+**`expenses.ts` actions file** ✅ CLARIFIED (2026-10-07)
+`src/lib/actions/expenses.ts` holds one export, `getCategoryTransactions()` (a read used by `category-breakdown-table.tsx` to expand a category's rows). It is a read living in `actions/` — candidate to move to `lib/queries/`.
 
 ## Future improvements
 
@@ -47,9 +52,9 @@ The `getHealthScore()` metric uses four pillars (Savings Rate, Variable Burn Rat
 
 ---
 
-### AI Advisor + Vaults — Global vault obligations banner (low effort)
+### ~~AI Advisor + Vaults — Global vault obligations banner (low effort)~~
 
-`VaultDueBanner` is currently mounted only on `/overview`. It could also appear on `/vaults` when the user is looking at their vaults page and still has obligations. Minor duplication — one mount point vs. two.
+✅ OBSOLETE (2026-10) — `VaultDueBanner` was removed in the Home/Vaults redesigns; Home's `VaultsPanel` and the Vaults page summary cover it. Original note: `VaultDueBanner` is currently mounted only on `/overview`. It could also appear on `/vaults` when the user is looking at their vaults page and still has obligations. Minor duplication — one mount point vs. two.
 
 ---
 
@@ -221,6 +226,7 @@ double-count epoch guard.
     adjustment. This resolves the vault-funding slice of the original C2 item; a general savings-movement
     categorization (e.g. `AccountEntry` itself gaining a category, or the same treatment for loan
     disbursements) is still open.
+- ✅ PARTIALLY RESOLVED (ADR-046) — wallet-to-wallet transfers ship as a paired MANUAL `Transaction` (`isTransfer`, `transferPairId`) from the ledger. A wallet settings screen is still absent, but `includeInAvailable` is now editable in `account-form.tsx`.
 - **C3** — first-class envelope→envelope `Transfer` (net-zero, distinct from a counterparty "transferencia
   a cuenta X" payment), `AccountEntry.walletId` for per-wallet adjustments, reconciliation UI, and an
   agent read-only wallet-balance tool + `propose_move_between_wallets`.

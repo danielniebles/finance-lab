@@ -1,6 +1,6 @@
 # Modules
 
-> Last updated: 2026-08-21
+> Last updated: 2026-10-07
 
 ## Project structure
 ```
@@ -12,10 +12,10 @@ src/
     apple-icon.tsx          — Generates the 180x180 iOS home-screen icon via next/og ImageResponse (ADR-041)
     page.tsx                — Redirects to /overview
     (app)/
-      layout.tsx            — App shell: SidebarProvider + ChatProvider + FloatingChat
-      overview/page.tsx     — Home dashboard (Health Score, KPI cards, module snapshots)
-      expenses/page.tsx     — Monthly expense analysis + XLSX import
-      trends/page.tsx       — Multi-month income/expense/category charts
+      layout.tsx            — App shell: SidebarProvider + MobileBottomNav + ChatProvider + AddTransactionProvider (global "add transaction" dialog; prefetches categories, tags, wallets)
+      overview/page.tsx     — Home: balance, month snapshot, wallets strip, vaults, obligations, spending, insights (current financial month)
+      expenses/page.tsx     — Ledger + Analysis views (?view=ledger|analysis), wallet quick filter
+      trends/page.tsx       — Health score, income vs spending, category trends (months by calendar, ADR-049)
       installments/page.tsx — Installment CRUD + monthly due summary
       loans/page.tsx        — Savings accounts + debtor/loan management
       vaults/page.tsx       — Goal-based savings pockets (CRUD + obligations)
@@ -23,7 +23,9 @@ src/
       settings/
         categories/page.tsx — AppCategory + BudgetItem CRUD
         mappings/page.tsx   — MoneyLoverCategory → AppCategory mapping
-        rules/page.tsx      — CounterpartyRule CRUD (ADR-032) — FOLLOW-UP, not yet built by this pass
+        rules/page.tsx      — CounterpartyRule CRUD (ADR-032) with wallet selector + tags
+        tags/page.tsx       — Tag CRUD (name, colour, default category)
+        design-system/page.tsx — Dev-only reference: every token, tone and ds component + FormsShowcase
     api/
       chat/route.ts         — Thin NDJSON streaming wrapper over runAgentTurn; emits {type:"proposal",proposalId,...} events
       proposals/
@@ -36,17 +38,38 @@ src/
         route.ts            — External ingest webhook (ADR-028): bearer-auth POST { text }, 200 { ok: true } immediately, then runs the shared delivery helper in after()
   components/
     app-sidebar.tsx         — Sidebar nav + theme toggle
-    overview/               — OverviewDashboard (BudgetBarsPanel, TopUnplannedPanel), ExpenseDonut, ForecastPanel
-    expenses/               — ImportForm, AnalysisDashboard, CategoryBreakdownTable, BudgetProgressBar (shared compressed-log-scale bar, ADR-044), PeriodSelector, ViewTabs, TransactionLedgerPage, LedgerControls, TransactionGroupList, TransactionRow, LedgerEmptyState
-    trends/                 — TrendsDashboard (Recharts)
-    installments/           — InstallmentsDashboard (client), InstallmentForm, PayButton, MonthNav, AllInstallmentsTable, InstallmentActions, CreditCardTile, CreditCardManager
-    loans/                  — LoansDashboard, AccountCard, DebtorForm, LoanForm, PaymentForm, EntryForm, AccountForm, TransferForm, LoansClient, LoanRowActions
-    vaults/                 — VaultsDashboard (client), VaultTile, VaultForm, EntryForm, VaultLedger, VaultDueBanner, RecurringList, RecurringExpenseForm
-    settings/               — CategoryList, MappingList
+    mobile-bottom-nav.tsx   — Phone bottom navigation
+    ds/                     — Design system (see "src/components/ds" below): PageHeader, HeaderAction, Money, StatusChip, Meter, StatCard, SectionHeader, ListRow, ReadingGrid, ColorDot; ds/form: FormDialog, Field, MoneyInput, DateField, OptionSelect, SegmentedControl, TagInput, ColorPicker, CheckField
+    shared/                 — Cross-module pieces: CategoryOption, PrivacyToggle, RowDeleteButton, WalletSelect, ShareStatementCard + ShareStatementDialog
+    bills/                  — PayBills dialog (ADR-052), opened from Home insights and Expenses attention cards
+    overview/home/          — BalanceCard, MonthSnapshot, WalletsStrip, VaultsPanel, ObligationsPanel, SpendingPanel, InsightsPanel, Panel. Replaces the old OverviewDashboard / ExpenseDonut / ForecastPanel
+    expenses/               — TransactionLedgerPage, LedgerControls, LedgerStickyBar, LedgerSummary, WalletQuickFilter (+ RememberLedgerWallet cookie), TransactionGroupList, TransactionRow, LedgerEmptyState, AddTransactionButton/Dialog/Provider, AnalysisDashboard, CategoryBreakdownTable, CategorySummaryPanel, PeriodSelector, ViewTabs, ImportForm (@deprecated); analysis/: SavingsHero, AttentionCards, GroupCard
+    trends/                 — TrendsDashboard (server), HealthScoreCard, IncomeSpendingCard, CategoryTrends, TrendsCharts (Recharts), PeriodToggle
+    installments/           — InstallmentsDashboard (client), InstallmentsSummary, DueThisMonthTable, PayButton, PayAllButton, ShareSelectedButton, MonthNav, AllInstallmentsTable, InstallmentActions, InstallmentForm, CreditCardTile, CreditCardManager
+    loans/                  — LoansDashboard, LoansClient, NetWorthCard, AccountCard, AccountLogDialog, AccountForm, AccountEntryForm, TransferForm, DebtorsSection, DebtorForm, LoanForm, PaymentForm; debtors/: DebtorCard, LoanList, LoanRow, PaymentsDialog, RecoveryCard, AccountFilter, ShareDebtorButton; hooks/: useLoanForm, usePrivacyMode; lib/: constants (MASK), account options
+    vaults/                 — VaultsDashboard (client), VaultsSummary, VaultCarousel, VaultTile, VaultForm, EntryForm, VaultLedger, RecurringList, RecurringExpenseForm, RecurringPayDialog
+    settings/               — CategoryList, MappingList (legacy), RuleList, TagList; categories/: CategoryDialog, BudgetItemDialog, CategoryStyleDialog
     chat/                   — FloatingChat, ChatProvider, ChatMessages, ChatInput, ActionCard (renders `editable` fields, ADR-031, as a `<select>`; branches to BatchProposalTable for `proposal.batch`, ADR-034), BatchProposalTable (interactive batch table — checkboxes + category selects + card-label select + live total)
     ui/                     — shadcn/ui base-nova primitives
   lib/
     db.ts                   — Prisma client singleton
+    status.ts               — Domain state → `Tone` → classes (`TONE_CLASSES`); `toneFor…` helpers per domain (category severity, vault/recurring status, budget used, savings rate, liquidity, bill difference). Only place status colours are chosen
+    form-format.ts          — Helpers behind ds/form: digitsOnly, formatThousands, parseISODate, localISODate, shiftISODate, formatDateLabel
+    color-presets.ts        — PRESET_COLORS + DEFAULT_ENTITY_COLOR for user-chosen account/card colours
+    bill-display.ts         — (ADR-052) billStatuses, unpaidBills, billDifference, Pay bills form helpers
+    category-status.ts      — Expenses analysis row status label + tone, grouping (ADR-048 Pending)
+    expenses-ledger-display.ts — Ledger wallet chips, remembered-wallet cookie (LEDGER_WALLET_COOKIE), active-filter labels
+    home-insights.ts        — buildHomeInsights(): the max-3 Home insight cards, priority-ordered
+    health-score-utils.ts   — Pure Health Score rules (4 metrics × 25 pts) + tier/metric tones
+    trend-utils.ts          — Trend window by calendar month (ADR-049), averages, category row stats
+    installment-display.ts  — Card due labels/status, unpaid-first sort
+    loan-display.ts         — Loan age/stale flag, chips, debtor sort, net-worth composition
+    loan-forms.ts           — allocatePayment across loans, form validation hints, signed entry amounts
+    settings-forms.ts       — Category delete blocker, budget item / rule validation hints
+    vault-display.ts        — Still-needed-this-month, urgency sort, next due per vault, cadence labels
+    tag-utils.ts            — Tag draft parse/split/join + suggestions (normalized like setTransactionTags)
+    share-statement.ts      — Builds the Spanish "what you owe me" statement for a debtor or selected installments (lines, greeting, plain text)
+    share-image.ts          — Browser-only: render a DOM card to PNG, Web Share / clipboard image
     format.ts               — formatCOP(), formatShort(), MONTH_NAMES
     utils.ts                — cn() (clsx + tailwind-merge)
     installment-utils.ts    — computeMonthlyAmount(), computeInstallmentDue(), isDueInMonth(), computeMonthSummary(), rate converters
@@ -71,6 +94,10 @@ src/
       vaults.ts             — getVaults() (branches on goalType: RECURRING uses summed set-asides), getVaultObligations(); VaultEntryRow now includes sourceAccountId + sourceAccountName
       recurring.ts          — getRecurringExpenses(month, year): items with set-aside + status
       accounts.ts           — getSavingsAccounts(): lightweight AccountOption[] (id, name, balance) for pickers
+      bills.ts              — (ADR-052) getBills(month, year): bill items, period expenses, whether the period is still open
+      tags.ts               — getTags(), getTagsByNames(), getTagsForSettings()
+      wallets.ts            — getWalletBalances(), listWalletOptions()
+      forecast.ts           — getForecast(month, year): paced from the period's logged transactions (ADR-047)
       counterparty-rules.ts — getCounterpartyRules(): CounterpartyRuleRow[] (ADR-032) — all rules, category name resolved, ordered by matchType/matchValue; serves both the get_counterparty_rules read tool and the future settings/rules page. Also matchCounterpartyRule(candidates) (ADR-033) — bundle lookup over { account?, merchant?, sender?, direction }, tried ACCOUNT → MERCHANT → SENDER, normalized via normalize-match-value.ts, filtered by direction (ANY matches either); pure read, does NOT bump usage. bumpCounterpartyRuleMatch(ruleId) — separate explicit step, called only by the auto-record path once a match is actually used.
       transactions.ts — (new, ADR-035) getTransactionList(month, year, groupBy, filters): the expenses module's granular ledger view — date-range scoped and category-resolved identically to getMonthlyAnalysis, grouped by day (newest-first)/category/wallet (both sorted by |subtotal| desc) with category/wallet/type/search filters applied before grouping. monthTotalExpense/monthTotalIncome are always whole-month (filter-independent, so the ledger's totals agree with getMonthlyAnalysis regardless of what's filtered); categorySummary IS filter-aware (reports on the current selection). search matches only note. Day-group labels are hand-built ("Mié 8 jul") rather than Intl's default es-CO format.
     agent/
@@ -86,6 +113,7 @@ src/
       execute-proposal.ts   — resolveProposal(): looks up PendingProposal, dispatches via PROPOSAL_ACTIONS registry, marks approved/dismissed; used by both web and Telegram. Since ADR-033, also returns an optional learnRuleNudge string on a successful propose_add_transaction approve when params.hadCounterpartyMatch === false and a counterparty was extracted — the learn-from-corrections trigger (Part 3). Since ADR-034, the dispatch step (factored into executeApprovedAction()) also supports a generic message escape hatch: if an action's execute() returns a `message` field in its extra-fields object, that string replaces the hardcoded "Approved" default (used by the batch's "Agregadas N · Total X" reply) — `message` itself is stripped before the rest of `extra` is persisted onto params. propose_add_transaction's learnRuleNudge is unaffected — a separate field, not this mechanism.
       apply-proposal-edit.ts — applyProposalEdit(proposalId, field, optionId) (ADR-031): the one shared mutation for editable proposal cards — updates params[field] + editable[fieldIndex].selectedId, rejects a non-pending proposal or unknown field/option, returns a re-rendered ProposalDescriptor. Used by both the Telegram callback handler and POST /api/proposals/edit. Since ADR-033, ALSO accepts a proposal with status "approved" when its action is in REVERSIBLE_ACTIONS and params.createdId is present (the auto-record case) — additionally calls updateTransactionCategory() to patch the already-created live Transaction row in that branch.
       apply-batch-edit.ts   — (new, ADR-034) toggleBatchItem(proposalId, itemIdx), setBatchItemCategory(proposalId, itemIdx, optionIdx), setBatchCardLabel(proposalId, optionIdx): the shared mutation set for the batch card, mirroring apply-proposal-edit.ts's pattern — each reads/writes PendingProposal.params.batch and returns a re-rendered ProposalDescriptor (title/fields rebuilt via transactions-batch.ts's buildBatchDisplay()). Used identically by both the Telegram bt:/bs:/bc: callbacks and POST /api/proposals/batch-edit. Rejects a non-pending proposal, a proposal with no params.batch, or an out-of-range item/option index.
+      events.ts             — (ADR-051) logEvent()/formatEvent(): system-authored `⟦event⟧` ChatMessage rows (proposal_created/approved/dismissed, auto_recorded, rule_offer, unbacked_claim); isReplayableEventContent
       deliver-to-telegram.ts — runTurnAndDeliverToTelegram(text, opts?): shared helper (ADR-028) — loads shared history (most-recent 20, reversed to chronological order — ADR-029), saveMessage, runAgentTurn({channel:"telegram"}), persists combined assistant turn, echoes ingested (shortcut-channel) text before the turn (ADR-029), delivers text + proposal cards to TELEGRAM_ALLOWED_CHAT_ID; used by both the Telegram webhook (handleTextMessage) and /api/ingest. Since ADR-033, also sends a dedicated auto-record notification (toTelegramAutoRecordMessage) for each entry in result.autoRecorded. New sibling `runImageTurnAndDeliverToTelegram(image, opts?)` (card-screenshot image ingestion, Part 1): echoes "📸 Leyendo el pantallazo…", persists a fixed text placeholder to ChatMessage (never raw base64 — no schema change), attaches an Anthropic image content block only to the live incoming message (history rows stay plain strings), and reuses the same delivery tail (`deliverResultToTelegram`, factored out of the text path) so text/proposal/auto-record delivery is identical between the text and image entry points. Since ADR-034, deliverResultToTelegram() renders a proposal via toTelegramBatchMessage() instead of toTelegramMessage() whenever proposal.batch is set.
     telegram/
       api.ts                — Telegram Bot API helpers: sendMessage, answerCallbackQuery, editMessageText, sendChatAction. Plus `getFile(fileId)` (resolves a Telegram file_id to a downloadable file_path via the Bot API) and `downloadFile(filePath)` (fetches the bytes from Telegram's separate file-host URL, returns `{ base64, mediaType }` — media type inferred from the file extension, defaulting to `image/jpeg` since Telegram always re-encodes photos server-side) — added for card-screenshot image ingestion, Part 1.
@@ -99,6 +127,8 @@ src/
       loans.ts              — SavingsAccount, Debtor, Loan, LoanPayment, Transfer CRUD actions
       transactions.ts       — createTransaction(), deleteTransaction() (ADR-030): the bot/manual-capture write path — MANUAL source, batchId/externalId/moneyLoverCategoryId null, direct appCategoryId. updateTransactionCategory(id, appCategoryId) (ADR-033): patches the category on an already-created transaction — the live-entity sync step for editing an auto-recorded transaction. updateTransaction(id, { amount?, date?, appCategoryId?, wallet?, note? }) (new, ADR-035): general partial-update for the Ledger's row-edit action — detach-on-edit rule: editing a MONEYLOVER row also flips source→MANUAL and nulls batchId/moneyLoverCategoryId in the same update (resolving a fallback appCategoryId via the ADR-030 rule when the caller didn't supply one), so the edit is authoritative and the existing import dedup (ADR-030) treats it as already-captured on re-import; a MANUAL row is a plain partial update with no source flip.
       chat.ts               — saveMessage()
+      bills.ts              — (ADR-052) payBills(): one expense per ticked bill, linked via budgetItemId, all-or-nothing
+      tags.ts               — createTag(), updateTag(), deleteTag() (normalized like setTransactionTags)
       vaults.ts             — createVault(), updateVault(), archiveVault(), addVaultEntry(vaultId, amount, opts?) — opts: { date?, notes?, sourceAccountId?, walletId?, appCategoryId? }; since ADR-045, opts.walletId + opts.appCategoryId (with amount > 0) fund the contribution via a real categorized Transaction instead of the legacy sourceAccountId-only earmark; revalidates /loans (+ /expenses when a Transaction was created), deleteVaultEntry() (cascades to delete the linked Transaction, ADR-045)
       recurring.ts          — createRecurringExpense(), updateRecurringExpense(), deleteRecurringExpense(), payRecurringExpense() (atomic via prisma.$transaction)
       counterparty-rules.ts — createCounterpartyRule(), updateCounterpartyRule(id, data), deleteCounterpartyRule(id) (ADR-032): CRUD over CounterpartyRule; create/update always normalize matchValue via normalizeMatchValue() before writing; revalidates /settings/rules
@@ -111,14 +141,16 @@ src/
 ## Module breakdown
 
 ### `src/app/(app)/overview`
-**Responsibility:** Home dashboard. Aggregates data from all modules into a single-page health summary. Uses an asymmetric 7/5 grid layout with a `BudgetBarsPanel` (variable/fixed burn rates + savings rate bars) and `TopUnplannedPanel` (top unplanned spending). Installments split into Upcoming/Paid columns. Loans section shows a Liquidity Health panel. Mounts `VaultDueBanner` at the top when vault obligations are still needed this month.
-**Key files:** `overview/page.tsx` → `components/overview/overview-dashboard.tsx` (contains `BudgetBarsPanel`, `TopUnplannedPanel` as module-private components), `components/overview/expense-donut.tsx` (horizontal layout, Total Spent center label, two-row legend), `components/overview/forecast-panel.tsx` (server component; shows projected savings rate, vsTarget delta, and top overspend drivers; renders a quiet thin-data state when < 3 months of history)
-**Dependencies:** `getMonthlyAnalysis`, `getMonthSummary`, `getLoansOverview`, `getHealthScore`, `getVaultObligations`, `getForecast`
-**Exports:** `OverviewPage` (route), `OverviewDashboard` (async Server Component), `ExpenseDonut` (Recharts pie chart), `ForecastPanel` (async Server Component)
+**Responsibility:** Home. A current-financial-month overview built on the design system (`financialMonthYear(new Date(), startDay)`, never derived from `ImportBatch`). Panels: total balance (hero, `surface-glow`), month snapshot with period progress, wallets strip, vaults, obligations (installments + bills), spending, and up to 3 insight cards (`buildHomeInsights`) — one of which opens Pay bills when bills are unpaid. Primary page action: Add transaction.
+**Key files:** `overview/page.tsx`, `components/overview/home/{balance-card,month-snapshot,wallets-strip,vaults-panel,obligations-panel,spending-panel,insights-panel,panel}.tsx`, `src/lib/home-insights.ts`
+**Dependencies:** `getWalletBalances`, `getLoansOverview`, `getVaultObligations`, `getMonthlyAnalysis`, `getMonthSummary`, `getForecast`, `getBills` + `unpaidBills`, `periodProgress`
+**Exports:** `OverviewPage` (route)
+**History:** The earlier OverviewDashboard / ExpenseDonut / ForecastPanel / Health Score layout was replaced in the 2026-10 Home redesign; Health Score moved to Trends.
 
 ---
 
 ### `src/app/(app)/expenses`
+**Current state (2026-10):** Rebuilt on the design system. Ledger (default view, always grouped by day — the group-by toggle was dropped) has wallet quick-filter chips with the last pick remembered in a cookie (`LEDGER_WALLET_COOKIE`, ADR-059), active-filter states, a sticky summary bar, budget pace, and category chips; adding a transaction uses the global `AddTransactionDialog` (also on phones). Analysis view: `SavingsHero`, `AttentionCards` (opens Pay bills), and grouped `GroupCard`s with category statuses from `category-status.ts` (incl. Pending fixed bills, ADR-048). Wallet-to-wallet transfers (ADR-046) and tags are editable from the ledger. Import UI is `@deprecated`. The detail below is pre-redesign history, kept for reference.
 **Responsibility:** Monthly expense analysis and a granular transaction ledger. `expenses/page.tsx` has two tabs (`?view=analysis|ledger`), switched via `ViewTabs`: **Analysis** shows the income/expenses/category-health breakdown, now filterable by `?walletId=` (ADR-039); **Ledger** (ADR-035) shows the month's transactions grouped by day/category/wallet with filters and per-row edit/delete. Since ADR-039, **Ledger is the default view** (no `?view` param → Ledger, not Analysis), month navigation (`PeriodSelector`) and tab switching (`ViewTabs`) both preserve the full current query string via `buildExpensesUrl()` instead of dropping filters, and the Analysis tab's old "month in progress" banner was removed. Since ADR-044: `ViewTabs` stretches to full width on mobile (`flex-1`, unchanged on desktop); the Fixed/Variable donut cards in `AnalysisDashboard` are themselves the click target that toggles `?groupFilter=` (no separate "Filter table below" button — clicking an already-active card clears the filter); Fixed/Variable/Mixed type pills and the ESSENTIAL/DISCRETIONARY donut-card pills lost their blue/violet identity colors in favor of neutral gray (Mixed kept its amber, since it flags a real ambiguity); the donut ring color now reflects over/under budget (`stroke-destructive`/`stroke-primary`) instead of group identity; Net Worth-style promotion applies here too — Savings Rate is now a first-position "hero" `StatCard` (bigger text, `hero` prop, Signal-gated glow per ADR-043) ahead of the flat KPI row; and `LedgerControls`' four filters collapse behind a single mobile-only "Filters" trigger (desktop keeps the always-visible inline bar).
 **Key files:** `expenses/page.tsx`, `components/expenses/import-form.tsx` (client), `components/expenses/analysis-dashboard.tsx` (server — `StatCard` now exported for reuse by the Ledger header band and accepts `hero`/`className` (ADR-044); no longer renders an in-progress banner, ADR-039), `components/expenses/category-breakdown-table.tsx` (`SeverityBadge` also exported/reused by the Top Issues panel; `TypePill`'s Fixed/Variable colors are now neutral, ADR-044), `components/expenses/budget-progress-bar.tsx` (new, ADR-044 — shared `BudgetProgressBar`, replaces two independently-duplicated bar implementations), `components/expenses/period-selector.tsx` (month nav; builds its next URL via `buildExpensesUrl()`, ADR-039), `components/expenses/view-tabs.tsx` (Analysis/Ledger tab pair; plain buttons with the active-nav-item color treatment, not a new Tabs primitive; also builds via `buildExpensesUrl()`, ADR-039; full-width on mobile since ADR-044), `components/expenses/transaction-ledger.tsx` (server — `TransactionLedgerPage`: fetches `getTransactionList` twice — once for the active groupBy/filters, once ungrouped-by-wallet with no filters purely to derive the full month's distinct wallet labels for `WalletSelect` — plus `getCategories()`; renders the Income/Expenses `StatCard`s, the informational `CategorySummaryPanel`, and `LedgerControls` wrapping either `TransactionGroupList` or `LedgerEmptyState`), `components/expenses/ledger-controls.tsx` (client — `GroupByToggle` + `FilterBar` (category/wallet/type selects + a 300ms-debounced search input), all driving the same `?groupBy=&category=&wallet=&type=&search=` search-param contract via `router.push` + `useTransition`; dims the group-list region — `opacity-50 pointer-events-none`, no spinner — while a navigation is pending; since ADR-044, `FilterBar` renders `hidden sm:block` and a new `MobileFilters` (Collapsible trigger + the same select components, `className`-overridden to full width) renders `sm:hidden`), `components/expenses/transaction-group-list.tsx` (client — renders one section per group with a Slate-Raised header strip showing the label + `text-lg` mono subtotal, sign-colored), `components/expenses/transaction-row.tsx` (client — `TransactionRow`: default / inline-edit / inline-delete-confirm states per row, adapted from `rule-list.tsx`'s `RuleRow` pattern; redundant-column suppression by `groupBy` — day mode hides the date column, category mode hides the category chip, wallet mode hides the wallet tag; `Escape` cancels edit/delete-confirm back to default; deleting focuses the row's "No" button by default, not "Yes"; a `source === "MANUAL"` row gets a plain "manual" caption tag, MoneyLover rows get nothing; renders the category's resolved icon + colored pill via `getCategoryStyle()`, ADR-038), `components/expenses/ledger-empty-state.tsx` (client — two copy variants: no data this period vs. no match for filters + a "Clear filters" reset)
 **Dependencies:** `getMonthlyAnalysis` (now takes an optional `walletId`, ADR-039), `getImportBatches`, `importMoneyLoverFile`, `listDriveFiles`, `importFromDrive`, `getTransactionList`, `getCategories`, `updateTransaction`, `deleteTransaction`, `buildExpensesUrl` (`src/lib/build-expenses-url.ts`, ADR-039)
@@ -127,14 +159,15 @@ src/
 ---
 
 ### `src/app/(app)/trends`
-**Responsibility:** Multi-month charts showing income, expenses, budget, net, savings rate trends over 3/6/12 months, plus per-category spend trends.
-**Key files:** `trends/page.tsx`, `components/trends/trends-dashboard.tsx`
-**Dependencies:** `getTrends(n)` — fetches the n most recent import batches
+**Responsibility:** Health Score card (4 metrics x 25 pts, `health-score-utils.ts`), income vs spending, and per-category trends over a 3/6/12-month window. Months are picked by calendar, not by import batch (ADR-049); the current month is included.
+**Key files:** `trends/page.tsx`, `components/trends/{trends-dashboard,health-score-card,income-spending-card,category-trends,trends-charts,period-toggle}.tsx`, `src/lib/trend-utils.ts`
+**Dependencies:** `getTrends(period, { includeCurrent: true })`, `getHealthScore`
 **Exports:** `TrendsPage` (route, reads `?period` search param)
 
 ---
 
 ### `src/app/(app)/installments`
+**Current state (2026-10):** Redesigned: a still-due summary (`InstallmentsSummary`), card tiles with due chips (`installment-display.ts`), unpaid-first list, a Due-this-month table with Pay / Pay all (`PayAllButton`), totals across all installments, and `ShareSelectedButton` to send a debtor the selected installments as an image or text (`share-statement.ts`). Forms use the ds form kit. The detail below is earlier history.
 **Responsibility:** Tracks deferred purchases split into monthly payments. Shows a Credit Overview section (credit card tiles + KPI band), a monthly obligation summary (total due, paid, remaining), lists all active and finished installments, and allows marking payments. Supports per-card filtering client-side. Since ADR-044: `CreditCardTile` no longer has inline Edit/Delete buttons (redundant with "Manage cards", which already owns both); the credit-card carousel dropped its prev/next arrow controls (swipe/scroll remains); `PayButton` renders paid and unpaid states through the same `Button` component instead of an unstyled bare `<button>` for the paid state; a floating-point precision bug in stored EA→monthly interest-rate conversions was fixed (see `docs/backlog.md` for the still-unclean pre-fix DB rows).
 **Key files:** `installments/page.tsx`, `components/installments/installments-dashboard.tsx` (client component), `installment-form.tsx` (`getMonthlyRate()` now rounds the EA→monthly conversion to 4 decimals before storing, ADR-044), `installment-actions.tsx`, `pay-button.tsx` (single `Button`, both states, ADR-044), `month-nav.tsx`, `all-installments-table.tsx` (`StatusBadge` icon-dot is Signal-gated, ADR-043; interest-rate display rounded to 2 decimals, ADR-044), `credit-card-tile.tsx` (no Edit/Delete, ADR-044), `credit-card-manager.tsx`
 **Dependencies:** `getAllInstallments`, `getMonthSummary`, `getCardSummaries`, `computeInstallmentDue`, `computeMonthSummary`, CreditCard CRUD actions
@@ -143,6 +176,7 @@ src/
 ---
 
 ### `src/app/(app)/loans`
+**Current state (2026-10):** "Savings & Loans" on the design system: `NetWorthCard` hero with composition (`loan-display.ts`), account cards with an overflow menu and `AccountLogDialog`, debtors split into `components/loans/debtors/` (DebtorCard, LoanList/LoanRow, PaymentsDialog, RecoveryCard, AccountFilter). `ShareDebtorButton` shares what someone owes as an image or Spanish text via `ShareStatementDialog`. Payment allocation across loans and form hints live in `loan-forms.ts`. Privacy masking via `usePrivacyMode` + `MASK`. The detail below is earlier history.
 **Responsibility:** Tracks personal savings accounts and money lent to debtors. Shows account balances (computed from ledger), outstanding loans per debtor, KPIs (available, in loans, liquidity ratio, earmarked in vaults, net worth), and allows full CRUD on accounts, debtors, loans, payments, and transfers. The "Entry log" dialog in `account-card.tsx` shows a unified sorted list of `AccountEntry` records (INITIAL/ADJUSTMENT badges) and sourced vault contributions (`VaultEntry` rows with a "Vault" badge and vault name; no delete — vault entries are managed from the Vaults module). Since ADR-044: debtor cards in `DebtorsSection` are collapsible (`Collapsible` primitive), expanded by default only when the debtor has outstanding debt; a global "Show settled" toggle replaces the old per-debtor destructive "Clear settled" delete action — settled loans are hidden by default across all debtors and revealed all at once, nothing is deleted (`deleteSettledLoans` action removed); Net Worth is now the KPI strip's first-position "hero" card (bigger text, Signal-gated glow per ADR-043) instead of a flat grid cell alongside the rest.
 **Key files:** `loans/page.tsx`, `components/loans/loans-dashboard.tsx` (`KpiCard` accepts `hero`/`className`, strip is `flex flex-wrap` not a grid, ADR-044), `loans-client.tsx`, `debtors-section.tsx` (`DebtorCard` wraps `Collapsible`; `LoanStatusBadge`'s icon-dot is Signal-gated, ADR-043; `ShowSettledToggle`/`PortfolioStatsStrip`, ADR-044), `account-card.tsx`, `debtor-form.tsx`, `loan-form.tsx`, `payment-form.tsx`, `entry-form.tsx`, `account-form.tsx`, `loan-row-actions.tsx`
 **Dependencies:** `getLoansOverview`
@@ -151,6 +185,7 @@ src/
 ---
 
 ### `src/app/(app)/vaults`
+**Current state (2026-10):** Redesigned: a monthly summary (`VaultsSummary`), urgency-sorted vault carousel (`VaultCarousel`, `sortVaultsByUrgency` in `vault-display.ts`), and a due-date list of recurring expenses (`RecurringList`, `RecurringPayDialog`). Recurring expenses link a real `AppCategory` (ADR-050). `VaultDueBanner` no longer exists. The detail below is earlier history.
 **Responsibility:** Goal-based savings pockets. Shows a KPI band (total balance, mandatory still-needed, leisure still-needed) and a tile grid — one tile per vault with SVG progress ring, status badge, kind chip, and balance/target/required-this-month figures. Supports full CRUD (create, edit, archive) and a ledger sheet per vault for contributions and withdrawals. The "Ask agent" button on `VaultDueBanner` opens the chat pre-scoped to the relevant vault. Contributions optionally name a source savings account ("From account" picker in `entry-form.tsx`) — sourced entries are real money moves (ADR-021). Since ADR-045, a contribution can instead (or additionally) name a specific wallet + category — that path creates a real categorized `Transaction` (visible in the Expenses ledger/analysis like any other spend) instead of just an out-of-band balance earmark; deleting such an entry deletes the linked transaction too.
 **Key files:** `vaults/page.tsx`, `components/vaults/vaults-dashboard.tsx` (client), `vault-tile.tsx`, `vault-form.tsx`, `entry-form.tsx`, `vault-ledger.tsx`, `vault-due-banner.tsx`
 **Dependencies:** `getVaults`, `getVaultObligations`, `getSavingsAccounts`, `createVault`, `updateVault`, `archiveVault`, `addVaultEntry`, `deleteVaultEntry`
@@ -159,6 +194,7 @@ src/
 ---
 
 ### `src/app/(app)/chat`
+**Current state (2026-10):** Model `claude-sonnet-4-6`; `tools.ts` defines 13 read + 20 proposal tools. History now includes system `event` rows (ADR-051, `lib/agent/events.ts`), which supersede the `[Proposed: ...]` assistant-summary detail below. `shortcut` turns force a tool call on the first model call.
 **Responsibility:** Full-screen AI advisor backed by `claude-sonnet-4-6`. Uses a channel-agnostic tool-use loop (14 read tools + 19 proposal tools, including the ADR-027 `propose_account_adjustment`/`propose_transfer` pair, the ADR-030/031 `get_categories`/`propose_add_transaction` pair, the ADR-032 `get_counterparty_rules` + `propose_create/update/delete_counterparty_rule` trio, and the ADR-034 `propose_add_transactions_batch`), orchestrated by `src/lib/agent/run-agent-turn.ts` and split across `src/lib/agent/{tools,read-tools,formatting}.ts` and `src/lib/agent/proposals/`. Conversation history is persisted in `ChatMessage` (shared across web, Telegram, and Shortcut ingest), capped at the 20 most **recent** messages, chronologically ordered (ADR-029 — previously the 20 oldest, a bug that made the agent blind to recent context in long conversations). The web route (`src/app/api/chat/route.ts`) persists a combined assistant-turn record — text plus a `[Proposed: ...]` summary line per proposal — instead of only the text reply, so a turn whose sole output was a proposal still threads into history (ADR-027; previously such turns vanished from the 20-message window, causing the model to re-ask). The Telegram and Shortcut-ingest entry points share this same behavior via `runTurnAndDeliverToTelegram()` (ADR-028) rather than duplicating it. The floating chat panel is available on every page, module-context-aware. Proposal tools persist a `PendingProposal` record (now optionally with `editable`, ADR-031, or `batch`, ADR-034) and surface action cards (`ActionCard`) that the user must approve before mutations occur (ADR-015). Approval calls `POST /api/proposals/resolve` which runs the unified `resolveProposal()` (ADR-022); an in-place field edit calls `POST /api/proposals/edit` which runs `applyProposalEdit()` — this mutates only the pending proposal's draft, never approves (ADR-031). A batch proposal (`propose_add_transactions_batch`, ADR-034) renders differently: `ActionCard` branches on `proposal.batch` and delegates to `BatchProposalTable` (`components/chat/batch-proposal-table.tsx`) instead of the generic fields/editable display — a table of vendor/amount/category rows, each with a checkbox (include) and a category `<select>`, plus a batch-level card-label `<select>` and a live running total computed from `batch.items` client-side. Every checkbox/select edit POSTs immediately to `POST /api/proposals/batch-edit` (`{ proposalId, op: "toggle"|"setCategory"|"setCardLabel", itemIdx?, optionIdx? }`) and merges the returned `ProposalDescriptor` back into `ChatProvider` state via `updateProposalDescriptor` — the same request/response/state-merge pattern `EditableFieldSelect` established for ADR-031, adapted for the batch's many-items shape. Approve/dismiss for a batch proposal reuse `POST /api/proposals/resolve` completely unchanged. `ActionCard`'s approved state now also displays `resolvedMessage` (the `message` returned by `/api/proposals/resolve`) below the "Approved" badge whenever it differs from the generic `"Approved"` string — for most actions this is a no-op (the message IS `"Approved"`), but for a batch proposal it surfaces the required "✅ Agregadas N · Total $X · mueve $X a tu pocket de Bancolombia." summary persistently instead of only as an ephemeral toast.
 **Key files:** `chat/page.tsx`, `components/chat/chat-provider.tsx` (NDJSON streaming + proposal state, incl. `batch`/`resolvedMessage` on `ProposalEvent`), `chat-messages.tsx`, `chat-input.tsx`, `floating-chat.tsx`, `action-card.tsx` (branches on `proposal.batch`), `batch-proposal-table.tsx` (new, ADR-034 — the interactive batch table), `src/app/api/chat/route.ts` (thin streaming wrapper; NDJSON proposal event includes `batch: p.batch` alongside `editable`), `src/app/api/proposals/resolve/route.ts` (web approve path), `src/app/api/proposals/batch-edit/route.ts` (web batch-edit path, ADR-034), `src/lib/agent/run-agent-turn.ts` (tool-use loop orchestrator), `src/lib/agent/tools.ts` (tool JSON schemas), `src/lib/agent/read-tools.ts` (read-tool dispatch), `src/lib/agent/formatting.ts` (proposal display formatting), `src/lib/agent/proposals/` (complex resolvers by domain), `src/lib/agent/execute-proposal.ts` (unified write path), `src/lib/agent/deliver-to-telegram.ts` (shared Telegram-delivery helper, ADR-028)
 **Dependencies:** All agent read queries, vault + recurring write actions, Anthropic SDK, Prisma (PendingProposal)
@@ -182,10 +218,34 @@ src/
 ---
 
 ### `src/app/(app)/settings`
-**Responsibility:** Configuration for the expense categorization system. Two sub-pages today: AppCategory CRUD (with BudgetItem line items, plus an icon/color picker — ADR-038) and MoneyLover→AppCategory mapping management. A third sub-page, `settings/rules/page.tsx` (CounterpartyRule CRUD, ADR-032), is a **follow-up for a later Frontend pass** — the data/action/agent-tool layer it will consume (`getCounterpartyRules()`, `createCounterpartyRule`/`updateCounterpartyRule`/`deleteCounterpartyRule`) already exists as of this pass, but the page itself is not yet built.
-**Key files:** `settings/categories/page.tsx`, `settings/mappings/page.tsx`, `components/settings/category-list.tsx` (icon/color picker dialog, ADR-038 — saves via `updateAppCategoryStyle`), `mapping-list.tsx`
-**Dependencies:** `categories.ts` actions (incl. `updateAppCategoryStyle`, ADR-038), `getUnmappedCategories`, `src/lib/category-keys.ts`, `src/lib/category-style.ts`
-**Exports:** `CategoriesPage`, `MappingsPage` (routes)
+**Responsibility:** Configuration. Sub-pages, each with a `PageHeader` and its primary action top-right: **Categories** (AppCategory + BudgetItem CRUD incl. the `isBill` flag, icon/colour style dialog — ADR-038; transfer categories hidden), **Rules** (CounterpartyRule CRUD with wallet selector and tags), **Tags** (name, colour, default category), **Legacy mappings** (MoneyLover -> AppCategory, kept so imported history stays categorised), and **Design system** (dev only — renders every token, tone and ds component plus a forms showcase).
+**Key files:** `settings/{categories,rules,tags,mappings,design-system}/page.tsx`, `components/settings/{category-list,rule-list,tag-list,mapping-list}.tsx`, `components/settings/categories/{category-dialog,budget-item-dialog,category-style-dialog}.tsx`, `src/lib/settings-forms.ts`
+**Dependencies:** `categories.ts`, `counterparty-rules.ts`, `tags.ts` actions; `getCounterpartyRules`, `getTagsForSettings`, `getCategories`, `listWalletOptions`
+**Exports:** `CategoriesPage`, `RulesPage`, `TagsPage`, `MappingsPage`, design-system page (routes)
+
+---
+
+### `src/components/ds`
+**Responsibility:** The app design system (see `DESIGN.md` §7). Presentational primitives every screen builds from: `PageHeader` + `HeaderAction`, `SectionHeader`, `StatCard`, `Money` (COP, `compact`, `tone`), `StatusChip`, `Meter`, `ListRow`, `ReadingGrid` (wraps long COP values), `ColorDot` (user-chosen colours). `ds/form`: `FormDialog` + `FormFooter`, `Field`, `MoneyInput`, `DateField` (`YYYY-MM-DD` strings; native picker on touch), `OptionSelect`, `SegmentedControl`, `TagInput`, `ColorPicker`, `CheckField`. Mobile forms are keyboard-aware sheets that scroll the focused field into view.
+**Key files:** `components/ds/index.ts`, `components/ds/form/*`, `src/lib/status.ts` (tones), `src/lib/form-format.ts`, `src/app/globals.css` (four theme blocks)
+**Guards:** `src/lib/design-system-guard.test.ts` (no raw colours in components/app/lib), `src/app/theme-tokens.test.ts` (every token in all four theme blocks), `ds.test.tsx`, `form-dialog.test.tsx`
+
+---
+
+### `src/components/bills` — Pay bills
+**Responsibility:** (ADR-052) Dialog listing the current period's unpaid bills (`BudgetItem.isBill`), with a tick-all box; pays the ticked ones from one wallet on one date via `payBills()`, creating one expense per bill linked through `Transaction.budgetItemId`. Offered only while the period is open. Opened from Home insights and Expenses attention cards.
+**Key files:** `components/bills/pay-bills.tsx`, `src/lib/bill-display.ts`, `src/lib/queries/bills.ts`, `src/lib/actions/bills.ts`
+
+---
+
+### Sharing statements
+**Responsibility:** Send someone a "what you owe me" summary as a PNG card or plain text (Spanish copy). Built for a debtor (Loans) or a selection of installments (Installments).
+**Key files:** `src/lib/share-statement.ts` (pure, tested), `src/lib/share-image.ts` (browser-only render + Web Share / clipboard; needs HTTPS or localhost), `components/shared/share-statement-{card,dialog}.tsx`, `components/loans/debtors/share-debtor-button.tsx`, `components/installments/share-selected-button.tsx`
+
+---
+
+### Display-rule modules (`src/lib/*-display.ts`, `*-utils.ts`, `*-forms.ts`)
+**Responsibility:** Pure, client-safe, unit-tested rules that keep components presentational: sorting, labels, which chip/tone to show, validation hints. One per screen: `vault-display`, `installment-display`, `loan-display`, `loan-forms`, `expenses-ledger-display`, `category-status`, `bill-display`, `home-insights`, `trend-utils`, `health-score-utils`, `settings-forms`, `tag-utils`. Each has a sibling `*.test.ts` except `tag-utils`.
 
 ---
 

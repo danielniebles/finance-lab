@@ -1,14 +1,17 @@
 # Concepts
 
-> Last updated: 2026-07-21
+> Last updated: 2026-10-07
 
 ## What this project is
-Finance Lab is a personal finance tracking application built for a single user living in Colombia. It imports expense data from the MoneyLover mobile app, maps raw categories to a custom budget structure, and provides dashboards for monthly expense analysis, installment obligations, loan/savings tracking, goal-based vaults, and recurring-expense planning. An AI advisor (Claude Sonnet 4.6) answers questions about the user's real financial data and can propose vault contributions, recurring expense payments, and other actions for the user to approve. All amounts are in Colombian Pesos (COP).
+Finance Lab is a personal finance tracking application built for a single user living in Colombia. Transactions are logged directly in the app (manual entry, the AI advisor, Telegram, and an iPhone Shortcut that forwards bank notifications); older months were imported from the MoneyLover mobile app, whose raw categories are still mapped to the custom budget structure. It and provides dashboards for monthly expense analysis, installment obligations, loan/savings tracking, goal-based vaults, and recurring-expense planning. An AI advisor (Claude Sonnet 4.6) answers questions about the user's real financial data and can propose vault contributions, recurring expense payments, and other actions for the user to approve. All amounts are in Colombian Pesos (COP).
 
 ## Core domain concepts
 
-**MoneyLover import**
-The app does not record transactions directly. It reads XLSX exports from the MoneyLover mobile app. Each import covers one calendar month and is stored as an `ImportBatch`. Re-importing the same month replaces the existing batch atomically.
+**Transaction capture (current)**
+Since the MoneyLover import was retired, every transaction is a `MANUAL` row logged in the app: the ledger's Add transaction dialog (global, also on phones), Pay bills, vault contributions funded from a wallet, wallet-to-wallet transfers, or the agent (web chat, Telegram, Shortcut ingest, card-screenshot batches). Counterparty rules auto-record known bank notifications.
+
+**MoneyLover import (deprecated)**
+Historical only — the parser, `import.ts` and `import-form.tsx` are marked `@deprecated`; never derive "the current month" from `ImportBatch`. Original description: the app did not record transactions directly. It reads XLSX exports from the MoneyLover mobile app. Each import covers one calendar month and is stored as an `ImportBatch`. Re-importing the same month replaces the existing batch atomically.
 
 **MoneyLoverCategory**
 Raw category names as they appear in MoneyLover exports (e.g. "Food & Dining", "Salary"). These are discovered dynamically on import — never pre-seeded. They have no budget meaning until mapped to an AppCategory.
@@ -20,7 +23,28 @@ User-defined simplified categories with semantic meaning (e.g. "Groceries", "Tra
 A category is FIXED when all its budget items are fixed-cost (rent, subscriptions), VARIABLE when all items are discretionary, or MIXED when it has both. This drives how severity is calculated: fixed categories flag deviation from exact budget; variable categories flag proportional overrun.
 
 **Category severity**
-Health of a category relative to its budget for a given month. Four tiers: OK, Issue, Critical, Unplanned. Logic lives in `src/lib/queries/expenses.ts:classifyCategory`.
+Health of a category relative to its budget for a given month. Five tiers: OK, Pending, Issue, Critical, Unplanned. Pending = a FIXED bill with nothing paid yet while its month is still running (ADR-048). Logic lives in `src/lib/queries/expenses.ts:classifyCategory`; the row label + tone shown in Analysis come from `src/lib/category-status.ts`.
+
+**Financial month**
+Months run from `FINANCIAL_MONTH_START_DAY` to the day before it next month. "Now" is always `financialMonthYear(new Date(), startDay)`; `getFinancialPeriodBounds()` gives the `[start, end)` range. Trends and Health Score pick months by calendar instead (ADR-049).
+
+**Bill**
+A `BudgetItem` flagged `isBill` — paid once a month (gym, phone, electricity). It is paid for a financial month when an expense in its category links to it via `Transaction.budgetItemId`. **Pay bills** pays the ticked unpaid bills in one step from one wallet (ADR-052).
+
+**Tag**
+A soft, budget-free label on transactions (many-to-many) for filtering the ledger; hashtags in bot messages map to tags, and a tag's optional default category seeds the bot's category guess. Counterparty rules can apply tags automatically.
+
+**Wallet-to-wallet transfer**
+Moving money between two of the user's own wallets. Stored as two MANUAL transactions (one per leg) flagged `isTransfer` and sharing a `transferPairId`, in the seeded Outgoing/Incoming Transfer categories. Excluded from income, spending and budget analysis; deleting one leg deletes both (ADR-046).
+
+**Tone (design system)**
+The colour meaning of a financial state — `src/lib/status.ts` maps each domain state (category severity, vault status, savings rate, liquidity, bill difference…) to a `Tone`, and components render tones, never raw colours. See `DESIGN.md`.
+
+**Agent event**
+A system-authored line in the agent's history (`ChatMessage.role = "event"`, `⟦event⟧ <name> k=v`) recording what actually happened — a proposal created/approved/dismissed, an auto-record, a rule offer. The model treats only events as proof an action happened (ADR-051).
+
+**Debt statement (share)**
+A Spanish "what you owe me" summary for a debtor or selected installments, shared as a PNG card or plain text (`share-statement.ts`).
 
 **Installment**
 A deferred-payment purchase split across N months (e.g. a phone on 12-cuotas). Uses German amortization (cuota decreciente): fixed capital per payment plus decreasing interest on the outstanding balance. The `monthlyAmount` stored in the DB is always the capital portion (P/n); the actual due amount for payment k is computed at read-time via `computeInstallmentDue`. An installment may be optionally linked to a `CreditCard` (which card was charged), a `Debtor` (if bought on behalf of someone else), and a `SavingsAccount` (the account that disbursed the cash when debtorId is set).
@@ -113,3 +137,11 @@ A plain-text summary of the user's finances, now used as the body of the `get_ov
 | netWorth | totalSavings + inVaults — the conserved quantity across savings + vault transfers |
 | sourced contribution | vault contribution with a sourceAccountId — reduces the source account's available |
 | notional contribution | vault contribution with no sourceAccountId — earmarks money without touching accounts |
+| financial month | the period starting on `FINANCIAL_MONTH_START_DAY`; the unit for budgets, bills and the ledger |
+| bill | a BudgetItem with `isBill` — paid once per financial month |
+| Pending | category severity for an unpaid FIXED bill while the month is open |
+| tag | budget-free transaction label (many-to-many) |
+| transfer pair | the two `isTransfer` transactions of a wallet-to-wallet move, joined by `transferPairId` |
+| tone | design-system colour meaning of a state (`status.ts`) |
+| event row | system-authored `ChatMessage` (`role = "event"`) in agent history |
+| MANUAL | Transaction source for anything logged in the app (vs historical `MONEYLOVER`) |

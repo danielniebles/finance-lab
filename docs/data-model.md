@@ -1,6 +1,6 @@
 # Data Model
 
-> Last updated: 2026-07-21
+> Last updated: 2026-10-07
 
 ## Entities
 
@@ -45,8 +45,24 @@ User-defined budget category. Groups one or more MoneyLover categories and carri
 | name | String (unique) | e.g. "Groceries" |
 | icon | String? | Closed-registry key (`CATEGORY_ICON_KEYS`, `src/lib/category-keys.ts`) — null = auto-derive from name via `getCategoryStyle()`; non-null = explicit override (ADR-038) |
 | color | String? | Closed-registry key (`CATEGORY_COLOR_KEYS`) — same null/override rule as `icon` (ADR-038) |
+| isTransfer | Boolean | Default false. True only on the two seeded "Outgoing Transfer"/"Incoming Transfer" categories auto-assigned by `createWalletTransfer` (ADR-046). Never user-created; `getCategories()` hides them from manual pickers and analysis/trends exclude them. |
 
-**Relations:** has many `CategoryMapping`; has many `BudgetItem`; has many `Transaction` (direct link — MANUAL rows only; see ADR-030); has many `CounterpartyRule` (via `counterpartyRules`, ADR-032)
+**Relations:** has many `CategoryMapping`; has many `BudgetItem`; has many `Transaction` (direct link — MANUAL rows only; see ADR-030); has many `CounterpartyRule` (via `counterpartyRules`, ADR-032); has many `RecurringExpense` (ADR-050); has many `Tag` as default category (`tagDefaults`)
+
+---
+
+### Tag
+Soft, budget-free label for filtering transactions. Many-to-many with `Transaction` and `CounterpartyRule`; deliberately lighter than `AppCategory` (no `BudgetItem`, no severity tracking). Managed at `/settings/tags`.
+
+| Field | Type | Description |
+|---|---|---|
+| id | String (cuid) | Primary key |
+| name | String (unique) | Normalized on write: trimmed + lowercased |
+| color | String? | Optional colour |
+| defaultAppCategoryId | String? | FK → AppCategory (SetNull). Only used by the bot (`propose_add_transaction`) to map a hashtag like `#uber` straight to a category guess, mirroring the CounterpartyRule confident-match short-circuit (ADR-033). The ledger filter ignores it. |
+| createdAt | DateTime | Record creation time |
+
+**Relations:** many-to-many `Transaction` (implicit join); many-to-many `CounterpartyRule` (implicit join); belongs to optional `AppCategory`
 
 ---
 
@@ -60,6 +76,9 @@ A single budget line within an AppCategory. Multiple items per category allow mi
 | name | String | Line item label |
 | amount | Float | Monthly budget amount (COP) |
 | budgetType | BudgetType enum | FIXED or VARIABLE |
+| isBill | Boolean | Default false. Paid once a month (gym, phone, electricity) — listed in Pay bills and tracked paid/unpaid per financial month (ADR-052). Backfilled true for FIXED items; independent of `budgetType`, so a variable bill can opt in. |
+
+**Relations:** belongs to `AppCategory` (cascade delete); has many `Transaction` (payments of this bill, SetNull on delete — removing an item never deletes history)
 
 ---
 
@@ -90,6 +109,11 @@ A single expense/income record — either a row from a MoneyLover XLSX export (`
 | appCategoryId | String? | FK → AppCategory — direct category link, set for MANUAL rows, null for MONEYLOVER rows (which resolve via `moneyLoverCategory.mapping` instead) |
 | source | TransactionSource enum | `MONEYLOVER` (default) or `MANUAL` |
 | walletId | String? | FK → Wallet (ADR-036/037) — the envelope partition this transaction belongs to. Nullable (backfilled by migration where the legacy `wallet` label resolves; null = unassigned). Resolved on every write path via `resolveWalletId()`/`buildWalletResolver()` (`src/lib/resolve-wallet.ts`), never set directly by a caller. |
+| isTransfer | Boolean | Default false. True on **both** legs of a wallet-to-wallet transfer (ADR-046). Excluded from income/expense totals and budget analysis everywhere (`getMonthlyAnalysis`, ledger month totals, trends). Stored on the row, not derived from the category, so exclusion survives a category rename. |
+| transferPairId | String? | Plain correlation id (not a relation) shared by both transfer legs — `deleteTransaction` removes the pair together so a transfer is never half-applied. Indexed. |
+| budgetItemId | String? | FK → BudgetItem (SetNull) — the bill this expense paid (Pay bills, ADR-052). Only counts while the row stays in the bill's category; see `src/lib/bill-display.ts`. Indexed. |
+
+**Relations:** belongs to optional `ImportBatch`, `MoneyLoverCategory`, `AppCategory`, `Wallet`, `BudgetItem`; optional back-relation `VaultEntry` (ADR-045); many-to-many `Tag`
 
 **Category resolution rule (used everywhere a transaction's effective AppCategory is needed):** `appCategoryId ?? moneyLoverCategory?.mapping?.appCategoryId` (ADR-030).
 
@@ -114,7 +138,8 @@ A dictionary entry mapping a known counterparty (destination account, merchant, 
 | matchValue | String | Normalized on write via `normalizeMatchValue()` — digits-only for ACCOUNT, trimmed+uppercased for MERCHANT/SENDER/KEYWORD |
 | direction | RuleDirection enum | Restricts the rule to EXPENSE, INCOME, or ANY (default) |
 | appCategoryId | String | FK → AppCategory — category to route a match to |
-| wallet | String | Wallet LABEL to route to — overrides the message's stated account. Plain string, like `Transaction.wallet` — no first-class Wallet model (deferred) |
+| wallet | String | LEGACY wallet label to route to — overrides the message's stated account. Kept as fallback + audit trail alongside `walletId` |
+| walletId | String? | FK → Wallet — the partition this rule routes to; mirrors `Transaction.walletId`. Set via the rules page's wallet selector |
 | autoRecord | Boolean | Default true — matched → record automatically instead of proposing a card (ADR-033) |
 | recurring | Boolean | Default false — hint: recurring inflow/outflow (foundation for Phase 3) |
 | expectedAmount | Float? | Optional, for future recurring-cadence validation (Phase 3) |
@@ -126,7 +151,7 @@ A dictionary entry mapping a known counterparty (destination account, merchant, 
 **Enum `RuleMatchType`:** `ACCOUNT` | `MERCHANT` | `SENDER` | `KEYWORD`
 **Enum `RuleDirection`:** `EXPENSE` | `INCOME` | `ANY`
 
-**Relations:** belongs to `AppCategory`
+**Relations:** belongs to `AppCategory`; belongs to optional `Wallet`; many-to-many `Tag` — tags applied to every transaction the rule matches/auto-records, on top of (never in place of) hashtags extracted from the message
 
 **Normalization:** `normalizeMatchValue(matchType, raw)` in `src/lib/normalize-match-value.ts` — the single source of truth for turning a raw matched value into its stored/lookup form. Standalone file (not inside `actions/` or `queries/`) because it is shared by the CRUD write path and by `matchCounterpartyRule()`'s lookup path (ADR-033) — both must normalize identically or matching silently breaks.
 
@@ -199,6 +224,7 @@ wallets' computed balances (see `Wallet` below).
 | color | String? | Hex color for UI |
 | savingsWalletId | String? | FK → Wallet — target wallet for account-level loan/vault-funding/transfer/adjustment flows (ADR-036/037). For a single-wallet account, equals `defaultWalletId`. |
 | defaultWalletId | String? | FK → Wallet — default wallet for ambient transactions whose label only names the institution (e.g. a MoneyLover "Bancolombia" row). For a single-wallet account, equals `savingsWalletId`. |
+| includeInOverviewTotal | Boolean | Default true. Gates membership in the Overview "Total balance" grand total (`getWalletBalances`). Separate from `Wallet.includeInAvailable`, which gates the Loans liquidity KPI. |
 
 **Relations:** has many `AccountEntry`; has many `Loan` (as lender); has many `Transfer` (from/to); has many `Installment` via "InstallmentFunding" (savings accounts that fund debtor-linked installments); has many `VaultEntry` via "VaultFundingSource" (entries sourced from this account reduce its computed balance); has many `Wallet` (its envelope partitions, ADR-036)
 
@@ -346,13 +372,14 @@ A non-monthly cost the user expects to pay on a recurring cadence. Source of tru
 | estimatedAmount | Float | Expected cost in COP |
 | cadenceMonths | Int | Recurrence interval (1=monthly, 6=semiannual, 12=annual) |
 | nextDueDate | DateTime | When the next payment falls due |
-| category | String? | Free label (e.g. "Vehicle", "Taxes") |
+| category | String? | LEGACY free-text label, kept for history (ADR-050) |
+| appCategoryId | String? | FK → AppCategory (SetNull) — real category link for new/edited expenses (ADR-050) |
 | fundingVaultId | String? | FK → Vault (optional; the RECURRING vault that holds the money) |
 | active | Boolean | Default true; set false to deactivate without deleting |
 | notes | String? | Optional notes |
 | createdAt | DateTime | Record creation time |
 
-**Relations:** belongs to `Vault` (optional, via `"VaultRecurring"`); has many `RecurringExpensePayment`
+**Relations:** belongs to `Vault` (optional, via `"VaultRecurring"`); belongs to optional `AppCategory`; has many `RecurringExpensePayment`
 
 ---
 
@@ -396,7 +423,7 @@ Persisted conversation history for the AI advisor. Up to 20 recent messages are 
 | Field | Type | Description |
 |---|---|---|
 | id | String (cuid) | Primary key |
-| role | String | "user" or "assistant" |
+| role | String | `"user"`, `"assistant"`, or `"event"` — system-authored rows (`⟦event⟧ <name> k=v`) written by `lib/agent/events.ts`; folded into the adjacent user turn on replay and hidden from the web chat (ADR-051) |
 | content | String | Full message text |
 | channel | String? | "web" \| "telegram" \| "shortcut" — null = legacy/unknown. For filtering/debugging; history is shared by default. |
 | createdAt | DateTime | Message timestamp |
