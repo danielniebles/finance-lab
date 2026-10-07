@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { markPayment, unmarkPayment } from "@/lib/actions/installments";
+import { localISODate } from "@/lib/form-format";
 
 export function PayButton({
   installmentId,
@@ -26,7 +27,10 @@ export function PayButton({
       if (isPaid && paymentId) {
         await unmarkPayment(paymentId);
       } else {
-        const result = await markPayment(installmentId, installmentNum, new Date());
+        // Local noon of today, like Pay all: a bare new Date() logged in the
+        // evening is already tomorrow in UTC, the day stored dates are read in.
+        const today = new Date(`${localISODate(new Date())}T12:00:00`);
+        const result = await markPayment(installmentId, installmentNum, today);
         if (result.loanCreated) {
           toast.success(`Loan recorded for ${result.debtorName}`);
         }

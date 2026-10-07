@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { ColorDot, Meter, Money, StatusChip } from "@/components/ds";
+import { formatStoredDate } from "@/lib/format";
 import { computeLoanMeta, loanChip } from "@/lib/loan-display";
 import { TONE_CLASSES } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -14,8 +15,8 @@ export const LOAN_GRID = "sm:grid sm:grid-cols-[7rem_minmax(0,1fr)_8rem_9.5rem_3
 /** "27 feb 2026" — es-CO's own short format ("27 de feb de 26") wraps in the column. */
 export function loanDate(value: Date): string {
   const d = new Date(value);
-  const month = d.toLocaleDateString("es-CO", { month: "short" }).replace(".", "");
-  return `${d.getDate()} ${month} ${d.getFullYear()}`;
+  const month = formatStoredDate(d, { month: "short" }).replace(".", "");
+  return `${d.getUTCDate()} ${month} ${d.getUTCFullYear()}`;
 }
 
 function Amount({ value, masked, className }: { value: number; masked: boolean; className?: string }) {

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ColorDot, DateField, Field, FormDialog, FormFooter, Money, MoneyInput, OptionSelect } from "@/components/ds";
 import { recordPayment } from "@/lib/actions/loans";
-import { formatCOP } from "@/lib/format";
+import { formatCOP, formatStoredDate } from "@/lib/format";
 import { localISODate, parseISODate } from "@/lib/form-format";
 import { accountsWithOpenLoans, allocatePayment, paymentMissingHint, type PaymentSplit } from "@/lib/loan-forms";
 import { TONE_CLASSES } from "@/lib/status";
@@ -40,7 +40,7 @@ function AllocationPreview({ splits }: { splits: PaymentSplit[] }) {
             <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
               <ColorDot color={loan.accountColor} />
               <span className="truncate">
-                {new Date(loan.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" })} ·{" "}
+                {formatStoredDate(loan.date, { month: "short", day: "numeric", year: "2-digit" })} ·{" "}
                 {loan.notes ?? loan.accountName}
               </span>
             </span>

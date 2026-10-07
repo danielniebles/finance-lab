@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { RowDeleteButton } from "@/components/shared/row-delete-button";
 import { deleteLoanPayment } from "@/lib/actions/loans";
 import type { DebtorWithLoans } from "@/lib/queries/loans";
+import { formatStoredDate } from "@/lib/format";
 
 type Payment = {
   id: string;
@@ -22,7 +23,7 @@ export function buildPaymentsLog(debtor: DebtorWithLoans): Payment[] {
 }
 
 function PaymentRow({ p, pending, onDelete }: { p: Payment; pending: boolean; onDelete: () => void }) {
-  const date = new Date(p.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" });
+  const date = formatStoredDate(p.date, { month: "short", day: "numeric", year: "2-digit" });
   return (
     <li className="group/row flex items-center gap-3 px-5 py-2.5">
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">

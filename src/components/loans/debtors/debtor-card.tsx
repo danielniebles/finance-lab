@@ -10,6 +10,7 @@ import type { AccountWithBalance, DebtorWithLoans } from "@/lib/queries/loans";
 import { LoansClient } from "../loans-client";
 import { MASK } from "../lib/constants";
 import { LoanList } from "./loan-list";
+import { ShareDebtorButton } from "./share-debtor-button";
 
 type Shared = {
   accounts: AccountWithBalance[];
@@ -52,7 +53,10 @@ function DebtorActions({
             Payments
           </Button>
           {debtor.totalOwed > 0 && (
-            <LoansClient accounts={accounts} debtors={debtors} mode="pay-button" debtorId={debtor.id} />
+            <>
+              <ShareDebtorButton debtor={debtor} />
+              <LoansClient accounts={accounts} debtors={debtors} mode="pay-button" debtorId={debtor.id} />
+            </>
           )}
           <LoansClient accounts={accounts} debtors={debtors} mode="add-loan-button" debtorId={debtor.id} />
         </>

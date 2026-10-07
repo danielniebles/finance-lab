@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { Money, StatusChip } from "@/components/ds";
 import { PayButton } from "./pay-button";
 import { PayAllButton } from "./pay-all-button";
+import { ShareSelectedButton } from "./share-selected-button";
 import { dueLabel, splitDues } from "@/lib/installment-display";
 import { cn } from "@/lib/utils";
 import type { WalletOption } from "@/components/shared/wallet-select";
@@ -30,11 +31,17 @@ function SelectionToolbar({
   selectedItems,
   walletOptions,
   categories,
+  month,
+  year,
+  dueDayOf,
   onClear,
 }: {
   selectedItems: DueThisMonth[];
   walletOptions: WalletOption[];
   categories: CategoryOption[];
+  month: number;
+  year: number;
+  dueDayOf: (d: DueThisMonth) => number | null;
   onClear: () => void;
 }) {
   const total = selectedItems.reduce((s, d) => s + d.amount, 0);
@@ -46,7 +53,10 @@ function SelectionToolbar({
           Clear
         </button>
       </span>
-      <PayAllButton items={selectedItems} walletOptions={walletOptions} categories={categories} onPaid={onClear} />
+      <span className="flex items-center gap-2">
+        <ShareSelectedButton items={selectedItems} month={month} year={year} dueDayOf={dueDayOf} />
+        <PayAllButton items={selectedItems} walletOptions={walletOptions} categories={categories} onPaid={onClear} />
+      </span>
     </div>
   );
 }
@@ -142,11 +152,12 @@ export function DueThisMonthTable({
   }
 
   const selectedItems = dueThisMonth.filter((d) => selected.has(rowKey(d)));
+  const dueDayOf = (d: DueThisMonth) => (d.installment.cardId ? cardDueDays.get(d.installment.cardId) ?? null : null);
   const renderRow = (d: DueThisMonth) => (
     <DueRow
       key={rowKey(d)}
       due={d}
-      dueDay={d.installment.cardId ? cardDueDays.get(d.installment.cardId) ?? null : null}
+      dueDay={dueDayOf(d)}
       month={month}
       year={year}
       isSelected={selected.has(rowKey(d))}
@@ -167,6 +178,9 @@ export function DueThisMonthTable({
           selectedItems={selectedItems}
           walletOptions={walletOptions}
           categories={categories}
+          month={month}
+          year={year}
+          dueDayOf={dueDayOf}
           onClear={() => setSelected(new Set())}
         />
       )}

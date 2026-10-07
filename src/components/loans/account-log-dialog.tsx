@@ -8,6 +8,7 @@ import { RowDeleteButton } from "@/components/shared/row-delete-button";
 import { deleteEntry } from "@/lib/actions/loans";
 import type { Tone } from "@/lib/status";
 import type { AccountWithBalance } from "@/lib/queries/loans";
+import { formatStoredDate } from "@/lib/format";
 
 type LogRow = {
   id: string;
@@ -45,7 +46,7 @@ export function buildLogRows(account: AccountWithBalance): LogRow[] {
 }
 
 function LogRowItem({ row, onDelete, pending }: { row: LogRow; onDelete: () => void; pending: boolean }) {
-  const date = new Date(row.date).toLocaleDateString("es-CO", { month: "short", day: "numeric", year: "2-digit" });
+  const date = formatStoredDate(row.date, { month: "short", day: "numeric", year: "2-digit" });
   return (
     <li className="group/row grid grid-cols-[1fr_auto_auto] items-center gap-x-3 gap-y-0.5 px-5 py-2.5 sm:grid-cols-[6rem_6rem_1fr_auto_1.75rem]">
       <span className="col-span-3 flex min-w-0 items-center gap-2 whitespace-nowrap text-xs text-muted-foreground sm:col-span-1">

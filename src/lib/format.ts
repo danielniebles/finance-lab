@@ -7,6 +7,16 @@ export function dateInputValue(date: Date): string {
   return new Date(date).toISOString().slice(0, 10);
 }
 
+/**
+ * A stored date (loan, payment, account entry) as es-CO text, read as a UTC
+ * calendar day for the same reason as dateInputValue. Also keeps the server
+ * (UTC) and the browser (Bogotá) rendering the same text, so no hydration
+ * mismatch.
+ */
+export function formatStoredDate(date: Date | string, options: Intl.DateTimeFormatOptions): string {
+  return new Date(date).toLocaleDateString("es-CO", { ...options, timeZone: "UTC" });
+}
+
 export function formatCOP(value: number): string {
   return new Intl.NumberFormat("es-CO", {
     style: "currency",
