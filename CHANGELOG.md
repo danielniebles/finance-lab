@@ -9,6 +9,7 @@ user-facing change (new feature, fix, redesign) — skip pure internal
 refactors/chores unless they're worth remembering.
 
 ## 2026-10-08
+- Local DB on Postgres 17 + script to copy production data locally (`1fa0171`)
 - Installments page defaults to the current financial month (`31e901c`)
 - Advisor read tools: financial month, manual transactions (`070fff9`)
 
