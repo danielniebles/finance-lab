@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { monthsLeft, computeVaultMetrics, classifyVault, type VaultPeriod } from "./vault-utils";
+import { monthsLeft, computeVaultMetrics, classifyVault, sourcedMoneyInVaults, type VaultPeriod } from "./vault-utils";
 
 describe("monthsLeft", () => {
   it("counts the current month even when the target is in the same month", () => {
@@ -84,5 +84,43 @@ describe("classifyVault — RECURRING", () => {
 
   it("is On track once contributions meet the required set-aside", () => {
     expect(classifyVault(vault, 300_000, 272_350, period, 272_350)).toBe("On track");
+  });
+});
+
+describe("sourcedMoneyInVaults", () => {
+  const src = "acc-1";
+
+  it("counts sourced contributions still in the vault", () => {
+    expect(sourcedMoneyInVaults([{ entries: [{ amount: 500_000, sourceAccountId: src }] }])).toBe(500_000);
+  });
+
+  it("ignores notional (unsourced) contributions", () => {
+    expect(sourcedMoneyInVaults([{ entries: [{ amount: 100_000, sourceAccountId: null }] }])).toBe(0);
+  });
+
+  it("drops to 0 when the vault spent its sourced money (prod: SOAT paid from Car expenses)", () => {
+    const entries = [
+      { amount: 272_350, sourceAccountId: src },
+      { amount: 425_050, sourceAccountId: src },
+      { amount: -697_400, sourceAccountId: null },
+    ];
+    expect(sourcedMoneyInVaults([{ entries }])).toBe(0);
+  });
+
+  it("caps sourced money by the vault balance when notional + sourced are mixed and partly spent", () => {
+    const entries = [
+      { amount: 150_000, sourceAccountId: null },
+      { amount: 600_000, sourceAccountId: src },
+      { amount: -500_000, sourceAccountId: null },
+    ];
+    expect(sourcedMoneyInVaults([{ entries }])).toBe(250_000);
+  });
+
+  it("a sourced withdrawal back to the account reduces it", () => {
+    const entries = [
+      { amount: 400_000, sourceAccountId: src },
+      { amount: -100_000, sourceAccountId: src },
+    ];
+    expect(sourcedMoneyInVaults([{ entries }])).toBe(300_000);
   });
 });

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { computeWalletBalancesForAccount, groupByWalletId, type DatedFlow } from "@/lib/wallet-balance-utils";
+import { sourcedMoneyInVaults } from "@/lib/vault-utils";
 
 export type AccountWithBalance = {
   id: string;
@@ -66,7 +67,7 @@ export type LoansOverview = {
   liquidityRatio: number | null;
   totalEverLent: number;
   totalRecovered: number;
-  inVaults: number;         // sourced vault money (separate from totalSavings)
+  inVaults: number;         // sourced money still in active vaults (separate from totalSavings)
   netWorth: number;         // totalSavings + inVaults (informational)
 };
 
@@ -206,12 +207,16 @@ function buildDebtorsWithLoans(debtors: OverviewDebtor[]): DebtorWithLoans[] {
 }
 
 export async function getLoansOverview(): Promise<LoansOverview> {
-  const [accounts, debtors, walletTransactions] = await Promise.all([
+  const [accounts, debtors, walletTransactions, activeVaults] = await Promise.all([
     fetchAccountsForOverview(),
     fetchDebtorsForOverview(),
     db.transaction.findMany({
       where: { walletId: { not: null } },
       select: { walletId: true, date: true, amount: true },
+    }),
+    db.vault.findMany({
+      where: { archivedAt: null },
+      select: { entries: { select: { amount: true, sourceAccountId: true } } },
     }),
   ]);
 
@@ -244,11 +249,7 @@ export async function getLoansOverview(): Promise<LoansOverview> {
     0,
   );
 
-  // Sourced vault money across all accounts (contributions positive, withdrawals negative)
-  const inVaults = accounts.reduce(
-    (s, acc) => s + acc.vaultEntriesFunded.reduce((as, e) => as + e.amount, 0),
-    0,
-  );
+  const inVaults = sourcedMoneyInVaults(activeVaults);
 
   return { accounts: accountsWithBalance, debtors: debtorsWithLoans, available, inLoans, totalSavings, liquidityRatio, totalEverLent, totalRecovered, inVaults, netWorth: totalSavings + inVaults };
 }

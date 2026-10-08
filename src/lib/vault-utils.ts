@@ -115,6 +115,25 @@ export function computeVaultMetrics(
   };
 }
 
+// ─── Net worth ────────────────────────────────────────────────────────────────
+
+/**
+ * Account-sourced money still sitting in vaults (Loans "In vaults").
+ * Withdrawals/spends are stored without a source account, so summing sourced
+ * entries alone keeps counting money already spent. Per vault, the sourced net
+ * is capped by the vault's actual balance (never below 0). Notional
+ * (unsourced) contributions never count — that money is still in the accounts.
+ */
+export function sourcedMoneyInVaults(
+  vaults: { entries: { amount: number; sourceAccountId: string | null }[] }[],
+): number {
+  return vaults.reduce((total, v) => {
+    const balance = v.entries.reduce((s, e) => s + e.amount, 0);
+    const sourced = v.entries.reduce((s, e) => s + (e.sourceAccountId ? e.amount : 0), 0);
+    return total + Math.max(0, Math.min(balance, sourced));
+  }, 0);
+}
+
 // ─── Status classification ────────────────────────────────────────────────────
 
 /**

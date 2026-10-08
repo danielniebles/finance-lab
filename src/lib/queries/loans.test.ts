@@ -11,6 +11,7 @@ vi.mock("@/lib/db", () => ({
     savingsAccount: { findMany: vi.fn() },
     debtor: { findMany: vi.fn() },
     transaction: { findMany: vi.fn() },
+    vault: { findMany: vi.fn() },
   },
 }));
 
@@ -21,6 +22,7 @@ const dbMock = db as unknown as {
   savingsAccount: { findMany: ReturnType<typeof vi.fn> };
   debtor: { findMany: ReturnType<typeof vi.fn> };
   transaction: { findMany: ReturnType<typeof vi.fn> };
+  vault: { findMany: ReturnType<typeof vi.fn> };
 };
 
 const OPENING_DATE = new Date("2026-07-09T00:00:00Z");
@@ -105,6 +107,25 @@ beforeEach(() => {
   vi.resetAllMocks();
   dbMock.debtor.findMany.mockResolvedValue([]);
   dbMock.transaction.findMany.mockResolvedValue([]);
+  dbMock.vault.findMany.mockResolvedValue([]);
+});
+
+describe("getLoansOverview — inVaults", () => {
+  it("drops sourced money once the vault spent it (unsourced withdrawal)", async () => {
+    dbMock.savingsAccount.findMany.mockResolvedValue([bancolombiaAccount()]);
+    dbMock.vault.findMany.mockResolvedValue([
+      { entries: [
+        { amount: 697_400, sourceAccountId: "acc-bancolombia" },
+        { amount: -697_400, sourceAccountId: null },
+      ] },
+      { entries: [{ amount: 300_000, sourceAccountId: "acc-bancolombia" }] },
+    ]);
+
+    const overview = await getLoansOverview();
+
+    expect(overview.inVaults).toBe(300_000);
+    expect(overview.netWorth).toBe(overview.totalSavings + 300_000);
+  });
 });
 
 describe("getLoansOverview — savings figure excludes non-savings wallets", () => {
