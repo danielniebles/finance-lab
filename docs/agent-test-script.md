@@ -17,6 +17,10 @@ the same number on the actual page.
 - "Which categories did I overspend last month?"
 - "How much do I owe across all installments, and what's due this month?"
 - "How much do I have available, and how much is out in loans?"
+- "List my transactions this month." *(current financial month, logged in-app)* → rows match the
+  /expenses ledger for that month; transfer legs are not counted as spending.
+- "Which months do you have data for?" → includes recent months logged only in-app, not just
+  old MoneyLover imports.
 
 **Pass:** numbers match the corresponding page exactly; it clearly pulled data before answering.
 **Red flag:** figures that don't match the UI, round/suspiciously generic numbers, or an answer

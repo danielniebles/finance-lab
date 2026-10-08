@@ -17,7 +17,7 @@ export const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "get_available_months",
-    description: "Get the list of months that have imported expense data.",
+    description: "Get the list of financial months that have any transaction data (logged in-app or historically imported), oldest first. `status` is present only for months with an import batch.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
@@ -36,7 +36,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "get_transactions",
     description:
-      "Get individual transactions for a month, optionally filtered by category name.",
+      "Get individual transactions (max 200) for a financial month, optionally filtered by category name. Rows with isTransfer=true are wallet-to-wallet transfer legs: never count them as income or spending. If truncated is true the list is partial (oldest rows first): use get_monthly_analysis for totals.",
     input_schema: {
       type: "object",
       properties: {
@@ -68,7 +68,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "get_installments",
     description:
-      "Get all installments (active and finished) plus the current month obligation summary.",
+      "Get all installments (active and finished) plus the obligation summary for the current financial month.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {

@@ -4,9 +4,11 @@
 // for PROPOSAL_ACTIONS, per backend-nextjs.md guidance.
 
 import { db } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma";
 import { getFinancialSnapshot } from "@/lib/queries/chat";
 import { getHealthScore } from "@/lib/queries/health-score";
-import { getImportBatches, getMonthlyAnalysis, getCategories } from "@/lib/queries/expenses";
+import { getAvailableMonths, getMonthlyAnalysis, getCategories } from "@/lib/queries/expenses";
+import { financialMonthYear, getFinancialPeriodBounds } from "@/lib/financial-period-utils";
 import { getTrends } from "@/lib/queries/trends";
 import { getAllInstallments, getMonthSummary } from "@/lib/queries/installments";
 import { getLoansOverview } from "@/lib/queries/loans";
@@ -48,10 +50,15 @@ async function fetchOverview(): Promise<unknown> {
   return { snapshot, healthScore };
 }
 
+// Same parse as getAvailableMonths / getTransactionList (src/lib/queries).
+function financialStartDay(): number {
+  return parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
+}
+
+// "This month" = the current FINANCIAL month, matching Overview and the health
+// score (never the server's calendar month — UTC on Vercel).
 async function fetchInstallments(): Promise<unknown> {
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
+  const { month, year } = financialMonthYear(new Date(), financialStartDay());
   const [installments, monthSummary] = await Promise.all([
     getAllInstallments(),
     getMonthSummary(month, year),
@@ -59,52 +66,88 @@ async function fetchInstallments(): Promise<unknown> {
   return { installments, monthSummary };
 }
 
-async function fetchTransactions(input: Record<string, unknown>): Promise<unknown> {
+// Case-insensitive partial match on the EFFECTIVE app category (ADR-030):
+// a direct appCategory (MANUAL) wins; the MoneyLover mapping only counts when
+// the row has no direct category, so a recategorised row never matches its
+// stale mapped name.
+function categoryWhere(category: string | undefined): Prisma.TransactionWhereInput {
+  if (!category) return {};
+  const name = { contains: category, mode: "insensitive" as const };
+  return {
+    OR: [
+      { appCategory: { name } },
+      { appCategoryId: null, moneyLoverCategory: { mapping: { appCategory: { name } } } },
+    ],
+  };
+}
+
+function requestedMonth(input: Record<string, unknown>, startDay: number): { month: number; year: number } {
   const month = Number(input.month);
   const year = Number(input.year);
-  const category = input.category as string | undefined;
+  const valid = Number.isInteger(month) && month >= 1 && month <= 12 && Number.isInteger(year);
+  if (valid) return { month, year };
+  return financialMonthYear(new Date(), startDay);
+}
 
-  const batch = await db.importBatch.findFirst({
-    where: { month, year },
-  });
-  if (!batch) return { transactions: [] };
+type AgentTransactionRow = Prisma.TransactionGetPayload<{
+  include: {
+    appCategory: true;
+    moneyLoverCategory: { include: { mapping: { include: { appCategory: true } } } };
+    walletRef: true;
+  };
+}>;
+
+// ADR-030: direct appCategory (MANUAL) wins, else the MoneyLover mapping.
+// `category` is the source label — the MoneyLover category for legacy rows,
+// else the app category — so MANUAL rows never show null.
+function categoryLabels(t: AgentTransactionRow): { category: string | null; appCategory: string | null } {
+  const appCategory = (t.appCategory ?? t.moneyLoverCategory?.mapping?.appCategory)?.name ?? null;
+  return { category: t.moneyLoverCategory?.name ?? appCategory, appCategory };
+}
+
+function toAgentTransaction(t: AgentTransactionRow) {
+  return {
+    id: t.id,
+    date: t.date,
+    amount: t.amount,
+    ...categoryLabels(t),
+    note: t.note,
+    wallet: t.walletRef?.name ?? t.wallet,
+    isTransfer: t.isTransfer,
+  };
+}
+
+const TRANSACTION_CAP = 200;
+
+// Date-range scoped like getTransactionList / getMonthlyAnalysis, so months
+// logged in-app (MANUAL, no ImportBatch) are returned alongside historical
+// MoneyLover rows. Transfer legs are returned but flagged — they are never
+// income or spending anywhere in the app.
+async function fetchTransactions(input: Record<string, unknown>): Promise<unknown> {
+  const startDay = financialStartDay();
+  const { month, year } = requestedMonth(input, startDay);
+  const { start, end } = getFinancialPeriodBounds(month, year, startDay);
 
   const rows = await db.transaction.findMany({
     where: {
-      batchId: batch.id,
-      ...(category
-        ? {
-            moneyLoverCategory: {
-              mapping: {
-                appCategory: {
-                  name: { contains: category, mode: "insensitive" },
-                },
-              },
-            },
-          }
-        : {}),
+      date: { gte: start, lt: end },
+      ...categoryWhere(input.category as string | undefined),
     },
     include: {
+      appCategory: true,
       moneyLoverCategory: {
         include: { mapping: { include: { appCategory: true } } },
       },
       walletRef: true,
     },
     orderBy: { date: "asc" },
-    take: 200,
+    take: TRANSACTION_CAP + 1,
   });
 
+  // One extra row tells us the cap was hit, so the model knows the list is partial.
   return {
-    transactions: rows.map((t) => ({
-      id: t.id,
-      date: t.date,
-      amount: t.amount,
-      category: t.moneyLoverCategory?.name ?? null,
-      appCategory:
-        t.moneyLoverCategory?.mapping?.appCategory?.name ?? null,
-      note: t.note,
-      wallet: t.walletRef?.name ?? t.wallet,
-    })),
+    transactions: rows.slice(0, TRANSACTION_CAP).map(toAgentTransaction),
+    truncated: rows.length > TRANSACTION_CAP,
   };
 }
 
@@ -114,7 +157,7 @@ type ReadToolHandler = (input: Record<string, unknown>) => Promise<unknown>;
 
 const READ_TOOL_HANDLERS: Record<string, ReadToolHandler> = {
   get_overview: () => fetchOverview(),
-  get_available_months: () => getImportBatches(),
+  get_available_months: () => getAvailableMonths(),
   get_monthly_analysis: (input) => getMonthlyAnalysis(Number(input.month), Number(input.year)),
   get_transactions: (input) => fetchTransactions(input),
   get_trends: (input) => fetchTrends(input),
