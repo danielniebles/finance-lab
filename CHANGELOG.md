@@ -8,7 +8,12 @@ Going forward, add a dated entry here as part of any `/commit` that ships a
 user-facing change (new feature, fix, redesign) — skip pure internal
 refactors/chores unless they're worth remembering.
 
+## 2026-10-08
+- Installments page defaults to the current financial month (`31e901c`)
+- Advisor read tools: financial month, manual transactions (`070fff9`)
+
 ## 2026-10-07
+- Refresh project docs and changelog through 2026-10-07 (`228a5b5`)
 - Share what someone owes as an image or text; fix loan date off-by-one (`98da92a`)
 - Ledger wallet quick filters, filter states and global add on phones (`e95a123`)
 - Pay bills polish: tick-all box, note spacing, themed scrollbars (`7047a6c`)
