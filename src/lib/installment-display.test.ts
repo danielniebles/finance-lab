@@ -26,6 +26,13 @@ describe("dueLabel", () => {
   it("shows the plain date for other months", () => {
     expect(dueLabel(10, 11, 2026, today)).toEqual({ label: "Due Nov 10", tone: "neutral" });
   });
+  it("uses relative wording for a due date in the next days of the next month", () => {
+    const oct30 = new Date(2026, 9, 30);
+    expect(dueLabel(1, 11, 2026, oct30)).toEqual({ label: "Due in 2 days", tone: "caution" });
+    expect(dueLabel(10, 11, 2026, oct30)).toEqual({ label: "Due Nov 10", tone: "neutral" });
+    const dec30 = new Date(2026, 11, 30);
+    expect(dueLabel(2, 1, 2027, dec30)).toEqual({ label: "Due in 3 days", tone: "caution" });
+  });
 });
 
 describe("cardStatus", () => {

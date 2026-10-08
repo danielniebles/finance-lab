@@ -8,17 +8,25 @@ const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "S
 
 export type DueLabel = { label: string; tone: Tone };
 
+/** Whole calendar days from `today` to `date` (negative when past). */
+function daysUntil(date: Date, today: Date): number {
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.round((date.getTime() - start.getTime()) / 86_400_000);
+}
+
 /**
  * Label for a card's payment due day in the viewed (month, year).
- * Only the month containing `today` gets relative wording ("Due today",
- * "Due in 3 days", "Was due Oct 5"); other months show the plain date.
+ * The month containing `today` gets relative wording ("Due today",
+ * "Due in 3 days", "Was due Oct 5"), and so does a due date in the next few
+ * days of a later month (the page defaults to the financial month, which
+ * runs ahead of the calendar from the start day on). Otherwise the plain date.
  */
 export function dueLabel(dueDay: number | null, month: number, year: number, today: Date = new Date()): DueLabel {
   if (dueDay === null) return { label: "This month", tone: "neutral" };
   const plain = `${MONTHS_SHORT[month - 1]} ${dueDay}`;
   const isCurrent = today.getMonth() + 1 === month && today.getFullYear() === year;
-  if (!isCurrent) return { label: `Due ${plain}`, tone: "neutral" };
-  const days = dueDay - today.getDate();
+  const days = daysUntil(new Date(year, month - 1, dueDay), today);
+  if (!isCurrent && (days < 0 || days > 3)) return { label: `Due ${plain}`, tone: "neutral" };
   if (days < 0) return { label: `Was due ${plain}`, tone: "danger" };
   if (days === 0) return { label: "Due today", tone: "danger" };
   if (days <= 3) return { label: `Due in ${days} ${days === 1 ? "day" : "days"}`, tone: "caution" };
