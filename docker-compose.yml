@@ -1,6 +1,8 @@
 services:
   db:
-    image: postgres:16-alpine
+    # 17 matches Supabase production (scripts/db-pull-prod.sh). New volume: a
+    # major-version upgrade cannot reuse the old data dir (postgres_data = PG16).
+    image: postgres:17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: financelab
@@ -9,7 +11,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres17_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U financelab"]
       interval: 5s
@@ -44,4 +46,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
+  postgres17_data:
