@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CreditCardSummary, DueThisMonth, InstallmentRow } from "@/lib/queries/installments";
-import { cardStatus, dueLabel, nextCardDue, sortInstallments, splitDues } from "./installment-display";
+import { cardStatus, dueLabel, installmentLoanNote, nextCardDue, payAllGroup, sortInstallments, splitDues } from "./installment-display";
 
 const today = new Date(2026, 9, 5); // 5 Oct 2026
 
@@ -64,5 +64,36 @@ describe("splitDues / sortInstallments", () => {
     const r = (id: string, paid: number, n: number, status: "Active" | "Finished" = "Active") =>
       ({ id, installmentsPaid: paid, numInstallments: n, status }) as InstallmentRow;
     expect(sortInstallments([r("a", 1, 12), r("b", 5, 6), r("c", 1, 1, "Finished")]).map((x) => x.id)).toEqual(["b", "a", "c"]);
+  });
+});
+
+describe("payAllGroup", () => {
+  const own = { debtorId: null, fundingAccountId: null };
+  const ana = { debtorId: "ana", fundingAccountId: "nu" };
+
+  it("only your own installments → own", () => {
+    expect(payAllGroup([own, own])).toEqual({ kind: "own" });
+  });
+  it("a debtor without a funding account lends nothing → own", () => {
+    expect(payAllGroup([own, { debtorId: "ana", fundingAccountId: null }])).toEqual({ kind: "own" });
+  });
+  it("one debtor's installments → that debtor's group", () => {
+    expect(payAllGroup([ana, ana])).toEqual({ kind: "debtor", debtorId: "ana", fundingAccountId: "nu" });
+  });
+  it("own + a debtor's, two debtors, or one debtor from two accounts → mixed", () => {
+    expect(payAllGroup([own, ana]).kind).toBe("mixed");
+    expect(payAllGroup([ana, { debtorId: "luis", fundingAccountId: "nu" }]).kind).toBe("mixed");
+    expect(payAllGroup([ana, { debtorId: "ana", fundingAccountId: "bancolombia" }]).kind).toBe("mixed");
+  });
+});
+
+describe("installmentLoanNote", () => {
+  it("lists every slot the loan covers", () => {
+    expect(
+      installmentLoanNote([
+        { installmentNum: 3, numInstallments: 12, description: "Phone" },
+        { installmentNum: 1, numInstallments: 6, description: "Tires" },
+      ]),
+    ).toBe("Cuota 3/12 — Phone, Cuota 1/6 — Tires");
   });
 });

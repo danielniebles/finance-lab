@@ -241,6 +241,7 @@ function makeLoanFixture(overrides?: Partial<{
     remaining: 1_000_000,
     isActive: true,
     payments: [],
+    linkedTransaction: null,
     ...overrides,
   };
 }

@@ -43,11 +43,6 @@
       "count": 1
     }
   },
-  "src/lib/actions/installments.ts": {
-    "sonarjs/no-duplicate-string": {
-      "count": 1
-    }
-  },
   "src/lib/actions/vaults.ts": {
     "complexity": {
       "count": 1

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DateField, Field, FormDialog, FormFooter, Money, MoneyInput, OptionSelect } from "@/components/ds";
+import { CheckField, DateField, Field, FormDialog, FormFooter, Money, MoneyInput, OptionSelect } from "@/components/ds";
 import { deleteLoan } from "@/lib/actions/loans";
 import { loanAmountError, loanMissingHint } from "@/lib/loan-forms";
 import { TONE_CLASSES } from "@/lib/status";
@@ -97,9 +97,11 @@ function DeleteLoanStep({
   debtorName?: string;
   pending: boolean;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (opts: { keepTransaction: boolean }) => void;
 }) {
   const n = loan.payments.length;
+  const linked = loan.linkedTransaction;
+  const [deleteTransaction, setDeleteTransaction] = useState(true);
   return (
     <FormDialog
       open={open}
@@ -110,7 +112,7 @@ function DeleteLoanStep({
           <Button type="button" variant="outline" onClick={onCancel} autoFocus>
             Cancel
           </Button>
-          <Button type="button" variant="destructive" disabled={pending} onClick={onConfirm}>
+          <Button type="button" variant="destructive" disabled={pending} onClick={() => onConfirm({ keepTransaction: !deleteTransaction })}>
             Delete loan
           </Button>
         </FormFooter>
@@ -120,6 +122,21 @@ function DeleteLoanStep({
         <Money value={loan.amount} className="text-foreground" /> to {debtorName ?? "this person"}.{" "}
         {n > 0 ? `Its ${n} ${n === 1 ? "payment is" : "payments are"} deleted too.` : "It has no payments."}
       </p>
+      {linked && (
+        <CheckField
+          id="delete-loan-transaction"
+          label="Also delete its transaction"
+          hint={
+            <>
+              <Money value={linked.amount} /> from {linked.wallet}. Keep it if the money really left and this person
+              simply doesn&apos;t owe it anymore.
+            </>
+          }
+          checked={deleteTransaction}
+          onChange={setDeleteTransaction}
+          disabled={pending}
+        />
+      )}
     </FormDialog>
   );
 }
@@ -150,10 +167,10 @@ export function LoanForm({
     if (open) setConfirmingDelete(false);
   }
 
-  function handleDelete() {
+  function handleDelete(opts: { keepTransaction: boolean }) {
     if (!editing) return;
     startDelete(async () => {
-      await deleteLoan(editing.id);
+      await deleteLoan(editing.id, opts);
       onClose();
     });
   }

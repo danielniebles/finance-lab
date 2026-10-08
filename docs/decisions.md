@@ -563,3 +563,11 @@ Two supporting changes. `tool_choice: {type:"any"}` on the **first** model call 
 **Decision:** A wallet chip row above the Expenses tabs scopes both the ledger and analysis (`?walletId=`). The last pick is stored in the `ledger_wallet` cookie (`LEDGER_WALLET_COOKIE`, `src/lib/expenses-ledger-display.ts`) and read by the server page, so the next visit opens on that wallet; an explicit `walletId=all` beats the remembered value. The ledger always groups by day (the Day/Category/Wallet group-by was dropped); category chips ignore the category filter so the others stay visible.
 
 **Why:** The user mostly looks at one wallet (daily spending), so re-picking it on every visit was friction. A cookie, unlike `localStorage`, is visible to the server component, so the first render is already scoped with no flash.
+
+---
+
+## ADR-060 — Loans leave through a linked transaction
+
+**Decision:** `Loan.transactionId` (unique, `onDelete: SetNull`) points at the Transaction the lent money left through. A linked loan no longer subtracts from its wallet itself (`computeWalletBalancesForAccount` skips it, like `VaultEntry.transactionId`); its repayments still land on `walletId` (the funding account's savings wallet). `createLoan` and a single "Mark paid" on a debtor's installment create the loan plus a "Loans" category transaction (`lib/loan-ledger.ts`; the category is created on first use and counts as spending). "Pay all" accepts one group only (`payAllGroup`): your own installments, or one debtor's from one funding account — mixed selections are blocked, since each group may leave from a different wallet. A debtor's batch is one loan for the total, linked to the batch's transaction. `updateLoan` keeps the transaction's amount/date (and wallet, when the account changes) in step; `deleteLoan` deletes the transaction too unless the user keeps it. Loans created before this stay unlinked and keep subtracting as before.
+
+**Why:** Lending didn't show on any ledger, "Pay all" created one loan per installment against one summary transaction, and deleting such a loan left the money gone with nothing to explain it. One loan ↔ one transaction makes both visible and lets them be removed together.

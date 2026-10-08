@@ -99,7 +99,12 @@ export type WalletForBalance = {
 export type AccountForWalletBalances = {
   savingsWalletId: string | null;
   wallets: WalletForBalance[];
-  loansGiven: { walletId: string | null; amount: number; date: Date; payments: DatedFlow[] }[];
+  /**
+   * transactionId set means the lent money left through a real Transaction
+   * (ADR-060) — already in `transactions`, so the loan itself isn't
+   * subtracted again. Its repayments still land on walletId.
+   */
+  loansGiven: { walletId: string | null; transactionId: string | null; amount: number; date: Date; payments: DatedFlow[] }[];
   /**
    * transactionId set means this entry created a real Transaction — that
    * money is already reflected in `transactions` via the normal sum, so it's
@@ -133,7 +138,7 @@ export function computeWalletBalancesForAccount(
       openingBalance: w.openingBalance,
       openingDate: w.openingDate,
       transactions: transactionsByWallet.get(w.id) ?? [],
-      loansGiven: account.loansGiven.filter((l) => l.walletId === w.id),
+      loansGiven: account.loansGiven.filter((l) => l.walletId === w.id && !l.transactionId),
       loanPayments: account.loansGiven
         .filter((l) => l.walletId === w.id)
         .flatMap((l) => l.payments),

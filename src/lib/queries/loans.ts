@@ -47,6 +47,8 @@ export type LoanWithRemaining = {
   remaining: number;
   isActive: boolean;
   payments: { id: string; amount: number; date: Date; notes: string | null }[];
+  /** The transaction the lent money left through (ADR-060); null on legacy loans. */
+  linkedTransaction: { amount: number; wallet: string } | null;
 };
 
 export type DebtorWithLoans = {
@@ -105,6 +107,7 @@ function fetchDebtorsForOverview() {
         include: {
           payments: { orderBy: { date: "asc" } },
           account: { select: { name: true, color: true } },
+          transaction: { select: { amount: true, wallet: true } },
         },
         orderBy: { date: "asc" },
       },
@@ -196,6 +199,7 @@ function buildDebtorsWithLoans(debtors: OverviewDebtor[]): DebtorWithLoans[] {
         remaining,
         isActive: remaining > 0,
         payments: l.payments,
+        linkedTransaction: l.transaction,
       };
     });
     const totalOwed = loans.reduce((s, l) => s + l.remaining, 0);

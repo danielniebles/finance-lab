@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { AccountType, EntryType } from "@/generated/prisma";
+import { createLoanWithTransaction, loanSourceWallet } from "@/lib/loan-ledger";
 
 const PATH = "/loans";
 
@@ -181,9 +182,8 @@ export async function deleteDebtor(id: string) {
 // ─── Loans ────────────────────────────────────────────────────────────────────
 
 /**
- * walletId (ADR-036/037) defaults to the account's savingsWalletId — C1
- * always sources a loan from the account's savings partition; per-transaction
- * wallet selection is a C2 follow-up (HANDOFF §1).
+ * Money lent leaves the account's savings wallet through a linked "Loans"
+ * transaction (ADR-060), so it shows on that wallet's ledger.
  */
 export async function createLoan(data: {
   debtorId: string;
@@ -193,34 +193,63 @@ export async function createLoan(data: {
   expectedBy?: Date;
   notes?: string;
 }) {
-  const account = await db.savingsAccount.findUniqueOrThrow({
-    where: { id: data.accountId },
-    select: { savingsWalletId: true },
-  });
-  const created = await db.loan.create({
-    data: { ...data, walletId: account.savingsWalletId },
-  });
-  revalidatePath(PATH);
+  const created = await db.$transaction((tx) => createLoanWithTransaction(tx, data));
+  revalidateLoanViews();
   return created;
 }
 
-/** Re-resolves walletId (ADR-036/037) to the (possibly new) account's savingsWalletId. */
-/** `expectedBy: null` / `notes: null` clear the field; undefined would keep the old value. */
+/**
+ * Re-resolves walletId (ADR-036/037) to the (possibly new) account's savings
+ * wallet, and keeps the linked transaction (ADR-060) in step: amount and date
+ * always, wallet only when the account changed (a "Pay all" loan's
+ * transaction may come from a wallet the user picked).
+ * `expectedBy: null` / `notes: null` clear the field; undefined would keep the old value.
+ */
 export async function updateLoan(
   id: string,
   data: { accountId: string; amount: number; date: Date; expectedBy: Date | null; notes: string | null }
 ) {
-  const account = await db.savingsAccount.findUniqueOrThrow({
-    where: { id: data.accountId },
-    select: { savingsWalletId: true },
+  await db.$transaction(async (tx) => {
+    const [before, wallet] = await Promise.all([
+      tx.loan.findUniqueOrThrow({ where: { id }, select: { accountId: true, transactionId: true } }),
+      loanSourceWallet(tx, data.accountId),
+    ]);
+    await tx.loan.update({ where: { id }, data: { ...data, walletId: wallet.id } });
+    if (!before.transactionId) return;
+    const accountChanged = before.accountId !== data.accountId;
+    await tx.transaction.update({
+      where: { id: before.transactionId },
+      data: {
+        amount: -data.amount,
+        date: data.date,
+        ...(accountChanged ? { walletId: wallet.id, wallet: wallet.name } : {}),
+      },
+    });
   });
-  await db.loan.update({ where: { id }, data: { ...data, walletId: account.savingsWalletId } });
-  revalidatePath(PATH);
+  revalidateLoanViews();
 }
 
-export async function deleteLoan(id: string) {
-  await db.loan.delete({ where: { id } });
+/**
+ * Deletes a loan (its payments cascade). Its linked transaction goes too
+ * unless `keepTransaction` — then the money stays spent and the loan simply
+ * stops being owed (ADR-060).
+ */
+export async function deleteLoan(id: string, opts: { keepTransaction?: boolean } = {}) {
+  await db.$transaction(async (tx) => {
+    const loan = await tx.loan.delete({ where: { id }, select: { transactionId: true } });
+    if (loan.transactionId && !opts.keepTransaction) {
+      await tx.transaction.delete({ where: { id: loan.transactionId } });
+    }
+  });
+  revalidateLoanViews();
+}
+
+/** A loan's transaction moves a wallet balance, so every view showing one refreshes. */
+function revalidateLoanViews() {
   revalidatePath(PATH);
+  revalidatePath("/expenses");
+  revalidatePath("/overview");
+  revalidatePath("/trends");
 }
 
 // ─── Payments (LIFO per debtor — newest debt paid first) ─────────────────────

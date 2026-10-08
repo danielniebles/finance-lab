@@ -7,6 +7,7 @@ import { DateField, Field, FormDialog, FormFooter, FormReadout, Money, OptionSel
 import { categorySelectOptions } from "@/components/shared/category-option";
 import type { WalletOption } from "@/components/shared/wallet-select";
 import { localISODate } from "@/lib/form-format";
+import { payAllGroup } from "@/lib/installment-display";
 import { payInstallmentsBulk } from "@/lib/actions/installments";
 import type { CategoryOption } from "@/lib/queries/expenses";
 import type { DueThisMonth } from "@/lib/queries/installments";
@@ -20,6 +21,17 @@ function defaultNote(items: DueThisMonth[]): string {
         `${d.installment.description} (cuota ${d.installmentNum}/${d.installment.numInstallments})`,
     )
     .join(", ");
+}
+
+function missingHint(appCategoryId: string | null, walletId: string | null): string {
+  if (!appCategoryId && !walletId) return "Pick a category and a wallet.";
+  if (!appCategoryId) return "Pick a category.";
+  return walletId ? "" : "Pick a wallet.";
+}
+
+function paidMessage(items: DueThisMonth[], loanCreated: boolean): string {
+  const paid = `Paid ${items.length} ${items.length === 1 ? "installment" : "installments"}`;
+  return loanCreated ? `${paid} — loan recorded for ${items[0]?.installment.debtorName ?? "the debtor"}` : paid;
 }
 
 type Props = {
@@ -38,8 +50,10 @@ export function PayAllButton({ items, walletOptions, categories, onPaid }: Props
   const [pending, startTransition] = useTransition();
 
   const total = useMemo(() => items.reduce((s, d) => s + d.amount, 0), [items]);
+  // One payment = one transaction: own installments and each person's are paid separately (ADR-060).
+  const mixed = useMemo(() => payAllGroup(items.map((d) => d.installment)).kind === "mixed", [items]);
   const canSubmit = !!walletId && !!appCategoryId && date !== "" && items.length > 0;
-  const missing = !appCategoryId && !walletId ? "Pick a category and a wallet." : !appCategoryId ? "Pick a category." : !walletId ? "Pick a wallet." : "";
+  const missing = missingHint(appCategoryId, walletId);
 
   function openDialog() {
     setNote(defaultNote(items));
@@ -64,11 +78,7 @@ export function PayAllButton({ items, walletOptions, categories, onPaid }: Props
           date: new Date(date + "T12:00:00"),
           note,
         });
-        toast.success(
-          result.loansCreated > 0
-            ? `Paid ${items.length} installments — ${result.loansCreated} loan${result.loansCreated > 1 ? "s" : ""} recorded`
-            : `Paid ${items.length} installments`,
-        );
+        toast.success(paidMessage(items, result.loansCreated > 0));
         setOpen(false);
         onPaid();
       } catch {
@@ -79,7 +89,8 @@ export function PayAllButton({ items, walletOptions, categories, onPaid }: Props
 
   return (
     <>
-      <Button size="sm" onClick={openDialog} className="h-7 gap-1.5 text-xs">
+      {mixed && <span className="text-xs text-muted-foreground">Pay yours and each person&apos;s separately</span>}
+      <Button size="sm" onClick={openDialog} disabled={mixed} className="h-7 gap-1.5 text-xs">
         Pay all ({items.length})
       </Button>
 

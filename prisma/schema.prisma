@@ -129,6 +129,9 @@ model Transaction {
   // Back-relation for a VaultEntry this transaction was created for (wallet
   // + category vault funding) — see VaultEntry.transactionId.
   vaultEntry           VaultEntry?
+  // Back-relation for a Loan whose money left through this transaction — see
+  // Loan.transactionId.
+  loan                 Loan?
   // Soft, budget-free labels (ledger filter + bot hashtag mapping) — see Tag.
   tags                 Tag[]
   // Wallet-to-wallet transfer (createWalletTransfer): true on BOTH legs.
@@ -345,6 +348,12 @@ model Loan {
   // per-transaction selection is a C2 follow-up.
   walletId   String?
   wallet     Wallet?        @relation(fields: [walletId], references: [id])
+  // The Transaction the lent money left through (ADR-060). When set, the
+  // wallet balance is reduced by that transaction, NOT by the loan itself
+  // (same rule as VaultEntry.transactionId). Null = legacy loan that still
+  // subtracts from its walletId directly.
+  transactionId String?      @unique
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
 }
 
 model LoanPayment {

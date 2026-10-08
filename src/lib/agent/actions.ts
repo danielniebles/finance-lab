@@ -28,6 +28,7 @@ import {
 import {
   createDebtor,
   createLoan,
+  deleteLoan,
   recordLoanPayment,
   createEntry,
   deleteEntry,
@@ -310,7 +311,8 @@ async function undoCreateLoan(
 ): Promise<void> {
   if (!params.createdId)
     throw new Error(CREATED_ID_MISSING_MSG);
-  await db.loan.delete({ where: { id: params.createdId as string } });
+  // Takes the loan's linked transaction with it (ADR-060).
+  await deleteLoan(params.createdId as string);
   if (params.createdDebtorId) {
     const debtorLoanCount = await db.loan.count({
       where: { debtorId: params.createdDebtorId as string },

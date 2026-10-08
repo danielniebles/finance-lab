@@ -4,7 +4,12 @@
 // No DB — computeWalletBalance/groupByWalletId are pure functions.
 
 import { describe, it, expect } from "vitest";
-import { computeWalletBalance, groupByWalletId, type WalletBalanceInputs } from "./wallet-balance-utils";
+import {
+  computeWalletBalance,
+  computeWalletBalancesForAccount,
+  groupByWalletId,
+  type WalletBalanceInputs,
+} from "./wallet-balance-utils";
 
 const OPENING_DATE = new Date("2026-07-09T00:00:00Z");
 
@@ -123,5 +128,32 @@ describe("groupByWalletId", () => {
 
   it("returns an empty map for an empty list", () => {
     expect(groupByWalletId([]).size).toBe(0);
+  });
+});
+
+describe("computeWalletBalancesForAccount — loans linked to a transaction (ADR-060)", () => {
+  const wallet = {
+    id: "w1", name: "Savings", color: null, sortOrder: 0, isSavings: true, includeInAvailable: true,
+    openingBalance: 1_000_000, openingDate: OPENING_DATE,
+  };
+  const account = (transactionId: string | null) => ({
+    savingsWalletId: "w1",
+    wallets: [wallet],
+    loansGiven: [{
+      walletId: "w1", transactionId, amount: 300_000, date: OPENING_DATE,
+      payments: [{ date: OPENING_DATE, amount: 100_000 }],
+    }],
+    vaultEntriesFunded: [], entries: [], transfersTo: [], transfersFrom: [],
+  });
+
+  it("subtracts the money once — through the transaction, not the loan — and still adds repayments", () => {
+    const txs = new Map([["w1", [{ date: OPENING_DATE, amount: -300_000 }]]]);
+    const [w] = computeWalletBalancesForAccount(account("tx-1"), txs);
+    expect(w.balance).toBe(800_000);
+  });
+
+  it("a legacy loan (no transaction) still subtracts on its own", () => {
+    const [w] = computeWalletBalancesForAccount(account(null), new Map());
+    expect(w.balance).toBe(800_000);
   });
 });

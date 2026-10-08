@@ -77,3 +77,34 @@ export function sortInstallments(rows: InstallmentRow[]): InstallmentRow[] {
       Number(a.status === "Finished") - Number(b.status === "Finished") || share(b) - share(a),
   );
 }
+
+export type PayAllGroup =
+  | { kind: "own" }
+  | { kind: "debtor"; debtorId: string; fundingAccountId: string }
+  | { kind: "mixed" };
+
+/**
+ * What a "Pay all" selection pays for (ADR-060). One payment = one
+ * transaction, so the selection must be a single group: only your own
+ * installments, or only one debtor's (same funding account) — those become
+ * one loan linked to that transaction. Anything else is "mixed" and can't be
+ * paid together, since each group may well leave from a different wallet.
+ * An installment lends money only when it has both a debtor and a funding account.
+ */
+export function payAllGroup(rows: { debtorId: string | null; fundingAccountId: string | null }[]): PayAllGroup {
+  const keys = new Set(
+    rows.map((r) => (r.debtorId && r.fundingAccountId ? `${r.debtorId}|${r.fundingAccountId}` : "own")),
+  );
+  if (keys.size > 1) return { kind: "mixed" };
+  const [key] = keys;
+  if (!key || key === "own") return { kind: "own" };
+  const [debtorId, fundingAccountId] = key.split("|");
+  return { kind: "debtor", debtorId, fundingAccountId };
+}
+
+/** Loan note for installment slots paid on a debtor's behalf: "Cuota 3/12 — Phone, Cuota 1/6 — Tires". */
+export function installmentLoanNote(
+  slots: { installmentNum: number; numInstallments: number; description: string }[],
+): string {
+  return slots.map((s) => `Cuota ${s.installmentNum}/${s.numInstallments} — ${s.description}`).join(", ");
+}

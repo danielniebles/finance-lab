@@ -38,6 +38,7 @@ const BASE_LOAN: LoanWithRemaining = {
   createdAt: new Date(`${LOAN_DATE_STR}T10:00:00`),
   paid: 0,
   remaining: 5_000_000,
+  linkedTransaction: null,
   isActive: true,
   payments: [],
 };
