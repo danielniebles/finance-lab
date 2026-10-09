@@ -234,7 +234,8 @@ export function AddTransactionDialog({ open, activeWalletId, onClose, categories
           setLastWallet(submittedWalletId);
           setValues((v) => ({ ...v, amount: "", note: "", tagNames: "" }));
           amountInputRef.current?.focus();
-        } catch {
+        } catch (err) {
+          console.error("createWalletTransfer failed", err);
           toast.error("Couldn't add transfer");
         }
       });
@@ -259,7 +260,8 @@ export function AddTransactionDialog({ open, activeWalletId, onClose, categories
         // keep type/date/appCategoryId/walletId as-is and stay open.
         setValues((v) => ({ ...v, amount: "", note: "", tagNames: "" }));
         amountInputRef.current?.focus();
-      } catch {
+      } catch (err) {
+        console.error("createTransaction failed", err);
         toast.error("Couldn't add transaction");
       }
     });
