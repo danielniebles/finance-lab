@@ -132,6 +132,8 @@ model Transaction {
   // Back-relation for a Loan whose money left through this transaction — see
   // Loan.transactionId.
   loan                 Loan?
+  loanPayments         LoanPayment[]
+  installmentPayments  InstallmentPayment[]
   // Soft, budget-free labels (ledger filter + bot hashtag mapping) — see Tag.
   tags                 Tag[]
   // Wallet-to-wallet transfer (createWalletTransfer): true on BOTH legs.
@@ -236,6 +238,16 @@ model InstallmentPayment {
   installment    Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
   installmentNum Int // 1-based, which payment in the sequence
   paidAt         DateTime
+  // Loan this slot was paid on a debtor's behalf under (ADR-060) — unmarking
+  // the slot takes its share of the loan back out. Several slots can share
+  // one loan ("Pay all").
+  loanId         String?
+  loan           Loan?       @relation(fields: [loanId], references: [id], onDelete: SetNull)
+  // Transaction an own-installment "Pay all" paid this slot through (ADR-060)
+  // — deleting it can unmark the slot, unmarking the slot shrinks it.
+  // (A debtor's slot goes through its loan instead.)
+  transactionId  String?
+  transaction    Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
 }
 
 // ─── Module 3: Loan / Debt Tracker ────────────────────────────────────────────
@@ -354,6 +366,7 @@ model Loan {
   // subtracts from its walletId directly.
   transactionId String?      @unique
   transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  installmentPayments InstallmentPayment[]
 }
 
 model LoanPayment {
@@ -363,6 +376,11 @@ model LoanPayment {
   amount Float
   date   DateTime
   notes  String?
+  // The incoming Transaction this repayment arrived through (ADR-060). One
+  // repayment split across several loans shares one transaction. When set,
+  // the wallet balance gains it via that transaction, not via the payment.
+  transactionId String?
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
 }
 
 // ─── Module 4: Vaults ─────────────────────────────────────────────────────────

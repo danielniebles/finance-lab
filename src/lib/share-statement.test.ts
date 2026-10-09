@@ -74,7 +74,7 @@ function loan(over: Partial<LoanWithRemaining>): LoanWithRemaining {
   return {
     id: "l", debtorId: "d", accountId: "a", accountName: "A", accountColor: null,
     amount: 100, date: day(2026, 6, 1), expectedBy: null, notes: null, createdAt: day(2026, 6, 1),
-    paid: 0, remaining: 100, isActive: true, payments: [], linkedTransaction: null,
+    paid: 0, remaining: 100, isActive: true, payments: [], linkedTransaction: null, installmentSlots: 0,
     ...over,
   };
 }

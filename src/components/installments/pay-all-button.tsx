@@ -23,15 +23,49 @@ function defaultNote(items: DueThisMonth[]): string {
     .join(", ");
 }
 
-function missingHint(appCategoryId: string | null, walletId: string | null): string {
-  if (!appCategoryId && !walletId) return "Pick a category and a wallet.";
-  if (!appCategoryId) return "Pick a category.";
+/** A debtor's batch is a loan, filed under "Loans" by the server: no category to pick. */
+function missingHint(appCategoryId: string | null, walletId: string | null, lending: boolean): string {
+  const needsCategory = !lending && !appCategoryId;
+  if (needsCategory && !walletId) return "Pick a category and a wallet.";
+  if (needsCategory) return "Pick a category.";
   return walletId ? "" : "Pick a wallet.";
 }
 
 function paidMessage(items: DueThisMonth[], loanCreated: boolean): string {
   const paid = `Paid ${items.length} ${items.length === 1 ? "installment" : "installments"}`;
   return loanCreated ? `${paid} — loan recorded for ${items[0]?.installment.debtorName ?? "the debtor"}` : paid;
+}
+
+/** Category + wallet. Paying a debtor's installments is a loan: filed under Loans, so no category to pick. */
+function PayFromFields({
+  lendingTo,
+  appCategoryId,
+  onCategoryChange,
+  walletId,
+  onWalletChange,
+  categories,
+  walletOptions,
+}: {
+  lendingTo: string | null;
+  appCategoryId: string | null;
+  onCategoryChange: (id: string | null) => void;
+  walletId: string | null;
+  onWalletChange: (id: string | null) => void;
+  categories: CategoryOption[];
+  walletOptions: WalletOption[];
+}) {
+  return (
+    <div className={lendingTo ? undefined : "grid grid-cols-2 gap-3"}>
+      {!lendingTo && (
+        <Field label="Category">
+          <OptionSelect ariaLabel="Category" value={appCategoryId} onChange={onCategoryChange} options={categorySelectOptions(categories.filter((c) => !c.isTransfer))} />
+        </Field>
+      )}
+      <Field label="Wallet" hint={lendingTo ? `A loan to ${lendingTo}: filed under Loans, not counted as spending.` : undefined}>
+        <OptionSelect ariaLabel="Wallet" value={walletId} onChange={onWalletChange} options={walletOptions.map((w) => ({ value: w.id, label: w.name }))} />
+      </Field>
+    </div>
+  );
 }
 
 type Props = {
@@ -51,9 +85,11 @@ export function PayAllButton({ items, walletOptions, categories, onPaid }: Props
 
   const total = useMemo(() => items.reduce((s, d) => s + d.amount, 0), [items]);
   // One payment = one transaction: own installments and each person's are paid separately (ADR-060).
-  const mixed = useMemo(() => payAllGroup(items.map((d) => d.installment)).kind === "mixed", [items]);
-  const canSubmit = !!walletId && !!appCategoryId && date !== "" && items.length > 0;
-  const missing = missingHint(appCategoryId, walletId);
+  const groupKind = useMemo(() => payAllGroup(items.map((d) => d.installment)).kind, [items]);
+  const mixed = groupKind === "mixed";
+  const lending = groupKind === "debtor";
+  const missing = missingHint(appCategoryId, walletId, lending);
+  const canSubmit = missing === "" && date !== "" && items.length > 0;
 
   function openDialog() {
     setNote(defaultNote(items));
@@ -63,7 +99,7 @@ export function PayAllButton({ items, walletOptions, categories, onPaid }: Props
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit || !walletId || !appCategoryId) return;
+    if (!canSubmit || !walletId) return;
     const walletName = walletOptions.find((w) => w.id === walletId)?.name ?? "";
     const slots = items.map((d) => ({
       installmentId: d.installment.id,
@@ -74,7 +110,7 @@ export function PayAllButton({ items, walletOptions, categories, onPaid }: Props
         const result = await payInstallmentsBulk(slots, {
           walletId,
           wallet: walletName,
-          appCategoryId,
+          appCategoryId: lending ? null : appCategoryId,
           date: new Date(date + "T12:00:00"),
           note,
         });
@@ -113,14 +149,15 @@ export function PayAllButton({ items, walletOptions, categories, onPaid }: Props
         <FormReadout label={`Total · ${items.length} ${items.length === 1 ? "cuota" : "cuotas"}`}>
           <Money value={total} />
         </FormReadout>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Category">
-            <OptionSelect ariaLabel="Category" value={appCategoryId} onChange={setAppCategoryId} options={categorySelectOptions(categories.filter((c) => !c.isTransfer))} />
-          </Field>
-          <Field label="Wallet">
-            <OptionSelect ariaLabel="Wallet" value={walletId} onChange={setWalletId} options={walletOptions.map((w) => ({ value: w.id, label: w.name }))} />
-          </Field>
-        </div>
+        <PayFromFields
+          lendingTo={lending ? (items[0]?.installment.debtorName ?? "this person") : null}
+          appCategoryId={appCategoryId}
+          onCategoryChange={setAppCategoryId}
+          walletId={walletId}
+          onWalletChange={setWalletId}
+          categories={categories}
+          walletOptions={walletOptions}
+        />
         <Field label="Date" htmlFor="pay-all-date">
           <DateField id="pay-all-date" value={date} onChange={setDate} quickPicks={["today", "yesterday"]} required />
         </Field>

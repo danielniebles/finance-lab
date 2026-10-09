@@ -5,7 +5,14 @@ import { db } from "@/lib/db";
 import { TransactionSource } from "@/generated/prisma";
 import { computeInstallmentDue, computeMonthlyAmount } from "@/lib/installment-utils";
 import { installmentLoanNote, payAllGroup } from "@/lib/installment-display";
-import { createLoanWithTransaction, loanSourceWallet } from "@/lib/loan-ledger";
+import {
+  createLoanWithTransaction,
+  loanSourceWallet,
+  loansCategoryId,
+  removeLoan,
+  shrinkTransaction,
+  type TransactionClient,
+} from "@/lib/loan-ledger";
 
 const PATH = "/installments";
 
@@ -99,30 +106,25 @@ export async function markPayment(
   let debtorName: string | undefined;
 
   await db.$transaction(async (tx) => {
-    // 1. Record the installment payment
-    await tx.installmentPayment.create({
-      data: { installmentId, installmentNum, paidAt },
-    });
-
-    // 2. If this installment tracks a debtor + funding account, auto-create a
-    //    loan — and the transaction its money leaves through (ADR-060).
+    // If this installment tracks a debtor + funding account, auto-create a
+    // loan — and the transaction its money leaves through (ADR-060) — and
+    // link the slot to it so unmarking takes it back out.
+    let loanId: string | null = null;
     if (inst.debtorId && inst.fundingAccountId) {
-      const amount = computeInstallmentDue(
-        inst.totalAmount,
-        inst.numInstallments,
-        installmentNum,
-        inst.monthlyInterestRate ?? undefined,
-      );
-      await createLoanWithTransaction(tx, {
+      const loan = await createLoanWithTransaction(tx, {
         debtorId: inst.debtorId,
         accountId: inst.fundingAccountId,
-        amount,
+        amount: slotDue(inst, installmentNum),
         date: paidAt,
         notes: installmentLoanNote([{ installmentNum, numInstallments: inst.numInstallments, description: inst.description }]),
       });
+      loanId = loan.id;
       loanCreated = true;
       debtorName = inst.debtor?.name;
     }
+    await tx.installmentPayment.create({
+      data: { installmentId, installmentNum, paidAt, loanId },
+    });
   });
 
   if (loanCreated) revalidateMoneyViews();
@@ -131,15 +133,63 @@ export async function markPayment(
   return { loanCreated, debtorName };
 }
 
+/** What one slot of an installment costs (German amortization when it has interest). */
+function slotDue(
+  inst: { totalAmount: number; numInstallments: number; monthlyInterestRate: number | null },
+  installmentNum: number,
+): number {
+  return computeInstallmentDue(inst.totalAmount, inst.numInstallments, installmentNum, inst.monthlyInterestRate ?? undefined);
+}
+
+/**
+ * Takes an unmarked slot's share back out of the loan it was paid under
+ * (ADR-060): the loan and its outgoing transaction shrink by the slot's
+ * amount, or go entirely when it was the loan's last slot. Repayments
+ * already received stay — that money did come in.
+ */
+async function releaseLoanShare(tx: TransactionClient, loanId: string, amount: number) {
+  const loan = await tx.loan.findUnique({
+    where: { id: loanId },
+    select: { amount: true, transactionId: true, _count: { select: { installmentPayments: true } } },
+  });
+  if (!loan) return;
+  if (loan._count.installmentPayments === 0) {
+    await removeLoan(tx, loanId, { keepOutgoing: false, keepRepayments: true, unmarkSlots: false });
+    return;
+  }
+  await tx.loan.update({ where: { id: loanId }, data: { amount: loan.amount - amount } });
+  if (loan.transactionId) await shrinkTransaction(tx, loan.transactionId, -amount);
+}
+
+/**
+ * Deletes slot payments and gives back what they moved: a debtor's slot
+ * releases its loan share, an own "Pay all" slot comes out of that payment's
+ * transaction. Returns whether any money moved.
+ */
+async function removeSlotPayments(where: { id: string } | { installmentId: string; installmentNum: number }) {
+  return db.$transaction(async (tx) => {
+    const payments = await tx.installmentPayment.findMany({ where, include: { installment: true } });
+    await tx.installmentPayment.deleteMany({ where: { id: { in: payments.map((p) => p.id) } } });
+    for (const p of payments) {
+      const due = slotDue(p.installment, p.installmentNum);
+      if (p.loanId) await releaseLoanShare(tx, p.loanId, due);
+      if (p.transactionId) await shrinkTransaction(tx, p.transactionId, -due);
+    }
+    return payments.some((p) => p.loanId || p.transactionId);
+  });
+}
+
 export async function unmarkPayment(paymentId: string) {
-  await db.installmentPayment.delete({ where: { id: paymentId } });
-  revalidatePath(PATH);
+  const touchedLoan = await removeSlotPayments({ id: paymentId });
+  if (touchedLoan) revalidateMoneyViews();
+  else revalidatePath(PATH);
 }
 
 /** Undo variant: delete by installmentId + installmentNum (used by agent undo). */
 export async function unmarkPaymentBySlot(installmentId: string, installmentNum: number) {
-  await db.installmentPayment.deleteMany({ where: { installmentId, installmentNum } });
-  revalidatePath(PATH);
+  const touchedLoan = await removeSlotPayments({ installmentId, installmentNum });
+  if (touchedLoan) revalidateMoneyViews();
+  else revalidatePath(PATH);
 }
 
 /**
@@ -150,14 +200,16 @@ export async function unmarkPaymentBySlot(installmentId: string, installmentNum:
  * The selection must be one group (payAllGroup, ADR-060): only your own
  * installments, or only one debtor's. A debtor's batch becomes ONE loan for
  * the total, linked to that transaction — so loan and transaction always
- * match, and deleting the loan can take its transaction with it.
+ * match, and deleting the loan can take its transaction with it. That
+ * transaction is lending, not spending: filed under "Loans" as a transfer,
+ * whatever category was picked (the dialog doesn't ask for one then).
  */
 export async function payInstallmentsBulk(
   items: { installmentId: string; installmentNum: number }[],
   data: {
     walletId: string;
     wallet: string;
-    appCategoryId: string;
+    appCategoryId: string | null;
     date: Date;
     note: string;
   },
@@ -171,31 +223,24 @@ export async function payInstallmentsBulk(
   const slots = items.flatMap((item) => {
     const inst = byId.get(item.installmentId);
     if (!inst) return [];
-    const amount = computeInstallmentDue(
-      inst.totalAmount,
-      inst.numInstallments,
-      item.installmentNum,
-      inst.monthlyInterestRate ?? undefined,
-    );
-    return [{ inst, installmentNum: item.installmentNum, amount }];
+    return [{ inst, installmentNum: item.installmentNum, amount: slotDue(inst, item.installmentNum) }];
   });
 
   const group = payAllGroup(slots.map((s) => s.inst));
   if (group.kind === "mixed") {
     throw new Error("Pay your own installments and each person's separately");
   }
+  if (group.kind === "own" && !data.appCategoryId) throw new Error("Pick a category");
   const totalAmount = slots.reduce((sum, s) => sum + s.amount, 0);
+  const lending = group.kind === "debtor";
 
   await db.$transaction(async (tx) => {
-    await tx.installmentPayment.createMany({
-      data: slots.map((s) => ({ installmentId: s.inst.id, installmentNum: s.installmentNum, paidAt: data.date })),
-    });
-
     const transaction = await tx.transaction.create({
       data: {
         amount: -totalAmount,
         date: data.date,
-        appCategoryId: data.appCategoryId,
+        appCategoryId: lending ? await loansCategoryId(tx) : data.appCategoryId,
+        isTransfer: lending,
         wallet: data.wallet,
         walletId: data.walletId,
         note: data.note,
@@ -206,10 +251,11 @@ export async function payInstallmentsBulk(
       },
     });
 
+    let loanId: string | null = null;
     if (group.kind === "debtor") {
       // walletId = the funding account's savings wallet: where repayments land.
       const wallet = await loanSourceWallet(tx, group.fundingAccountId);
-      await tx.loan.create({
+      const loan = await tx.loan.create({
         data: {
           debtorId: group.debtorId,
           accountId: group.fundingAccountId,
@@ -222,7 +268,19 @@ export async function payInstallmentsBulk(
           ),
         },
       });
+      loanId = loan.id;
     }
+
+    // A debtor's slots go through their loan; your own through the payment itself.
+    await tx.installmentPayment.createMany({
+      data: slots.map((s) => ({
+        installmentId: s.inst.id,
+        installmentNum: s.installmentNum,
+        paidAt: data.date,
+        loanId,
+        transactionId: loanId ? null : transaction.id,
+      })),
+    });
   });
 
   revalidateMoneyViews();

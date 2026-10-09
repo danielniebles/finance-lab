@@ -24,6 +24,7 @@ vi.mock("@/lib/db", () => ({
     wallet: { findMany: vi.fn().mockResolvedValue([]), findUniqueOrThrow: vi.fn() },
     savingsAccount: { findMany: vi.fn().mockResolvedValue([]) },
     appCategory: { findUniqueOrThrow: vi.fn() },
+    installmentPayment: { deleteMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -53,6 +54,7 @@ const dbMock = db as unknown as {
     findUniqueOrThrow: ReturnType<typeof vi.fn>;
   };
   appCategory: { findUniqueOrThrow: ReturnType<typeof vi.fn> };
+  installmentPayment: { deleteMany: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 };
 
@@ -163,6 +165,18 @@ describe("deleteTransaction", () => {
       where: { transferPairId: "pair-1" },
     });
     expect(dbMock.transaction.delete).not.toHaveBeenCalled();
+  });
+
+  it("with unmarkSlots, an own Pay all transaction takes its installment slots back to unpaid", async () => {
+    dbMock.transaction.findUnique.mockResolvedValue({ transferPairId: null });
+    dbMock.installmentPayment.deleteMany.mockReturnValue("unmark-op");
+    dbMock.transaction.delete.mockReturnValue("delete-op");
+
+    await deleteTransaction("txn-payall", { unmarkSlots: true });
+
+    expect(dbMock.installmentPayment.deleteMany).toHaveBeenCalledWith({ where: { transactionId: "txn-payall" } });
+    expect(dbMock.$transaction).toHaveBeenCalledWith(["unmark-op", "delete-op"]);
+    expect(revalidatePath).toHaveBeenCalledWith("/installments");
   });
 });
 

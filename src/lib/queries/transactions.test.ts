@@ -44,6 +44,9 @@ function txn(overrides: Record<string, unknown> = {}) {
     appCategory: null,
     moneyLoverCategory: null,
     tags: [],
+    loan: null,
+    loanPayments: [],
+    _count: { installmentPayments: 0 },
     ...overrides,
   };
 }

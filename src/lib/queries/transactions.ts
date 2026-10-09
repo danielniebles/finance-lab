@@ -48,6 +48,13 @@ export type LedgerItem = {
   // shown in the raw list/groups, but excluded from monthTotalIncome/Expense
   // below (a transfer is neither real income nor real spending).
   isTransfer: boolean;
+  /**
+   * "Loan to Javier" / "Repayment from Javier" when a loan or repayment owns
+   * this transaction (ADR-060) — it's then changed from Loans, not here.
+   */
+  loanLink: string | null;
+  /** Own installment slots an own "Pay all" paid through this transaction (ADR-060). */
+  paidSlots: number;
 };
 
 export type LedgerGroup = {
@@ -89,6 +96,9 @@ type RawTransaction = {
   moneyLoverCategory: { mapping: { appCategory: RawAppCategory } | null } | null;
   tags: TagOption[];
   isTransfer: boolean;
+  loan: { debtor: { name: string } } | null;
+  loanPayments: { loan: { debtor: { name: string } } }[];
+  _count: { installmentPayments: number };
 };
 
 // Category resolution rule (ADR-030), applied everywhere a transaction's
@@ -104,6 +114,12 @@ function resolveAppCategory(t: RawTransaction): RawAppCategory | null {
 // Bank (SavingsAccount) colour first, then the wallet's own — see LedgerItem.walletColor.
 function walletColorOf(t: RawTransaction): string | null {
   return t.walletRef?.account?.color ?? t.walletRef?.color ?? null;
+}
+
+function loanLinkOf(t: RawTransaction): string | null {
+  if (t.loan) return `Loan to ${t.loan.debtor.name}`;
+  const repaid = t.loanPayments[0];
+  return repaid ? `Repayment from ${repaid.loan.debtor.name}` : null;
 }
 
 function toLedgerItem(t: RawTransaction): LedgerItem {
@@ -123,6 +139,8 @@ function toLedgerItem(t: RawTransaction): LedgerItem {
     source: t.source,
     tags: t.tags,
     isTransfer: t.isTransfer,
+    loanLink: loanLinkOf(t),
+    paidSlots: t._count.installmentPayments,
   };
 }
 
@@ -305,6 +323,9 @@ export async function getTransactionList(
       moneyLoverCategory: { include: { mapping: { include: { appCategory: true } } } },
       walletRef: { select: { name: true, color: true, account: { select: { color: true } } } },
       tags: { select: { id: true, name: true, color: true } },
+      loan: { select: { debtor: { select: { name: true } } } },
+      loanPayments: { take: 1, select: { loan: { select: { debtor: { select: { name: true } } } } } },
+      _count: { select: { installmentPayments: true } },
     },
     orderBy: { date: "desc" },
   });

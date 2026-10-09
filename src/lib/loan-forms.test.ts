@@ -27,7 +27,7 @@ function loan(id: string, accountId: string, date: string, remaining: number, is
     remaining,
     isActive,
     payments: [],
-    linkedTransaction: null,
+    linkedTransaction: null, installmentSlots: 0,
   };
 }
 

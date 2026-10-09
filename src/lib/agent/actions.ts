@@ -30,6 +30,7 @@ import {
   createLoan,
   deleteLoan,
   recordLoanPayment,
+  deleteLoanPayment,
   createEntry,
   deleteEntry,
   createTransfer,
@@ -353,7 +354,8 @@ async function undoRecordLoanPayment(
 ): Promise<void> {
   if (!params.createdId)
     throw new Error(CREATED_ID_MISSING_MSG);
-  await db.loanPayment.delete({ where: { id: params.createdId as string } });
+  // Takes the payment's share out of its incoming transaction (ADR-060).
+  await deleteLoanPayment(params.createdId as string);
 }
 
 // ─── Account actions ──────────────────────────────────────────────────────────

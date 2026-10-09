@@ -1,9 +1,11 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  CheckField,
   ColorDot,
   DateField,
   Field,
@@ -97,6 +99,7 @@ type Props = {
 export function TransactionRow({ item, groupBy, showWallet = false, categories, walletOptions, tags }: Props) {
   const [mode, setMode] = useState<Mode>("default");
   const [values, setValues] = useState<RowFormValues>(() => formValuesFromItem(item, categories));
+  const [unmarkSlots, setUnmarkSlots] = useState(true);
   const [pending, startTransition] = useTransition();
 
   // The Dialog's content depends on `mode`, but `mode` returns to "default"
@@ -134,7 +137,7 @@ export function TransactionRow({ item, groupBy, showWallet = false, categories, 
   }
 
   function handleDelete() {
-    startTransition(() => deleteTransaction(item.id));
+    startTransition(() => deleteTransaction(item.id, { unmarkSlots: item.paidSlots > 0 && unmarkSlots }));
   }
 
   return (
@@ -160,8 +163,13 @@ export function TransactionRow({ item, groupBy, showWallet = false, categories, 
         onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
         onSubmit={handleSave}
         onCancel={cancelToDefault}
-        onDeleteRequest={() => setMode("delete-confirm")}
+        onDeleteRequest={() => {
+          setUnmarkSlots(true);
+          setMode("delete-confirm");
+        }}
         onDelete={handleDelete}
+        unmarkSlots={unmarkSlots}
+        onUnmarkSlotsChange={setUnmarkSlots}
       />
     </>
   );
@@ -296,6 +304,8 @@ function TransactionDialog({
   onCancel,
   onDeleteRequest,
   onDelete,
+  unmarkSlots,
+  onUnmarkSlotsChange,
 }: {
   open: boolean;
   view: Exclude<Mode, "default">;
@@ -310,30 +320,21 @@ function TransactionDialog({
   onCancel: () => void;
   onDeleteRequest: () => void;
   onDelete: () => void;
+  unmarkSlots: boolean;
+  onUnmarkSlotsChange: (unmark: boolean) => void;
 }) {
+  if (item.loanLink) return <LoanOwnedDialog open={open} item={item} onClose={onCancel} />;
   if (view === "delete-confirm") {
     return (
-      <FormDialog
+      <DeleteTransactionDialog
         open={open}
-        onOpenChange={(o) => !o && onCancel()}
-        title={item.isTransfer ? "Delete transfer?" : "Delete transaction?"}
-        footer={
-          <FormFooter>
-            <Button type="button" variant="outline" onClick={onCancel} autoFocus>
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" disabled={pending} onClick={onDelete}>
-              Delete
-            </Button>
-          </FormFooter>
-        }
-      >
-        <p className="text-sm text-muted-foreground">
-          {item.isTransfer
-            ? "Both the outgoing and the incoming leg will be removed."
-            : `${item.note?.trim() || item.categoryName || "This transaction"} · ${formatCOP(Math.abs(item.amount))} will be removed.`}
-        </p>
-      </FormDialog>
+        item={item}
+        pending={pending}
+        onCancel={onCancel}
+        onDelete={onDelete}
+        unmarkSlots={unmarkSlots}
+        onUnmarkSlotsChange={onUnmarkSlotsChange}
+      />
     );
   }
   // A legacy row whose walletId hasn't been backfilled yet has "" here —
@@ -360,6 +361,89 @@ function TransactionDialog({
       }
     >
       <EditFields item={item} values={values} categories={categories} walletOptions={walletOptions} tags={tags} onChange={onChange} />
+    </FormDialog>
+  );
+}
+
+/** Delete confirm; an own "Pay all" transaction can take its installment slots back to unpaid. */
+function DeleteTransactionDialog({
+  open,
+  item,
+  pending,
+  onCancel,
+  onDelete,
+  unmarkSlots,
+  onUnmarkSlotsChange,
+}: {
+  open: boolean;
+  item: LedgerItem;
+  pending: boolean;
+  onCancel: () => void;
+  onDelete: () => void;
+  unmarkSlots: boolean;
+  onUnmarkSlotsChange: (unmark: boolean) => void;
+}) {
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && onCancel()}
+      title={item.isTransfer ? "Delete transfer?" : "Delete transaction?"}
+      footer={
+        <FormFooter>
+          <Button type="button" variant="outline" onClick={onCancel} autoFocus>
+            Cancel
+          </Button>
+          <Button type="button" variant="destructive" disabled={pending} onClick={onDelete}>
+            Delete
+          </Button>
+        </FormFooter>
+      }
+    >
+      <p className="text-sm text-muted-foreground">
+        {item.isTransfer
+          ? "Both the outgoing and the incoming leg will be removed."
+          : `${item.note?.trim() || item.categoryName || "This transaction"} · ${formatCOP(Math.abs(item.amount))} will be removed.`}
+      </p>
+      {item.paidSlots > 0 && (
+        <CheckField
+          id={`unmark-slots-${item.id}`}
+          label={`Mark the ${item.paidSlots} ${item.paidSlots === 1 ? "installment" : "installments"} it paid as unpaid`}
+          hint="Keep them paid only if they were really paid some other way."
+          checked={unmarkSlots}
+          onChange={onUnmarkSlotsChange}
+          disabled={pending}
+        />
+      )}
+    </FormDialog>
+  );
+}
+
+/**
+ * A loan's or repayment's transaction (ADR-060) is changed from Loans, so the
+ * loan, what's owed and the money stay in step — no editing it here.
+ */
+function LoanOwnedDialog({ open, item, onClose }: { open: boolean; item: LedgerItem; onClose: () => void }) {
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={item.loanLink ?? "Loan"}
+      footer={
+        <FormFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Close
+          </Button>
+          <Button type="button" render={<Link href="/loans" />}>
+            Open Savings &amp; Loans
+          </Button>
+        </FormFooter>
+      }
+    >
+      <p className="text-sm text-muted-foreground">
+        {formatCOP(Math.abs(item.amount))} · {item.walletName ?? item.wallet}. This transaction belongs to a loan, so
+        it&apos;s changed or deleted from Savings &amp; Loans — that keeps the loan, what&apos;s owed and the balance
+        in step. It isn&apos;t counted as spending or income.
+      </p>
     </FormDialog>
   );
 }

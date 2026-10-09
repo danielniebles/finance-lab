@@ -82,6 +82,49 @@ function footerHint(error: string | null, pending: boolean, missing: string): Re
   return pending ? "" : missing;
 }
 
+type DeleteLoanOptions = { keepTransaction: boolean; deleteRepayments: boolean };
+
+/** "It was a mistake" undoes the loan: its transaction goes and the installments it paid go back to unpaid. */
+function MistakeField({
+  loan,
+  checked,
+  onChange,
+  disabled,
+}: {
+  loan: LoanWithRemaining;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled: boolean;
+}) {
+  const linked = loan.linkedTransaction;
+  const slots = loan.installmentSlots;
+  if (!linked && slots === 0) return null;
+  const undoes = [
+    linked ? <>deletes its transaction (<Money value={linked.amount} /> from {linked.wallet})</> : null,
+    slots > 0 ? `marks its ${slots} ${slots === 1 ? "installment" : "installments"} unpaid` : null,
+  ].filter(Boolean);
+  return (
+    <CheckField
+      id="delete-loan-mistake"
+      label="It was a mistake — undo it"
+      hint={
+        <>
+          {undoes.map((part, i) => (
+            <span key={i}>
+              {i === 0 ? "Also " : " and "}
+              {part}
+            </span>
+          ))}
+          . Uncheck it if the money really left and they just don&apos;t owe it anymore.
+        </>
+      }
+      checked={checked}
+      onChange={onChange}
+      disabled={disabled}
+    />
+  );
+}
+
 function DeleteLoanStep({
   open,
   onClose,
@@ -97,11 +140,11 @@ function DeleteLoanStep({
   debtorName?: string;
   pending: boolean;
   onCancel: () => void;
-  onConfirm: (opts: { keepTransaction: boolean }) => void;
+  onConfirm: (opts: DeleteLoanOptions) => void;
 }) {
   const n = loan.payments.length;
-  const linked = loan.linkedTransaction;
-  const [deleteTransaction, setDeleteTransaction] = useState(true);
+  const [mistake, setMistake] = useState(true);
+  const [deleteRepayments, setDeleteRepayments] = useState(false);
   return (
     <FormDialog
       open={open}
@@ -112,28 +155,28 @@ function DeleteLoanStep({
           <Button type="button" variant="outline" onClick={onCancel} autoFocus>
             Cancel
           </Button>
-          <Button type="button" variant="destructive" disabled={pending} onClick={() => onConfirm({ keepTransaction: !deleteTransaction })}>
+          <Button type="button" variant="destructive" disabled={pending} onClick={() => onConfirm({ keepTransaction: !mistake, deleteRepayments })}>
             Delete loan
           </Button>
         </FormFooter>
       }
     >
       <p className="text-sm text-muted-foreground">
-        <Money value={loan.amount} className="text-foreground" /> to {debtorName ?? "this person"}.{" "}
-        {n > 0 ? `Its ${n} ${n === 1 ? "payment is" : "payments are"} deleted too.` : "It has no payments."}
+        <Money value={loan.amount} className="text-foreground" /> to {debtorName ?? "this person"}.
       </p>
-      {linked && (
+      <MistakeField loan={loan} checked={mistake} onChange={setMistake} disabled={pending} />
+      {n > 0 && (
         <CheckField
-          id="delete-loan-transaction"
-          label="Also delete its transaction"
+          id="delete-loan-repayments"
+          label={`Also delete its ${n} ${n === 1 ? "repayment" : "repayments"}`}
           hint={
             <>
-              <Money value={linked.amount} /> from {linked.wallet}. Keep it if the money really left and this person
-              simply doesn&apos;t owe it anymore.
+              <Money value={loan.paid} /> received. Delete them only if that money never came in — otherwise it stays in
+              your balance.
             </>
           }
-          checked={deleteTransaction}
-          onChange={setDeleteTransaction}
+          checked={deleteRepayments}
+          onChange={setDeleteRepayments}
           disabled={pending}
         />
       )}
@@ -167,7 +210,7 @@ export function LoanForm({
     if (open) setConfirmingDelete(false);
   }
 
-  function handleDelete(opts: { keepTransaction: boolean }) {
+  function handleDelete(opts: DeleteLoanOptions) {
     if (!editing) return;
     startDelete(async () => {
       await deleteLoan(editing.id, opts);

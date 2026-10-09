@@ -42,6 +42,8 @@ const GROUPS: LedgerGroup[] = [
         source: "MONEYLOVER",
         tags: [],
         isTransfer: false,
+        loanLink: null,
+        paidSlots: 0,
       },
     ],
   },

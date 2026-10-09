@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { TransactionSource } from "@/generated/prisma";
 import { resolveWalletId, resolveWalletFields } from "@/lib/resolve-wallet";
 
-const PATHS = ["/expenses", "/overview", "/trends"] as const;
+const PATHS = ["/expenses", "/overview", "/trends", "/installments"] as const;
 
 function revalidateAll() {
   for (const path of PATHS) revalidatePath(path);
@@ -62,10 +62,19 @@ export async function createTransaction(data: {
  * transfer can't be left half-applied (money gone from one wallet, never
  * arrived in the other).
  */
-export async function deleteTransaction(id: string) {
+/**
+ * `unmarkSlots`: an own-installment "Pay all" transaction (ADR-060) — its
+ * slots go back to unpaid with it. Otherwise they stay paid, unlinked.
+ */
+export async function deleteTransaction(id: string, opts: { unmarkSlots?: boolean } = {}) {
   const existing = await db.transaction.findUnique({ where: { id }, select: { transferPairId: true } });
   if (existing?.transferPairId) {
     await db.transaction.deleteMany({ where: { transferPairId: existing.transferPairId } });
+  } else if (opts.unmarkSlots) {
+    await db.$transaction([
+      db.installmentPayment.deleteMany({ where: { transactionId: id } }),
+      db.transaction.delete({ where: { id } }),
+    ]);
   } else {
     await db.transaction.delete({ where: { id } });
   }

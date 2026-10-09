@@ -62,6 +62,8 @@ function makeItem(overrides: Partial<LedgerItem> = {}): LedgerItem {
     source: "MONEYLOVER",
     tags: [],
     isTransfer: false,
+    loanLink: null,
+    paidSlots: 0,
     ...overrides,
   };
 }
@@ -244,7 +246,7 @@ describe("TransactionRow — delete-confirm mode", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
 
-    expect(deleteTransactionMock).toHaveBeenCalledWith("txn-1");
+    expect(deleteTransactionMock).toHaveBeenCalledWith("txn-1", { unmarkSlots: false });
   });
 
   it("Escape cancels delete-confirm back to the default row", async () => {

@@ -136,12 +136,12 @@ describe("computeWalletBalancesForAccount — loans linked to a transaction (ADR
     id: "w1", name: "Savings", color: null, sortOrder: 0, isSavings: true, includeInAvailable: true,
     openingBalance: 1_000_000, openingDate: OPENING_DATE,
   };
-  const account = (transactionId: string | null) => ({
+  const account = (transactionId: string | null, paymentTransactionId: string | null = null) => ({
     savingsWalletId: "w1",
     wallets: [wallet],
     loansGiven: [{
       walletId: "w1", transactionId, amount: 300_000, date: OPENING_DATE,
-      payments: [{ date: OPENING_DATE, amount: 100_000 }],
+      payments: [{ date: OPENING_DATE, amount: 100_000, transactionId: paymentTransactionId }],
     }],
     vaultEntriesFunded: [], entries: [], transfersTo: [], transfersFrom: [],
   });
@@ -149,6 +149,12 @@ describe("computeWalletBalancesForAccount — loans linked to a transaction (ADR
   it("subtracts the money once — through the transaction, not the loan — and still adds repayments", () => {
     const txs = new Map([["w1", [{ date: OPENING_DATE, amount: -300_000 }]]]);
     const [w] = computeWalletBalancesForAccount(account("tx-1"), txs);
+    expect(w.balance).toBe(800_000);
+  });
+
+  it("a repayment with its own incoming transaction is added once — through that transaction", () => {
+    const txs = new Map([["w1", [{ date: OPENING_DATE, amount: -300_000 }, { date: OPENING_DATE, amount: 100_000 }]]]);
+    const [w] = computeWalletBalancesForAccount(account("tx-1", "tx-2"), txs);
     expect(w.balance).toBe(800_000);
   });
 
