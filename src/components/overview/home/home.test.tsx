@@ -6,7 +6,7 @@ import { render, screen } from "@testing-library/react";
 import type { AccountWithWallets, WalletBalance } from "@/lib/queries/wallets";
 import { allocationSlices, liquidityTone } from "./balance-card";
 import { WalletCard, walletHref, walletTiles } from "./wallets-strip";
-import { topSpending } from "./spending-panel";
+import { meterScale, topSpending } from "./spending-panel";
 
 function wallet(o: Partial<WalletBalance> = {}): WalletBalance {
   return { id: "w1", name: "Debit/daily", color: null, sortOrder: 0, isSavings: false, includeInAvailable: true, balance: 100, ...o };
@@ -79,5 +79,15 @@ describe("topSpending", () => {
     expect(top).toHaveLength(6);
     expect(top[0].id).toBe("c7");
     expect(top.some((r) => r.spent === 0)).toBe(false);
+  });
+});
+
+describe("meterScale", () => {
+  const base = { id: "c", name: "Bills", icon: null, color: null, spent: 500, percentUsed: null, severity: "OK" as const };
+  it("fills budgeted rows against their own budget", () => {
+    expect(meterScale({ ...base, budget: 400 }, 5000).max).toBe(400);
+  });
+  it("fills unbudgeted rows against the top spender", () => {
+    expect(meterScale({ ...base, budget: 0 }, 5000).max).toBe(5000);
   });
 });

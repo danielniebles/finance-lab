@@ -26,6 +26,12 @@ function statusLabel(row: SpendingRow): { tone: Tone; text: string } {
   return { tone: "neutral", text: `${Math.round(pct)}% of budget` };
 }
 
+/** Budgeted rows fill against their own budget (matching the label); unbudgeted ones against the top spender. */
+export function meterScale(row: SpendingRow, topSpent: number): { max: number; label: string } {
+  if (row.budget > 0) return { max: row.budget, label: `${row.name} budget used` };
+  return { max: topSpent, label: `${row.name} share of top spending` };
+}
+
 export function ledgerCategoryHref(name: string): string {
   return `/expenses?view=ledger&category=${encodeURIComponent(name)}`;
 }
@@ -34,6 +40,7 @@ function Row({ row, max }: { row: SpendingRow; max: number }) {
   const style = resolveEffectiveCategoryStyle(row.name, row.icon, row.color);
   const Icon = style.icon;
   const status = statusLabel(row);
+  const scale = meterScale(row, max);
   return (
     <li>
       <Link
@@ -48,7 +55,7 @@ function Row({ row, max }: { row: SpendingRow; max: number }) {
             <span className="truncate">{row.name}</span>
             <Money value={row.spent} />
           </span>
-          <Meter label={`${row.name} share of top spending`} value={row.spent} max={max} tone={status.tone === "neutral" ? "info" : status.tone} size="sm" />
+          <Meter label={scale.label} value={row.spent} max={scale.max} tone={status.tone === "neutral" ? "info" : status.tone} size="sm" />
           <span className={cn("text-xs", TONE_CLASSES[status.tone].text, status.tone === "neutral" && "text-muted-foreground")}>
             {status.text}
           </span>
