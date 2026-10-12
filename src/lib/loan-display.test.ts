@@ -66,14 +66,14 @@ describe("debtor helpers", () => {
     const c = debtor([loan({ remaining: 0, isActive: false })], "C");
     expect(sortDebtors([c, a, b]).map((d) => d.name)).toEqual(["B", "A", "C"]);
   });
-  it("sorts loans active-oldest first, then settled newest first", () => {
+  it("sorts loans active first, then settled, newest first in each", () => {
     const rows = sortLoans([
       loan({ id: "s-old", isActive: false, date: daysAgo(300) }),
       loan({ id: "a-new", date: daysAgo(5) }),
       loan({ id: "s-new", isActive: false, date: daysAgo(20) }),
       loan({ id: "a-old", date: daysAgo(100) }),
     ]);
-    expect(rows.map((l) => l.id)).toEqual(["a-old", "a-new", "s-new", "s-old"]);
+    expect(rows.map((l) => l.id)).toEqual(["a-new", "a-old", "s-new", "s-old"]);
   });
 });
 

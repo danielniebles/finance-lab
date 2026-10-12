@@ -65,12 +65,12 @@ export function sortDebtors(debtors: DebtorWithLoans[]): DebtorWithLoans[] {
   return [...debtors].sort((a, b) => b.totalOwed - a.totalOwed || a.name.localeCompare(b.name));
 }
 
-/** Loans in a debtor card: active first (oldest first), then settled (newest first). */
+/** Loans in a debtor card: active first, then settled; newest first within each. */
 export function sortLoans(loans: LoanWithRemaining[]): LoanWithRemaining[] {
   const time = (l: LoanWithRemaining) => new Date(l.date).getTime();
   return [...loans].sort((a, b) => {
     if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
-    return a.isActive ? time(a) - time(b) : time(b) - time(a);
+    return time(b) - time(a);
   });
 }
 
