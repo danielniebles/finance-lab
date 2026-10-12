@@ -108,7 +108,8 @@ export function FormDialog({
   description?: React.ReactNode;
   onSubmit?: (e: React.FormEvent<HTMLFormElement>) => void;
   footer?: React.ReactNode;
-  size?: "md" | "lg";
+  /** `xl`: room for a side-by-side preview from `md` up. */
+  size?: "md" | "lg" | "xl";
   children: React.ReactNode;
 }) {
   const sheetRef = useKeyboardAwareSheet(open);
@@ -131,7 +132,7 @@ export function FormDialog({
         ref={sheetRef}
         className={cn(
           "flex max-h-[min(92dvh,52rem)] flex-col gap-0 overflow-hidden rounded-2xl border border-border/60 bg-card p-0 ring-0",
-          size === "lg" ? "sm:max-w-xl" : "sm:max-w-md",
+          { md: "sm:max-w-md", lg: "sm:max-w-xl", xl: "sm:max-w-xl md:max-w-235" }[size],
           // Phones: bottom sheet, lifted above the keyboard (useKeyboardAwareSheet).
           "max-sm:top-auto max-sm:bottom-[var(--kb-inset,0px)] max-sm:left-0 max-sm:max-w-full max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0",
           "max-sm:max-h-[calc(var(--vv-height,100dvh)-1rem)] max-sm:transition-[bottom,max-height] max-sm:duration-150",

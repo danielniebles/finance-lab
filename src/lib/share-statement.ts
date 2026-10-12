@@ -96,15 +96,20 @@ const loanLabel = (notes: string | null) => notes?.split("\n")[0].trim() || "Pr�
 /**
  * What a debtor owes right now: each active loan (oldest first) with what's
  * left on it, the balance, and their last few payments as proof they counted.
+ * `loanIds` narrows it to some loans: the total becomes their subtotal and
+ * only their payments are listed.
  */
 export function debtorStatement(
   debtor: Pick<DebtorWithLoans, "loans" | "totalOwed">,
-  opts: { recipient: string; note: string; today?: Date },
+  opts: { recipient: string; note: string; today?: Date; loanIds?: ReadonlySet<string> },
 ): ShareStatement {
   const today = opts.today ?? new Date();
-  const active = debtor.loans
-    .filter((l) => l.isActive)
+  const all = debtor.loans.filter((l) => l.isActive);
+  const active = all
+    .filter((l) => !opts.loanIds || opts.loanIds.has(l.id))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const partial = active.length < all.length;
+  const picked = new Set(active.map((l) => l.id));
   const lines = active.map((l) => {
     const parts = [dateIn(storedDay(l.date), today)];
     if (l.paid > 0) parts.push(`abonado ${formatCOP(l.paid)} de ${formatCOP(l.amount)}`);
@@ -115,6 +120,7 @@ export function debtorStatement(
     return { label: loanLabel(l.notes), detail: parts.join(" · "), amount: l.remaining };
   });
   const payments = debtor.loans
+    .filter((l) => !partial || picked.has(l.id))
     .flatMap((l) => l.payments.map((p) => ({ date: storedDay(p.date), amount: p.amount, loan: loanLabel(l.notes) })))
     .sort((a, b) => b.date.getTime() - a.date.getTime())
     .slice(0, RECENT_PAYMENTS)
@@ -125,8 +131,8 @@ export function debtorStatement(
     subtitle: `Estado de cuenta al ${fullDate(today)}`,
     lines,
     linesHeading: "Préstamos activos",
-    totalLabel: "Saldo pendiente",
-    total: debtor.totalOwed,
+    totalLabel: partial ? "Subtotal" : "Saldo pendiente",
+    total: partial ? active.reduce((s, l) => s + l.remaining, 0) : debtor.totalOwed,
     extra: payments.length > 0 ? { heading: "Últimos abonos", lines: payments } : undefined,
     note: opts.note.trim(),
     issuedOn: fullDate(today),

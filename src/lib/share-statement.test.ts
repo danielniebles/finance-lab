@@ -81,9 +81,9 @@ function loan(over: Partial<LoanWithRemaining>): LoanWithRemaining {
 
 describe("debtorStatement", () => {
   const loans = [
-    loan({ notes: "Cuota 4/12 — Arriendo", amount: 300, remaining: 300, date: day(2026, 8, 10) }),
+    loan({ id: "rent", notes: "Cuota 4/12 — Arriendo", amount: 300, remaining: 300, date: day(2026, 8, 10) }),
     loan({
-      amount: 500, paid: 200, remaining: 300, date: day(2026, 7, 12), expectedBy: day(2026, 9, 30),
+      id: "cash", amount: 500, paid: 200, remaining: 300, date: day(2026, 7, 12), expectedBy: day(2026, 9, 30),
       payments: [
         { id: "p1", amount: 50, date: day(2026, 7, 20), notes: null },
         { id: "p2", amount: 100, date: day(2026, 9, 2), notes: null },
@@ -91,7 +91,7 @@ describe("debtorStatement", () => {
         { id: "p4", amount: 20, date: day(2026, 8, 15), notes: null },
       ],
     }),
-    loan({ notes: "Viejo", isActive: false, remaining: 0, paid: 100, date: day(2026, 0, 1), expectedBy: day(2026, 1, 1) }),
+    loan({ id: "old", notes: "Viejo", isActive: false, remaining: 0, paid: 100, date: day(2026, 0, 1), expectedBy: day(2026, 1, 1) }),
   ];
   const s = debtorStatement({ loans, totalOwed: 600 }, { recipient: "María", note: "", today });
 
@@ -122,6 +122,15 @@ describe("debtorStatement", () => {
   it("keeps the three most recent payments, newest first", () => {
     expect(s.extra?.heading).toBe("Últimos abonos");
     expect(s.extra?.lines.map((l) => l.label)).toEqual(["2 oct", "15 sep", "1 sep"]);
+  });
+
+  it("narrows to the chosen loans with a subtotal and their payments only", () => {
+    const ids = new Set(["rent"]);
+    const one = debtorStatement({ loans, totalOwed: 600 }, { recipient: "", note: "", today, loanIds: ids });
+    expect(one.lines.map((l) => l.label)).toEqual(["Cuota 4/12 — Arriendo"]);
+    expect(one.total).toBe(300);
+    expect(one.totalLabel).toBe("Subtotal");
+    expect(one.extra).toBeUndefined();
   });
 
   it("omits the payments section when there are none", () => {
