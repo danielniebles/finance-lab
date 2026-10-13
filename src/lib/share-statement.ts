@@ -62,7 +62,7 @@ export function installmentStatement(
 ): ShareStatement {
   const today = opts.today ?? new Date();
   const lines = items.map((d) => {
-    const due = dueText(opts.dueDayOf(d), opts.month, opts.year, today);
+    const due = dueText(opts.dueDayOf(d), d.overdueFrom?.month ?? opts.month, d.overdueFrom?.year ?? opts.year, today);
     const slot = `Cuota ${d.installmentNum} de ${d.installment.numInstallments}`;
     return { label: d.installment.description, detail: due ? `${slot} · ${due}` : slot, amount: d.amount };
   });

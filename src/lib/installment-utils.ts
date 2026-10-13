@@ -117,3 +117,32 @@ export function computeMonthSummary(
 
   return { totalObligation, totalPaid, totalDue, activeCount, totalRemainingDebt, dueThisMonth };
 }
+
+/**
+ * Unpaid slots due before (month, year), oldest first. They aren't part of
+ * that month's list (computeMonthSummary), so a slot nobody has paid yet —
+ * typically a debtor's — would otherwise drop out of sight once its month
+ * has passed.
+ */
+export function overdueSlots(month: number, year: number, installments: InstallmentRow[]): DueThisMonth[] {
+  const viewed = year * 12 + (month - 1);
+  const slots: DueThisMonth[] = [];
+  for (const inst of installments) {
+    for (let n = 1; n <= inst.numInstallments; n++) {
+      const d = new Date(inst.startDate);
+      d.setMonth(d.getMonth() + (n - 1));
+      const at = d.getFullYear() * 12 + d.getMonth();
+      if (at >= viewed) break;
+      if (inst.payments.some((p) => p.installmentNum === n)) continue;
+      slots.push({
+        installment: inst,
+        installmentNum: n,
+        amount: computeInstallmentDue(inst.totalAmount, inst.numInstallments, n, inst.monthlyInterestRate),
+        payment: null,
+        overdueFrom: { month: d.getMonth() + 1, year: d.getFullYear() },
+      });
+    }
+  }
+  const key = (s: DueThisMonth) => (s.overdueFrom ? s.overdueFrom.year * 12 + s.overdueFrom.month : 0);
+  return slots.sort((a, b) => key(a) - key(b));
+}

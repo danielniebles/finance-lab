@@ -13,7 +13,7 @@ import { DueThisMonthTable } from "./due-this-month-table";
 import { AllInstallmentsTable } from "./all-installments-table";
 import { CreditCardTile } from "./credit-card-tile";
 import { CreditCardManager } from "./credit-card-manager";
-import { computeMonthSummary } from "@/lib/installment-utils";
+import { computeMonthSummary, overdueSlots } from "@/lib/installment-utils";
 import type { InstallmentRow, MonthSummary, CreditCardSummary } from "@/lib/queries/installments";
 import type { WalletOption } from "@/components/shared/wallet-select";
 import type { CategoryOption } from "@/lib/queries/expenses";
@@ -48,6 +48,7 @@ export function InstallmentsDashboard({
   const [privacyMode, setPrivacyMode] = useState(false);
   const [cardManagerOpen, setCardManagerOpen] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [showOverdue, setShowOverdue] = useState(false);
 
   function handlePrivacyToggle() {
     setPrivacyMode((prev) => !prev);
@@ -72,6 +73,9 @@ export function InstallmentsDashboard({
         : summary,
     [selectedCardId, filteredInstallments, month, year, summary],
   );
+
+  const overdue = useMemo(() => overdueSlots(month, year, filteredInstallments), [month, year, filteredInstallments]);
+  const shownOverdue = showOverdue ? overdue : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -139,12 +143,22 @@ export function InstallmentsDashboard({
 
       {/* Due this month — unpaid first, paid folded away */}
       <section className="flex flex-col gap-3">
-        <SectionHeader title={`To pay this month · ${activeSummary.dueThisMonth.filter((d) => d.payment === null).length}`} />
-        {activeSummary.dueThisMonth.length === 0 ? (
+        <SectionHeader
+          title={`To pay this month · ${activeSummary.dueThisMonth.filter((d) => d.payment === null).length}`}
+          trailing={
+            overdue.length > 0 && (
+              <Button variant="outline" size="sm" aria-pressed={showOverdue} onClick={() => setShowOverdue((v) => !v)}>
+                {showOverdue ? "Hide earlier unpaid" : `Earlier unpaid · ${overdue.length}`}
+              </Button>
+            )
+          }
+        />
+        {activeSummary.dueThisMonth.length === 0 && shownOverdue.length === 0 ? (
           <p className="text-sm text-muted-foreground">No installments due this month.</p>
         ) : (
           <DueThisMonthTable
             dueThisMonth={activeSummary.dueThisMonth}
+            overdue={shownOverdue}
             totalObligation={activeSummary.totalObligation}
             cardDueDays={new Map(cards.map((c) => [c.id, c.paymentDueDay]))}
             month={month}

@@ -6,7 +6,7 @@ import { Money, StatusChip } from "@/components/ds";
 import { PayButton } from "./pay-button";
 import { PayAllButton } from "./pay-all-button";
 import { ShareSelectedButton } from "./share-selected-button";
-import { dueLabel, splitDues } from "@/lib/installment-display";
+import { slotChip, splitDues } from "@/lib/installment-display";
 import { cn } from "@/lib/utils";
 import type { WalletOption } from "@/components/shared/wallet-select";
 import type { CategoryOption } from "@/lib/queries/expenses";
@@ -14,6 +14,8 @@ import type { DueThisMonth } from "@/lib/queries/installments";
 
 type Props = {
   dueThisMonth: DueThisMonth[];
+  /** Unpaid slots from earlier months, listed above this month's when shown. */
+  overdue?: DueThisMonth[];
   totalObligation: number;
   /** cardId → payment due day, for each row's due chip. */
   cardDueDays: Map<string, number | null>;
@@ -99,7 +101,7 @@ function DueRow({
   onToggle: () => void;
 }) {
   const paid = due.payment !== null;
-  const chip = paid ? null : dueLabel(dueDay, month, year);
+  const chip = slotChip(due, dueDay, month, year);
   return (
     <li
       onClick={paid ? undefined : onToggle}
@@ -126,6 +128,7 @@ function DueRow({
 
 export function DueThisMonthTable({
   dueThisMonth,
+  overdue = [],
   totalObligation,
   cardDueDays,
   month,
@@ -151,7 +154,7 @@ export function DueThisMonthTable({
     });
   }
 
-  const selectedItems = dueThisMonth.filter((d) => selected.has(rowKey(d)));
+  const selectedItems = [...overdue, ...dueThisMonth].filter((d) => selected.has(rowKey(d)));
   const dueDayOf = (d: DueThisMonth) => (d.installment.cardId ? cardDueDays.get(d.installment.cardId) ?? null : null);
   const renderRow = (d: DueThisMonth) => (
     <DueRow
@@ -167,6 +170,12 @@ export function DueThisMonthTable({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border/60 bg-card">
+      {overdue.length > 0 && (
+        <>
+          <p className="border-b border-border/40 bg-muted/20 px-4 py-2 text-xs text-muted-foreground">Earlier months · {overdue.length}</p>
+          <ul className="border-b border-border/60">{overdue.map(renderRow)}</ul>
+        </>
+      )}
       {toPay.length > 0 ? (
         <ul>{toPay.map(renderRow)}</ul>
       ) : (

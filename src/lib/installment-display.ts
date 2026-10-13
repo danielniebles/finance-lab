@@ -33,6 +33,18 @@ export function dueLabel(dueDay: number | null, month: number, year: number, tod
   return { label: `Due ${plain}`, tone: "neutral" };
 }
 
+/** Chip for an unpaid slot from an earlier month: "Was due Sep 10" (with the year when it isn't the viewed one). */
+export function overdueLabel(from: { month: number; year: number }, dueDay: number | null, viewedYear: number): DueLabel {
+  const year = from.year === viewedYear ? "" : ` ${from.year}`;
+  return { label: `Was due ${MONTHS_SHORT[from.month - 1]}${dueDay === null ? "" : ` ${dueDay}`}${year}`, tone: "danger" };
+}
+
+/** A row's chip: none once paid, "Was due …" for an earlier month's slot, else this month's due label. */
+export function slotChip(due: DueThisMonth, dueDay: number | null, month: number, year: number, today?: Date): DueLabel | null {
+  if (due.payment !== null) return null;
+  return due.overdueFrom ? overdueLabel(due.overdueFrom, dueDay, year) : dueLabel(dueDay, month, year, today);
+}
+
 const unpaid = (d: DueThisMonth) => d.payment === null;
 
 /** Card chip: "Paid" once every slot due on it this month is paid, else its due label. */

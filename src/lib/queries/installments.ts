@@ -40,6 +40,8 @@ export type DueThisMonth = {
   installmentNum: number; // which payment number (1-based)
   amount: number;
   payment: { id: string; paidAt: Date } | null; // null = unpaid
+  /** Set on an unpaid slot from an earlier month shown alongside this one (overdueSlots). */
+  overdueFrom?: { month: number; year: number };
 };
 
 /** Returns the Date of the nth payment (1-based) for a given installment. */

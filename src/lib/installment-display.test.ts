@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CreditCardSummary, DueThisMonth, InstallmentRow } from "@/lib/queries/installments";
-import { cardStatus, dueLabel, installmentLoanNote, nextCardDue, payAllGroup, sortInstallments, splitDues } from "./installment-display";
+import { cardStatus, dueLabel, installmentLoanNote, overdueLabel, nextCardDue, payAllGroup, sortInstallments, splitDues } from "./installment-display";
 
 const today = new Date(2026, 9, 5); // 5 Oct 2026
 
@@ -95,5 +95,12 @@ describe("installmentLoanNote", () => {
         { installmentNum: 1, numInstallments: 6, description: "Tires" },
       ]),
     ).toBe("Cuota 3/12 — Phone, Cuota 1/6 — Tires");
+  });
+});
+
+describe("overdueLabel", () => {
+  it("names the missed month, with the year only when it differs", () => {
+    expect(overdueLabel({ month: 9, year: 2026 }, 10, 2026)).toEqual({ label: "Was due Sep 10", tone: "danger" });
+    expect(overdueLabel({ month: 12, year: 2025 }, null, 2026).label).toBe("Was due Dec 2025");
   });
 });
