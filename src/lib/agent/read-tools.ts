@@ -17,6 +17,9 @@ import { getRecurringExpenses } from "@/lib/queries/recurring";
 import { getForecast } from "@/lib/queries/forecast";
 import { listDriveFiles } from "@/lib/actions/drive";
 import { getCounterpartyRules } from "@/lib/queries/counterparty-rules";
+import { getWalletBalances } from "@/lib/queries/wallets";
+import { comparePeriodToDate } from "@/lib/queries/period-comparison";
+import { parseISODate } from "@/lib/form-format";
 
 export const READ_TOOLS = new Set([
   "get_overview",
@@ -33,6 +36,8 @@ export const READ_TOOLS = new Set([
   "get_categories",
   "list_drive_files",
   "get_counterparty_rules",
+  "get_wallet_balances",
+  "compare_period_to_date",
 ]);
 
 // ─── fetch helpers ─────────────────────────────────────────────────────────────
@@ -151,6 +156,31 @@ async function fetchTransactions(input: Record<string, unknown>): Promise<unknow
   };
 }
 
+// `asOf` is a calendar date: the balance at the END of that day, i.e. the
+// instant the next day starts. Omitted = now.
+async function fetchWalletBalances(input: Record<string, unknown>): Promise<unknown> {
+  if (input.asOf === undefined) return { asOf: null, ...(await getWalletBalances()) };
+  const day = parseISODate(String(input.asOf));
+  if (!day) return { error: `Invalid asOf "${String(input.asOf)}" — expected YYYY-MM-DD.` };
+  const endOfDay = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+  return { asOf: String(input.asOf), ...(await getWalletBalances(endOfDay)) };
+}
+
+function optionalInt(value: unknown): number | undefined {
+  const n = Number(value);
+  return value === undefined || value === null || !Number.isInteger(n) ? undefined : n;
+}
+
+function fetchPeriodComparison(input: Record<string, unknown>): Promise<unknown> {
+  const month = optionalInt(input.month);
+  return comparePeriodToDate({
+    month: month !== undefined && month >= 1 && month <= 12 ? month : undefined,
+    year: optionalInt(input.year),
+    day: optionalInt(input.day),
+    wallet: typeof input.wallet === "string" && input.wallet.trim() ? input.wallet : undefined,
+  });
+}
+
 // ─── Registry ──────────────────────────────────────────────────────────────────
 
 type ReadToolHandler = (input: Record<string, unknown>) => Promise<unknown>;
@@ -170,6 +200,8 @@ const READ_TOOL_HANDLERS: Record<string, ReadToolHandler> = {
   get_categories: () => getCategories(),
   list_drive_files: () => listDriveFiles(),
   get_counterparty_rules: () => getCounterpartyRules(),
+  get_wallet_balances: (input) => fetchWalletBalances(input),
+  compare_period_to_date: (input) => fetchPeriodComparison(input),
 };
 
 export async function runReadTool(

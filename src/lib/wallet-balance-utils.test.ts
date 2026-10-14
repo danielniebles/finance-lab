@@ -8,6 +8,7 @@ import {
   computeWalletBalance,
   computeWalletBalancesForAccount,
   groupByWalletId,
+  walletExistedAt,
   type WalletBalanceInputs,
 } from "./wallet-balance-utils";
 
@@ -161,5 +162,34 @@ describe("computeWalletBalancesForAccount — loans linked to a transaction (ADR
   it("a legacy loan (no transaction) still subtracts on its own", () => {
     const [w] = computeWalletBalancesForAccount(account(null), new Map());
     expect(w.balance).toBe(800_000);
+  });
+});
+
+describe("computeWalletBalance — asOf (historical balance)", () => {
+  const before = new Date("2026-08-01T00:00:00Z");
+  const after = new Date("2026-09-01T00:00:00Z");
+  const asOf = new Date("2026-08-15T00:00:00Z");
+
+  it("counts only flows strictly before asOf, across every flow kind", () => {
+    const balance = computeWalletBalance(
+      emptyInputs({
+        openingBalance: 1_000_000,
+        transactions: [{ date: before, amount: -100_000 }, { date: after, amount: -400_000 }],
+        loansGiven: [{ date: after, amount: 200_000 }],
+        accountEntries: [{ date: asOf, amount: 50_000 }], // exactly asOf: excluded
+      }),
+      asOf,
+    );
+    expect(balance).toBe(900_000);
+  });
+
+  it("omitting asOf keeps every flow (the balance now)", () => {
+    const inputs = emptyInputs({ transactions: [{ date: after, amount: -400_000 }] });
+    expect(computeWalletBalance(inputs)).toBe(-400_000);
+  });
+
+  it("walletExistedAt is false for a wallet whose epoch starts on/after asOf", () => {
+    expect(walletExistedAt({ openingDate: OPENING_DATE }, asOf)).toBe(true);
+    expect(walletExistedAt({ openingDate: asOf }, asOf)).toBe(false);
   });
 });

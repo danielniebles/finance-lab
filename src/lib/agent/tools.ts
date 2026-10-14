@@ -108,6 +108,36 @@ export const TOOLS: Anthropic.Tool[] = [
       "Get all counterparty rules (dictionary mapping a known account/merchant/sender to a category + wallet). Call this before proposing an update/delete to resolve a rule's id, or to check for an existing rule before creating a new one.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
+  {
+    name: "get_wallet_balances",
+    description:
+      "Get every account's per-wallet balances and the Overview grand total, now or as of the END of a past date. Use asOf for questions like \"how much did I have on Sep 14\". Wallets that didn't exist yet on that date are left out.",
+    input_schema: {
+      type: "object",
+      properties: {
+        asOf: { type: "string", description: "Optional YYYY-MM-DD; omit for current balances" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "compare_period_to_date",
+    description:
+      "Compare the first N days of a financial month against the SAME first N days of the previous one (never a partial month against a whole month). Returns income/spend totals, per-category spend with delta (positive = spent more now) and a 3-month baseline average. With `wallet`, everything is scoped to that wallet and also returns its start/end balances for both windows plus a decomposition of the balance difference (carryover, incomeDelta, spendDelta, transfersDelta, otherFlowsDelta). Use for \"how am I doing vs this point last month\" questions; prefer a per-wallet comparison (e.g. the daily-spending wallet) so a one-off income or transfer on another wallet doesn't distort it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        wallet: { type: "string", description: "Optional wallet name (e.g. \"debit/daily\"); omit for all wallets" },
+        day: {
+          type: "number",
+          description: "Optional day of the financial period (1–31). Defaults to today's day of the current period, or the whole period for a past month",
+        },
+        month: { type: "number", description: "Optional financial month (1–12); defaults to the current one" },
+        year: { type: "number", description: "Optional 4-digit year; defaults to the current one" },
+      },
+      required: [],
+    },
+  },
 
   // ── Proposal tools ──
   {

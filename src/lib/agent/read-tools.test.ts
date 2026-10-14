@@ -19,12 +19,22 @@ vi.mock("@/lib/queries/installments", () => ({
   getMonthSummary: vi.fn().mockResolvedValue({ totalObligation: 0 }),
 }));
 
+vi.mock("@/lib/queries/wallets", () => ({
+  getWalletBalances: vi.fn().mockResolvedValue({ accounts: [], grandTotal: 0 }),
+}));
+
+vi.mock("@/lib/queries/period-comparison", () => ({
+  comparePeriodToDate: vi.fn().mockResolvedValue({}),
+}));
+
 // Pulled in by read-tools.ts's registry but irrelevant here; mocked so import
 // never reaches Google/Prisma-heavy modules.
 vi.mock("@/lib/actions/drive", () => ({ listDriveFiles: vi.fn() }));
 
 import { db } from "@/lib/db";
 import { getMonthSummary } from "@/lib/queries/installments";
+import { getWalletBalances } from "@/lib/queries/wallets";
+import { comparePeriodToDate } from "@/lib/queries/period-comparison";
 import { runReadTool } from "./read-tools";
 
 const dbMock = db as unknown as {
@@ -179,5 +189,34 @@ describe("get_installments", () => {
     await runReadTool("get_installments", {});
 
     expect(getMonthSummary).toHaveBeenCalledWith(1, 2027);
+  });
+});
+
+describe("get_wallet_balances", () => {
+  it("asOf is the END of that local day — the cutoff is the next midnight", async () => {
+    await runReadTool("get_wallet_balances", { asOf: "2026-09-14" });
+
+    expect(getWalletBalances).toHaveBeenCalledWith(new Date(2026, 8, 15));
+  });
+
+  it("no asOf → current balances", async () => {
+    await runReadTool("get_wallet_balances", {});
+
+    expect(getWalletBalances).toHaveBeenCalledWith();
+  });
+
+  it("rejects a malformed date instead of guessing", async () => {
+    const result = await runReadTool("get_wallet_balances", { asOf: "14/09/2026" });
+
+    expect(result).toEqual({ error: expect.stringContaining("YYYY-MM-DD") });
+    expect(getWalletBalances).not.toHaveBeenCalled();
+  });
+});
+
+describe("compare_period_to_date", () => {
+  it("passes valid fields through and drops invalid ones", async () => {
+    await runReadTool("compare_period_to_date", { wallet: "debit/daily", day: 20, month: 13, year: "x" });
+
+    expect(comparePeriodToDate).toHaveBeenCalledWith({ wallet: "debit/daily", day: 20, month: undefined, year: undefined });
   });
 });

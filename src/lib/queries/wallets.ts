@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { computeWalletBalancesForAccount, groupByWalletId } from "@/lib/wallet-balance-utils";
+import { computeWalletBalancesForAccount, groupByWalletId, walletExistedAt } from "@/lib/wallet-balance-utils";
 
 export type WalletBalance = {
   id: string;
@@ -29,15 +29,8 @@ export type WalletBalancesResult = {
   grandTotal: number; // Σ wallet.balance for accounts with includeInOverviewTotal (Home number)
 };
 
-/**
- * Per-wallet balances + a grand total across every institution (ADR-036/037,
- * HANDOFF §3). This is the Home/Overview number — every partition of an
- * included account counts, grand total = the user's chosen subset of the
- * real bank balance (SavingsAccount.includeInOverviewTotal). Contrast with
- * `getLoansOverview` (`queries/loans.ts`), which reports only the
- * `isSavings` subset gated by the separate Wallet.includeInAvailable flag.
- */
-export async function getWalletBalances(): Promise<WalletBalancesResult> {
+/** Loads the rows `buildWalletBalances` needs — load once for several cutoffs. */
+export async function loadWalletBalanceSources() {
   const [accounts, walletTransactions] = await Promise.all([
     db.savingsAccount.findMany({
       include: {
@@ -55,12 +48,25 @@ export async function getWalletBalances(): Promise<WalletBalancesResult> {
       select: { walletId: true, date: true, amount: true },
     }),
   ]);
+  return { accounts, transactionsByWallet: groupByWalletId(walletTransactions) };
+}
 
-  const transactionsByWallet = groupByWalletId(walletTransactions);
+export type WalletBalanceSources = Awaited<ReturnType<typeof loadWalletBalanceSources>>;
 
+/**
+ * Pure assembly of `getWalletBalances`' result from already-loaded rows, so a
+ * caller needing balances at several cutoffs loads once. With `asOf`
+ * (exclusive) every balance is the one at the start of that instant, and
+ * wallets whose balance epoch hadn't started yet are left out.
+ */
+export function buildWalletBalances(
+  { accounts, transactionsByWallet }: WalletBalanceSources,
+  asOf?: Date,
+): WalletBalancesResult {
   const accountsWithWallets: AccountWithWallets[] = accounts.map((acc) => {
-    const wallets: WalletBalance[] = computeWalletBalancesForAccount(acc, transactionsByWallet).map(
-      (w) => ({
+    const wallets: WalletBalance[] = computeWalletBalancesForAccount(acc, transactionsByWallet, asOf)
+      .filter((w) => !asOf || walletExistedAt(w, asOf))
+      .map((w) => ({
         id: w.id,
         name: w.name,
         color: w.color,
@@ -68,8 +74,7 @@ export async function getWalletBalances(): Promise<WalletBalancesResult> {
         isSavings: w.isSavings,
         includeInAvailable: w.includeInAvailable,
         balance: w.balance,
-      }),
-    );
+      }));
 
     return {
       id: acc.id,
@@ -89,6 +94,18 @@ export async function getWalletBalances(): Promise<WalletBalancesResult> {
   return { accounts: accountsWithWallets, grandTotal };
 }
 
+/**
+ * Per-wallet balances + a grand total across every institution (ADR-036/037,
+ * HANDOFF §3). This is the Home/Overview number — every partition of an
+ * included account counts, grand total = the user's chosen subset of the
+ * real bank balance (SavingsAccount.includeInOverviewTotal). Contrast with
+ * `getLoansOverview` (`queries/loans.ts`), which reports only the
+ * `isSavings` subset gated by the separate Wallet.includeInAvailable flag.
+ * `asOf` (exclusive) gives the historical balances at that instant.
+ */
+export async function getWalletBalances(asOf?: Date): Promise<WalletBalancesResult> {
+  return buildWalletBalances(await loadWalletBalanceSources(), asOf);
+}
 
 /**
  * Cheap `{id, name}` pairs for every wallet, for a plain dropdown (e.g. the

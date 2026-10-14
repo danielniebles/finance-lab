@@ -13,9 +13,11 @@
 
 export type DatedFlow = { date: Date; amount: number };
 
-function sumSince(flows: DatedFlow[], openingDate: Date): number {
+// `asOf` (exclusive) cuts the flows off for a historical balance: the balance
+// at the start of `asOf`. Omitted = every flow, i.e. the balance now.
+function sumSince(flows: DatedFlow[], openingDate: Date, asOf?: Date): number {
   return flows
-    .filter((f) => f.date >= openingDate)
+    .filter((f) => f.date >= openingDate && (!asOf || f.date < asOf))
     .reduce((sum, f) => sum + f.amount, 0);
 }
 
@@ -43,18 +45,29 @@ export type WalletBalanceInputs = {
   transfersOut: DatedFlow[];
 };
 
-export function computeWalletBalance(inputs: WalletBalanceInputs): number {
+/**
+ * `asOf` (exclusive) returns the balance at the start of that instant. A
+ * wallet opened on/after `asOf` has no known balance then — callers check
+ * `openingDate < asOf` first (see `walletExistedAt`).
+ */
+export function computeWalletBalance(inputs: WalletBalanceInputs, asOf?: Date): number {
   const { openingBalance, openingDate } = inputs;
+  const sum = (flows: DatedFlow[]) => sumSince(flows, openingDate, asOf);
   return (
     openingBalance +
-    sumSince(inputs.transactions, openingDate) -
-    sumSince(inputs.loansGiven, openingDate) +
-    sumSince(inputs.loanPayments, openingDate) -
-    sumSince(inputs.vaultFunded, openingDate) +
-    sumSince(inputs.accountEntries, openingDate) +
-    sumSince(inputs.transfersIn, openingDate) -
-    sumSince(inputs.transfersOut, openingDate)
+    sum(inputs.transactions) -
+    sum(inputs.loansGiven) +
+    sum(inputs.loanPayments) -
+    sum(inputs.vaultFunded) +
+    sum(inputs.accountEntries) +
+    sum(inputs.transfersIn) -
+    sum(inputs.transfersOut)
   );
+}
+
+/** False when the wallet's balance epoch starts after `asOf` — no balance existed yet. */
+export function walletExistedAt(wallet: { openingDate: Date }, asOf: Date): boolean {
+  return wallet.openingDate < asOf;
 }
 
 /**
@@ -138,6 +151,7 @@ export type WalletBalanceResult = WalletForBalance & { balance: number };
 export function computeWalletBalancesForAccount(
   account: AccountForWalletBalances,
   transactionsByWallet: Map<string, DatedFlow[]>,
+  asOf?: Date,
 ): WalletBalanceResult[] {
   return account.wallets.map((w) => {
     const isSavingsWallet = w.id === account.savingsWalletId;
@@ -153,7 +167,7 @@ export function computeWalletBalancesForAccount(
       accountEntries: isSavingsWallet ? account.entries : [],
       transfersIn: isSavingsWallet ? account.transfersTo : [],
       transfersOut: isSavingsWallet ? account.transfersFrom : [],
-    });
+    }, asOf);
     return { ...w, balance };
   });
 }
