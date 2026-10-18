@@ -16,7 +16,8 @@ export type CategoryTransaction = {
 export async function getCategoryTransactions(
   appCategoryId: string,
   month: number,
-  year: number
+  year: number,
+  walletId?: string
 ): Promise<CategoryTransaction[]> {
   const startDay = parseInt(process.env.FINANCIAL_MONTH_START_DAY ?? "1", 10);
   const { start, end } = getFinancialPeriodBounds(month, year, startDay);
@@ -26,6 +27,8 @@ export async function getCategoryTransactions(
   const transactions = await db.transaction.findMany({
     where: {
       date: { gte: start, lt: end },
+      // Same wallet scope as getMonthlyAnalysis, so the list matches the row's Spent.
+      ...(walletId ? { walletId } : {}),
       OR: [
         { appCategoryId },
         { moneyLoverCategory: { mapping: { appCategoryId } } },

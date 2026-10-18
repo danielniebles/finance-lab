@@ -24,10 +24,12 @@ type Props = {
   categoryBreakdown: CategoryRow[];
   month: number;
   year: number;
+  /** The analysed wallet; undefined = all wallets. */
+  walletId?: string;
   titleSuffix?: string;
 };
 
-export function CategoryBreakdownTable({ categoryBreakdown, month, year, titleSuffix }: Props) {
+export function CategoryBreakdownTable({ categoryBreakdown, month, year, walletId, titleSuffix }: Props) {
   const [open, setOpen] = useState(false);
   const [selectedName, setSelectedName] = useState("");
   const [transactions, setTransactions] = useState<CategoryTransaction[]>([]);
@@ -38,7 +40,7 @@ export function CategoryBreakdownTable({ categoryBreakdown, month, year, titleSu
     setTransactions([]);
     setOpen(true);
     startTransition(async () => {
-      const txns = await getCategoryTransactions(row.id, month, year);
+      const txns = await getCategoryTransactions(row.id, month, year, walletId);
       setTransactions(txns);
     });
   }
@@ -230,11 +232,13 @@ function CategoryTransactionsDialog({
 }
 
 // One markup for every width: note on top with date · wallet under it on
-// phones; from sm up the date and wallet move into their own columns.
+// phones; from sm up the date and wallet move into their own columns. The
+// amount column is fixed-width: each row is its own grid, so `auto` let the
+// wallet column shift with every amount's width.
 function CategoryTransactionRow({ transaction: t }: { transaction: CategoryTransaction }) {
   const date = formatDateLabel(dateInputValue(new Date(t.date)));
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0.5 px-5 py-2.5 sm:grid-cols-[6.5rem_minmax(0,1fr)_8rem_auto]">
+    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0.5 px-5 py-2.5 sm:grid-cols-[6.5rem_minmax(0,1fr)_8rem_7rem]">
       <span className="hidden text-xs text-muted-foreground sm:block">{date}</span>
       <span className="min-w-0 truncate text-sm">{noteOrTagsLabel(t.note, t.tags)}</span>
       <span className="hidden truncate text-xs text-muted-foreground sm:block">{t.wallet}</span>

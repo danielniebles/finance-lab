@@ -99,6 +99,7 @@ function CategorySection({ rows, month, year, walletId, groupFilter }: UrlProps 
         categoryBreakdown={filterByGroup(rows, groupFilter)}
         month={month}
         year={year}
+        walletId={walletId}
         titleSuffix={groupFilter === "FIXED" ? "Fixed" : groupFilter === "VARIABLE" ? "Variable" : undefined}
       />
     </div>
