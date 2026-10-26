@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { PROPOSAL_ACTIONS } from "@/lib/agent/actions";
 import { DEFAULT_APPROVE_MESSAGE } from "@/lib/agent/types";
 import { looksLikeRealAccountNumber } from "@/lib/normalize-match-value";
+import { matchCounterpartyRule } from "@/lib/queries/counterparty-rules";
 
 export type ProposalDecision = {
   proposalId: string;
@@ -73,6 +74,10 @@ async function buildLearnRuleNudge(
   }
   const matched = COUNTERPARTY_FIELDS.find(({ param }) => params[param]);
   if (!matched) return undefined;
+  // hadCounterpartyMatch was decided when the card was drafted. A rule may
+  // have been created since, or matching may have loosened (ADR-061), so
+  // look again before offering a rule that would only duplicate one.
+  if (await ruleNowMatches(params)) return undefined;
   const counterparty = params[matched.param] as string;
   // Mirrors proposals/transactions.ts's lookupRuleFromInput reclassification:
   // a counterpartyAccount value with no digits at all is a named-recipient
@@ -95,6 +100,25 @@ async function buildLearnRuleNudge(
     wallet: params.wallet as string | undefined,
     tagNames: (params.tagNames as string[] | undefined) ?? [],
   });
+}
+
+/**
+ * True when an existing rule matches this transaction's counterparty today.
+ * Same candidates as proposals/transactions.ts's lookupRuleFromInput: a
+ * counterpartyAccount with no digits is looked up as a merchant.
+ */
+async function ruleNowMatches(params: Record<string, unknown>): Promise<boolean> {
+  const rawAccount = params.counterpartyAccount as string | null | undefined;
+  const isRealAccount = rawAccount ? looksLikeRealAccountNumber(rawAccount) : false;
+  const rule = await matchCounterpartyRule({
+    account: isRealAccount ? (rawAccount ?? undefined) : undefined,
+    merchant:
+      (params.counterpartyMerchant as string | null | undefined) ??
+      (rawAccount && !isRealAccount ? rawAccount : undefined),
+    sender: (params.counterpartySender as string | null | undefined) ?? undefined,
+    direction: Number(params.amount) > 0 ? "INCOME" : "EXPENSE",
+  });
+  return rule != null;
 }
 
 type LearnRuleNudgeParts = {

@@ -14,6 +14,9 @@ vi.mock("@/lib/db", () => ({
     appCategory: { findUnique: vi.fn().mockResolvedValue({ name: "Groceries" }) },
   },
 }));
+vi.mock("@/lib/queries/counterparty-rules", () => ({
+  matchCounterpartyRule: vi.fn().mockResolvedValue(null),
+}));
 const executeMock = vi.fn().mockResolvedValue(undefined);
 const batchExecuteMock = vi.fn();
 vi.mock("@/lib/agent/actions", () => ({
@@ -24,6 +27,7 @@ vi.mock("@/lib/agent/actions", () => ({
 }));
 
 import { db } from "@/lib/db";
+import { matchCounterpartyRule } from "@/lib/queries/counterparty-rules";
 import { resolveProposal } from "./execute-proposal";
 
 function makeProposal(overrides?: Record<string, unknown>) {
@@ -79,6 +83,33 @@ describe("resolveProposal — learn-from-correction nudge", () => {
     expect(result.learnRuleNudge).toContain("MERCHANT");
     expect(result.learnRuleNudge).not.toContain("ACCOUNT");
     expect(result.learnRuleNudge).toContain("MARIA NELLY CORRAI ES OSORIO");
+  });
+
+  it("does not offer a nudge when a rule matches now, though none did when the card was drafted", async () => {
+    vi.mocked(matchCounterpartyRule).mockResolvedValueOnce({ id: "rule-uber" } as never);
+    vi.mocked(db.pendingProposal.findUnique).mockResolvedValue(
+      makeProposal({
+        params: {
+          amount: -6_953,
+          appCategoryId: "cat-1",
+          wallet: "debit/daily",
+          hadCounterpartyMatch: false,
+          counterpartyMerchant: "UBER RIDES",
+        },
+      }) as never,
+    );
+
+    const result = await resolveProposal({ proposalId: "prop-1", choiceId: "approve" });
+
+    expect(matchCounterpartyRule).toHaveBeenCalledWith({
+      account: undefined,
+      merchant: "UBER RIDES",
+      sender: undefined,
+      direction: "EXPENSE",
+    });
+    expect(result.ok).toBe(true);
+    expect(result.learnRuleNudge).toBeUndefined();
+    expect(result.learnRuleOffer).toBeUndefined();
   });
 
   it("does not offer a nudge when a rule DID match (hadCounterpartyMatch: true)", async () => {
