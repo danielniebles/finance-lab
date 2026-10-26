@@ -587,3 +587,11 @@ Two supporting changes. `tool_choice: {type:"any"}` on the **first** model call 
 - When the model's category name names no real category, the transaction (single or batch row) takes the category the user most often gave past transactions whose note names the same counterparty (`lib/category-history.ts`, last 200 matching rows, transfers excluded, ties to the most recent). Only with no history does it fall back to the first category alphabetically. Priority: rule → tag default → model guess → history → alphabetical.
 
 **Why:** Two Uber charges arrived as "UBER RIDES" while the rules said "UBER*RIDES"/"UBERRIDES"; exact matching missed them and the model's guess named no category, so both landed in Bills & Utilities, the first alphabetically, though every past Uber ride was in Going Out.
+
+---
+
+## ADR-062 — A rule's wallet label names the wallet it routes to
+
+**Decision:** A CounterpartyRule routes by `walletId`; its `wallet` text is only a label. Readers now get the linked Wallet's name (`getCounterpartyRules` / `matchCounterpartyRule` return `walletRef.name`, falling back to the label when unlinked), so Settings → Rules "Routes to", the Advisor and the auto-record notice show the real wallet. Creating or updating a rule from a label alone (the Advisor's case) rewrites the label to the resolved Wallet's name, and migration `20261026120000_rule_wallet_labels` backfills existing rules.
+
+**Why:** Rules showed "Bancolombia" (created before wallets existed), "Débito *4941" (the Advisor copied the bank message's account) or "—", though all of them routed to debit/daily.

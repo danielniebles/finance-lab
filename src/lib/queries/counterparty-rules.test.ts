@@ -74,6 +74,18 @@ describe("getCounterpartyRules", () => {
     expect(rows[0]).not.toHaveProperty("tags");
   });
 
+  it("reports the linked wallet's name instead of the saved label", async () => {
+    dbMock.counterpartyRule.findMany.mockResolvedValue([
+      { ...ACCOUNT_RULE, wallet: "Débito *4941", walletId: "wlt-1", walletRef: { name: "debit/daily" } },
+      { ...ACCOUNT_RULE, id: "unlinked", wallet: "Bancolombia", walletId: null, walletRef: null },
+    ]);
+
+    const rows = await getCounterpartyRules();
+
+    expect(rows.map((r) => r.wallet)).toEqual(["debit/daily", "Bancolombia"]);
+    expect(rows[0]).not.toHaveProperty("walletRef");
+  });
+
   it("returns an empty array when there are no rules", async () => {
     dbMock.counterpartyRule.findMany.mockResolvedValue([]);
 

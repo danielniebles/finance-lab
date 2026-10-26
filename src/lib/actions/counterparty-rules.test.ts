@@ -149,6 +149,25 @@ describe("createCounterpartyRule", () => {
     });
   });
 
+  it("rewrites a resolved free-text label to the wallet's own name", async () => {
+    dbMock.counterpartyRule.create.mockResolvedValue({ id: "rule-1" });
+    vi.mocked(db.savingsAccount.findMany).mockResolvedValueOnce([
+      { name: "Bancolombia", defaultWalletId: "wlt-daily" },
+    ] as never);
+    dbMock.wallet.findUniqueOrThrow.mockResolvedValueOnce({ name: "debit/daily" });
+
+    await createCounterpartyRule({
+      matchType: "MERCHANT",
+      matchValue: "UBER RIDES",
+      appCategoryId: "cat-1",
+      wallet: "Débito *4941",
+    });
+
+    expect(dbMock.counterpartyRule.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ wallet: "debit/daily", walletId: "wlt-daily" }),
+    });
+  });
+
   it("connects/creates normalized tags without a `set` (nothing to clear yet)", async () => {
     dbMock.counterpartyRule.create.mockResolvedValue({ id: "rule-1" });
 

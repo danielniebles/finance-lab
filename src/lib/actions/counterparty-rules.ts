@@ -26,6 +26,20 @@ function tagsConnectOrCreate(tagNames: string[] | undefined, replace: boolean) {
 }
 
 /**
+ * Wallet fields for a rule. A rule given only a label ("Débito *4941", the
+ * Advisor's case) still resolves to a Wallet; its `wallet` label is then
+ * rewritten to that Wallet's name, so the stored label always names the
+ * wallet the rule really routes to (ADR-062).
+ */
+async function ruleWalletFields(data: { wallet: string; walletId?: string }) {
+  const fields = await resolveWalletFields({ wallet: data.wallet, walletId: data.walletId });
+  if (fields.walletId && !fields.wallet) {
+    return resolveWalletFields({ walletId: fields.walletId });
+  }
+  return fields;
+}
+
+/**
  * Both `wallet` (required legacy label) and `walletId` (optional curated
  * Wallet.id, ADR-036/037-style upgrade mirroring Transaction) are accepted.
  * `resolveWalletFields` resolves them together: a supplied `walletId` wins
@@ -48,7 +62,7 @@ export async function createCounterpartyRule(data: {
   notes?: string | null;
   tagNames?: string[];
 }) {
-  const walletFields = await resolveWalletFields({ wallet: data.wallet, walletId: data.walletId });
+  const walletFields = await ruleWalletFields(data);
   const tags = tagsConnectOrCreate(data.tagNames, false);
   const created = await db.counterpartyRule.create({
     data: {
@@ -85,7 +99,7 @@ export async function updateCounterpartyRule(
     tagNames?: string[];
   },
 ) {
-  const walletFields = await resolveWalletFields({ wallet: data.wallet, walletId: data.walletId });
+  const walletFields = await ruleWalletFields(data);
   const tags = tagsConnectOrCreate(data.tagNames, true);
   const updated = await db.counterpartyRule.update({
     where: { id },

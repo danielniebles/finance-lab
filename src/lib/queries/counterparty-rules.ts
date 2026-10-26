@@ -6,6 +6,14 @@ import {
   normalizeMatchValue,
 } from "@/lib/normalize-match-value";
 
+const RULE_INCLUDE = {
+  appCategory: true,
+  tags: true,
+  walletRef: { select: { name: true } },
+} satisfies Prisma.CounterpartyRuleInclude;
+
+type RuleWithRelations = Prisma.CounterpartyRuleGetPayload<{ include: typeof RULE_INCLUDE }>;
+
 export type CounterpartyRuleRow = {
   id: string;
   matchType: RuleMatchType;
@@ -40,7 +48,7 @@ export type CounterpartyRuleRow = {
  */
 export async function getCounterpartyRules(): Promise<CounterpartyRuleRow[]> {
   const rules = await db.counterpartyRule.findMany({
-    include: { appCategory: true, tags: true },
+    include: RULE_INCLUDE,
     orderBy: [{ matchType: "asc" }, { matchValue: "asc" }],
   });
 
@@ -70,10 +78,6 @@ function directionMatches(ruleDirection: RuleDirection, direction: "EXPENSE" | "
   return ruleDirection === "ANY" || ruleDirection === direction;
 }
 
-type RuleWithRelations = Prisma.CounterpartyRuleGetPayload<{
-  include: { appCategory: true; tags: true };
-}>;
-
 function toRuleRow(rule: RuleWithRelations): CounterpartyRuleRow {
   return {
     id: rule.id,
@@ -82,7 +86,10 @@ function toRuleRow(rule: RuleWithRelations): CounterpartyRuleRow {
     direction: rule.direction,
     appCategoryId: rule.appCategoryId,
     appCategoryName: rule.appCategory.name,
-    wallet: rule.wallet,
+    // The linked Wallet's name, not the free-text label saved with the rule
+    // (older rules hold "Bancolombia" or the message's "Débito *4941"), so
+    // every reader shows where the rule really routes (ADR-062).
+    wallet: rule.walletRef?.name ?? rule.wallet,
     walletId: rule.walletId,
     autoRecord: rule.autoRecord,
     recurring: rule.recurring,
@@ -126,7 +133,7 @@ async function findRule(
     if (!normalized) return null;
     const rule = await db.counterpartyRule.findFirst({
       where: { matchType, matchValue: normalized },
-      include: { appCategory: true, tags: true },
+      include: RULE_INCLUDE,
     });
     return rule && directionMatches(rule.direction, direction) ? rule : null;
   }
@@ -137,7 +144,7 @@ async function findRule(
   if (!candidateKey) return null;
   const rules = await db.counterpartyRule.findMany({
     where: { matchType },
-    include: { appCategory: true, tags: true },
+    include: RULE_INCLUDE,
     orderBy: { createdAt: "asc" },
   });
   const eligible = rules.filter((r) => directionMatches(r.direction, direction));
