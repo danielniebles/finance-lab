@@ -132,8 +132,12 @@ function PopupSelect({
         )}
         {options.map((o) => (
           <SelectItem key={o.value} value={o.value} className="py-1.5">
-            {o.leading}
-            {o.label}
+            {/* The item's text slot is a flex row without vertical centering,
+                which pins a colour dot to the top of the line. */}
+            <span className="flex min-w-0 items-center gap-2">
+              {o.leading}
+              {o.label}
+            </span>
           </SelectItem>
         ))}
       </SelectContent>
