@@ -1,6 +1,10 @@
 import { db } from "@/lib/db";
-import type { RuleMatchType, RuleDirection } from "@/generated/prisma";
-import { normalizeMatchValue } from "@/lib/normalize-match-value";
+import type { Prisma, RuleMatchType, RuleDirection } from "@/generated/prisma";
+import {
+  counterpartyKeyMatches,
+  counterpartyMatchKey,
+  normalizeMatchValue,
+} from "@/lib/normalize-match-value";
 
 export type CounterpartyRuleRow = {
   id: string;
@@ -40,24 +44,7 @@ export async function getCounterpartyRules(): Promise<CounterpartyRuleRow[]> {
     orderBy: [{ matchType: "asc" }, { matchValue: "asc" }],
   });
 
-  return rules.map((rule) => ({
-    id: rule.id,
-    matchType: rule.matchType,
-    matchValue: rule.matchValue,
-    direction: rule.direction,
-    appCategoryId: rule.appCategoryId,
-    appCategoryName: rule.appCategory.name,
-    wallet: rule.wallet,
-    walletId: rule.walletId,
-    autoRecord: rule.autoRecord,
-    recurring: rule.recurring,
-    expectedAmount: rule.expectedAmount,
-    notes: rule.notes,
-    matchCount: rule.matchCount,
-    lastMatchedAt: rule.lastMatchedAt,
-    createdAt: rule.createdAt,
-    tagNames: rule.tags.map((t) => t.name),
-  }));
+  return rules.map(toRuleRow);
 }
 
 export type CounterpartyMatchCandidates = {
@@ -83,10 +70,86 @@ function directionMatches(ruleDirection: RuleDirection, direction: "EXPENSE" | "
   return ruleDirection === "ANY" || ruleDirection === direction;
 }
 
+type RuleWithRelations = Prisma.CounterpartyRuleGetPayload<{
+  include: { appCategory: true; tags: true };
+}>;
+
+function toRuleRow(rule: RuleWithRelations): CounterpartyRuleRow {
+  return {
+    id: rule.id,
+    matchType: rule.matchType,
+    matchValue: rule.matchValue,
+    direction: rule.direction,
+    appCategoryId: rule.appCategoryId,
+    appCategoryName: rule.appCategory.name,
+    wallet: rule.wallet,
+    walletId: rule.walletId,
+    autoRecord: rule.autoRecord,
+    recurring: rule.recurring,
+    expectedAmount: rule.expectedAmount,
+    notes: rule.notes,
+    matchCount: rule.matchCount,
+    lastMatchedAt: rule.lastMatchedAt,
+    createdAt: rule.createdAt,
+    tagNames: rule.tags.map((t) => t.name),
+  };
+}
+
+/**
+ * Picks the best MERCHANT/SENDER rule for a candidate key: an exact key match
+ * first, else the longest rule key that is a prefix of the candidate (the
+ * most specific rule wins). Ties keep the input order (oldest rule first).
+ */
+export function pickLooseRule<T extends { matchValue: string }>(
+  rules: T[],
+  candidateKey: string,
+): T | undefined {
+  let best: { rule: T; length: number } | undefined;
+  for (const rule of rules) {
+    const ruleKey = counterpartyMatchKey(rule.matchValue);
+    if (!counterpartyKeyMatches(ruleKey, candidateKey)) continue;
+    if (ruleKey === candidateKey) return rule;
+    if (!best || ruleKey.length > best.length) best = { rule, length: ruleKey.length };
+  }
+  return best?.rule;
+}
+
+async function findRule(
+  matchType: RuleMatchType,
+  raw: string,
+  direction: "EXPENSE" | "INCOME",
+): Promise<RuleWithRelations | null> {
+  // ACCOUNT stays an exact digits-only match: account numbers don't vary in
+  // spelling, and a prefix of one is a different account.
+  if (matchType === "ACCOUNT") {
+    const normalized = normalizeMatchValue(matchType, raw);
+    if (!normalized) return null;
+    const rule = await db.counterpartyRule.findFirst({
+      where: { matchType, matchValue: normalized },
+      include: { appCategory: true, tags: true },
+    });
+    return rule && directionMatches(rule.direction, direction) ? rule : null;
+  }
+
+  // MERCHANT/SENDER: compared on a loose key (see counterpartyMatchKey), so
+  // the candidates are filtered in memory. The rule table is small.
+  const candidateKey = counterpartyMatchKey(raw);
+  if (!candidateKey) return null;
+  const rules = await db.counterpartyRule.findMany({
+    where: { matchType },
+    include: { appCategory: true, tags: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const eligible = rules.filter((r) => directionMatches(r.direction, direction));
+  return pickLooseRule(eligible, candidateKey) ?? null;
+}
+
 /**
  * Looks up a CounterpartyRule matching any of the given candidate values
- * (tried ACCOUNT → MERCHANT → SENDER) and the message's direction. Returns
- * the first match, or null if none. Pure read — does NOT bump matchCount/
+ * (tried ACCOUNT → MERCHANT → SENDER) and the message's direction. ACCOUNT
+ * matches exactly; MERCHANT/SENDER match loosely ("UBER RIDES" finds a
+ * "UBER*RIDES" rule, "UBER RIDES*DL" finds a "UBERRIDES" rule). Returns the
+ * first match, or null if none. Pure read — does NOT bump matchCount/
  * lastMatchedAt (see bumpCounterpartyRuleMatch): a lookup that matched but
  * was not ultimately used (low-confidence parse, autoRecord: false) should
  * not count as a real match.
@@ -97,34 +160,8 @@ export async function matchCounterpartyRule(
   for (const { matchType, key } of MATCH_PRIORITY) {
     const raw = candidates[key] as string | undefined;
     if (!raw) continue;
-
-    const normalized = normalizeMatchValue(matchType, raw);
-    if (!normalized) continue;
-
-    const rule = await db.counterpartyRule.findFirst({
-      where: { matchType, matchValue: normalized },
-      include: { appCategory: true, tags: true },
-    });
-    if (rule && directionMatches(rule.direction, candidates.direction)) {
-      return {
-        id: rule.id,
-        matchType: rule.matchType,
-        matchValue: rule.matchValue,
-        direction: rule.direction,
-        appCategoryId: rule.appCategoryId,
-        appCategoryName: rule.appCategory.name,
-        wallet: rule.wallet,
-        walletId: rule.walletId,
-        autoRecord: rule.autoRecord,
-        recurring: rule.recurring,
-        expectedAmount: rule.expectedAmount,
-        notes: rule.notes,
-        matchCount: rule.matchCount,
-        lastMatchedAt: rule.lastMatchedAt,
-        createdAt: rule.createdAt,
-        tagNames: rule.tags.map((t) => t.name),
-      };
-    }
+    const rule = await findRule(matchType, raw, candidates.direction);
+    if (rule) return toRuleRow(rule);
   }
   return null;
 }

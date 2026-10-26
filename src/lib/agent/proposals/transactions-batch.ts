@@ -11,7 +11,7 @@
 // appCategoryName guess (its knowledge of the vendor, e.g. "Rappi" → Going
 // Out) resolved via the same resolveCategoryGuess/buildCategoryShortlist a
 // normal propose_add_transaction card uses; failing that (no guess or no
-// match), the shared no-name fallback (categories[0]). Only the rule's
+// match), the vendor's category history, then categories[0] (ADR-061). Only the rule's
 // appCategoryId is borrowed — NOT its wallet: every included row's wallet is
 // the batch-level cardLabel, a deliberate difference from the
 // single-transaction ADR-033 auto-record flow (see docs/decisions.md ADR-034).
@@ -21,7 +21,7 @@ import { matchCounterpartyRule } from "@/lib/queries/counterparty-rules";
 import { getCardSummaries } from "@/lib/queries/installments";
 import { formatCOP } from "@/lib/format";
 import { blockingProposal, buildResolvedProposal, type ResolvedProposal } from "./shared";
-import { resolveCategoryGuess } from "./transactions";
+import { findCategoryByName, resolveFallbackCategory } from "./transactions";
 import type { BatchDescriptor, BatchItem } from "../types";
 
 const OTHER_CARD_OPTION = { id: "__other__", label: "Other…" };
@@ -40,7 +40,7 @@ type RawBatchItem = {
  * card purchases are never income), else the model's own per-row
  * appCategoryName guess (resolved the same way resolveAddTransaction's
  * normal card resolves its guess), else the shared no-name fallback
- * (categories[0]). `included` is purely `!scratched` — scratch-out
+ * (vendor history, then categories[0]). `included` is purely `!scratched` — scratch-out
  * detection is entirely the model's job, this resolver only reads whatever
  * boolean it sent.
  */
@@ -56,9 +56,10 @@ async function resolveBatchItem(
     direction: "EXPENSE",
   });
 
-  const appCategoryId = rule
-    ? rule.appCategoryId
-    : resolveCategoryGuess(categories, raw.appCategoryName).id;
+  const appCategoryId =
+    rule?.appCategoryId ??
+    findCategoryByName(categories, raw.appCategoryName)?.id ??
+    (await resolveFallbackCategory(categories, raw.vendor)).id;
 
   return {
     vendor,

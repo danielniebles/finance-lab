@@ -27,6 +27,34 @@ export function normalizeMatchValue(matchType: RuleMatchType, raw: string): stri
 }
 
 /**
+ * Loose comparison key for MERCHANT/SENDER values: uppercased, accents
+ * dropped, everything but letters and digits removed. Bank messages spell
+ * the same merchant several ways ("UBER RIDES", "UBER*RIDES", "UBERRIDES"),
+ * so rules are compared on this key, not on the stored matchValue. The stored
+ * value stays readable (normalizeMatchValue) — only the comparison is loose.
+ */
+export function counterpartyMatchKey(raw: string): string {
+  return raw
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toUpperCase()
+    .replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+// A rule key this short ("UB", "A") would match almost anything as a prefix.
+export const MIN_PREFIX_KEY_LENGTH = 4;
+
+/**
+ * True when a rule's key matches a candidate's key: equal, or the rule key
+ * is a prefix of the candidate (rule "UBERRIDES" matches "UBER RIDES*DL").
+ */
+export function counterpartyKeyMatches(ruleKey: string, candidateKey: string): boolean {
+  if (!ruleKey || !candidateKey) return false;
+  if (ruleKey === candidateKey) return true;
+  return ruleKey.length >= MIN_PREFIX_KEY_LENGTH && candidateKey.startsWith(ruleKey);
+}
+
+/**
  * True when a raw "counterpartyAccount" extraction actually contains an
  * account number. Colombian bank transfer notifications often identify the
  * destination by the recipient's full name only ("Cuenta MARIA NELLY...",

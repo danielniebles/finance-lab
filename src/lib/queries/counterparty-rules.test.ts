@@ -119,9 +119,10 @@ describe("matchCounterpartyRule", () => {
   });
 
   it("tries ACCOUNT before MERCHANT before SENDER", async () => {
-    dbMock.counterpartyRule.findFirst
-      .mockResolvedValueOnce(null) // ACCOUNT miss
-      .mockResolvedValueOnce({ ...ACCOUNT_RULE, matchType: "MERCHANT", matchValue: "RAPPI" });
+    dbMock.counterpartyRule.findFirst.mockResolvedValueOnce(null); // ACCOUNT miss
+    dbMock.counterpartyRule.findMany.mockResolvedValueOnce([
+      { ...ACCOUNT_RULE, matchType: "MERCHANT", matchValue: "RAPPI" },
+    ]);
 
     const result = await matchCounterpartyRule({
       account: "999",
@@ -129,15 +130,54 @@ describe("matchCounterpartyRule", () => {
       direction: "EXPENSE",
     });
 
-    expect(dbMock.counterpartyRule.findFirst).toHaveBeenNthCalledWith(
-      1,
+    expect(dbMock.counterpartyRule.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ where: { matchType: "ACCOUNT", matchValue: "999" } }),
     );
-    expect(dbMock.counterpartyRule.findFirst).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ where: { matchType: "MERCHANT", matchValue: "RAPPI" } }),
+    expect(dbMock.counterpartyRule.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { matchType: "MERCHANT" } }),
     );
     expect(result?.matchType).toBe("MERCHANT");
+  });
+
+  it("matches a merchant spelled with different symbols or spacing", async () => {
+    dbMock.counterpartyRule.findMany.mockResolvedValue([
+      { ...ACCOUNT_RULE, id: "uber", matchType: "MERCHANT", matchValue: "UBER*RIDES" },
+    ]);
+
+    const result = await matchCounterpartyRule({ merchant: "UBER RIDES", direction: "EXPENSE" });
+
+    expect(result?.id).toBe("uber");
+  });
+
+  it("prefers an exact key, then the longest prefix rule", async () => {
+    const merchant = (id: string, matchValue: string) => ({
+      ...ACCOUNT_RULE,
+      id,
+      matchType: "MERCHANT",
+      matchValue,
+    });
+    dbMock.counterpartyRule.findMany.mockResolvedValue([
+      merchant("short", "UBER"),
+      merchant("long", "UBERRIDES"),
+      merchant("other", "UBER EATS"),
+    ]);
+
+    const prefix = await matchCounterpartyRule({ merchant: "UBER RIDES*DL", direction: "EXPENSE" });
+    const exact = await matchCounterpartyRule({ merchant: "uber", direction: "EXPENSE" });
+
+    expect(prefix?.id).toBe("long");
+    expect(exact?.id).toBe("short");
+  });
+
+  it("skips a merchant rule whose direction conflicts and keeps looking", async () => {
+    dbMock.counterpartyRule.findMany.mockResolvedValue([
+      { ...ACCOUNT_RULE, id: "income-only", matchType: "MERCHANT", matchValue: "UBERRIDES", direction: "INCOME" },
+      { ...ACCOUNT_RULE, id: "expense", matchType: "MERCHANT", matchValue: "UBER*RIDES", direction: "EXPENSE" },
+    ]);
+
+    const result = await matchCounterpartyRule({ merchant: "UBER RIDES", direction: "EXPENSE" });
+
+    expect(result?.id).toBe("expense");
   });
 
   it("a rule with direction ANY matches both EXPENSE and INCOME", async () => {
@@ -160,6 +200,9 @@ describe("matchCounterpartyRule", () => {
 
   it("returns null when no candidate matches any rule", async () => {
     dbMock.counterpartyRule.findFirst.mockResolvedValue(null);
+    dbMock.counterpartyRule.findMany.mockResolvedValue([
+      { ...ACCOUNT_RULE, matchType: "MERCHANT", matchValue: "RAPPI" },
+    ]);
 
     const result = await matchCounterpartyRule({
       account: "000",
@@ -176,6 +219,7 @@ describe("matchCounterpartyRule", () => {
 
     expect(result).toBeNull();
     expect(dbMock.counterpartyRule.findFirst).not.toHaveBeenCalled();
+    expect(dbMock.counterpartyRule.findMany).not.toHaveBeenCalled();
   });
 });
 

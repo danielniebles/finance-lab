@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { normalizeMatchValue, looksLikeRealAccountNumber } from "./normalize-match-value";
+import {
+  counterpartyKeyMatches,
+  counterpartyMatchKey,
+  looksLikeRealAccountNumber,
+  normalizeMatchValue,
+} from "./normalize-match-value";
 
 describe("normalizeMatchValue", () => {
   describe("ACCOUNT — digits only", () => {
@@ -38,6 +43,39 @@ describe("normalizeMatchValue", () => {
       const twice = normalizeMatchValue("MERCHANT", once);
       expect(twice).toBe(once);
     });
+  });
+});
+
+describe("counterpartyMatchKey", () => {
+  it("gives the same key to every spelling of a merchant", () => {
+    const keys = ["UBER RIDES", "UBER*RIDES", "UBERRIDES", " uber-rides "].map(counterpartyMatchKey);
+    expect(new Set(keys)).toEqual(new Set(["UBERRIDES"]));
+  });
+
+  it("drops accents", () => {
+    expect(counterpartyMatchKey("Juan Pérez")).toBe("JUANPEREZ");
+  });
+});
+
+describe("counterpartyKeyMatches", () => {
+  it("matches equal keys", () => {
+    expect(counterpartyKeyMatches("UBERRIDES", "UBERRIDES")).toBe(true);
+  });
+
+  it("matches when the rule key is a prefix of the candidate", () => {
+    expect(counterpartyKeyMatches("UBERRIDES", "UBERRIDESDL")).toBe(true);
+  });
+
+  it("does not match the other way round", () => {
+    expect(counterpartyKeyMatches("UBERRIDESDL", "UBERRIDES")).toBe(false);
+  });
+
+  it("ignores prefixes shorter than 4 characters", () => {
+    expect(counterpartyKeyMatches("UBE", "UBERRIDES")).toBe(false);
+  });
+
+  it("never matches an empty key", () => {
+    expect(counterpartyKeyMatches("", "UBER")).toBe(false);
   });
 });
 

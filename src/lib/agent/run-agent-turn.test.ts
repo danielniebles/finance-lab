@@ -46,6 +46,9 @@ vi.mock("@/lib/queries/counterparty-rules", () => ({
   matchCounterpartyRule: vi.fn().mockResolvedValue(null),
   bumpCounterpartyRuleMatch: vi.fn(),
 }));
+vi.mock("@/lib/queries/category-history", () => ({
+  getHistoricalCategoryId: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/actions/chat", () => ({
   saveMessage: vi.fn().mockResolvedValue(undefined),
@@ -110,6 +113,7 @@ import { getTagsByNames } from "@/lib/queries/tags";
 import { listDriveFiles } from "@/lib/actions/drive";
 import { createTransaction } from "@/lib/actions/transactions";
 import { matchCounterpartyRule } from "@/lib/queries/counterparty-rules";
+import { getHistoricalCategoryId } from "@/lib/queries/category-history";
 import type { LoansOverview } from "@/lib/queries/loans";
 import type { InstallmentRow } from "@/lib/queries/installments";
 import type { CategoryOption } from "@/lib/queries/expenses";
@@ -1400,6 +1404,36 @@ function makeRule(overrides?: Partial<CounterpartyRuleRow>): CounterpartyRuleRow
     ...overrides,
   };
 }
+
+describe("resolveAddTransaction — category history fallback", () => {
+  it("uses the counterparty's category history when appCategoryName matches nothing", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT]);
+    vi.mocked(getHistoricalCategoryId).mockResolvedValueOnce(GOING_OUT.id);
+
+    const result = await resolveAddTransaction({
+      amount: -6_953,
+      appCategoryName: "Rides",
+      counterpartyMerchant: "UBER RIDES",
+    });
+
+    expect(getHistoricalCategoryId).toHaveBeenCalledWith("UBER RIDES");
+    expect(result.params.appCategoryId).toBe(GOING_OUT.id);
+  });
+
+  it("keeps a resolvable appCategoryName guess over the history", async () => {
+    vi.mocked(getCategories).mockResolvedValue([makeCategory(), GOING_OUT, TRANSPORT]);
+    vi.mocked(getHistoricalCategoryId).mockResolvedValueOnce(GOING_OUT.id);
+
+    const result = await resolveAddTransaction({
+      amount: -6_953,
+      appCategoryName: "Transport",
+      counterpartyMerchant: "UBER RIDES",
+    });
+
+    expect(getHistoricalCategoryId).not.toHaveBeenCalled();
+    expect(result.params.appCategoryId).toBe(TRANSPORT.id);
+  });
+});
 
 describe("resolveAddTransaction — counterparty-rule auto-record", () => {
   beforeEach(() => {

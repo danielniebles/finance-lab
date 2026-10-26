@@ -1,6 +1,6 @@
 // Resolver tests for propose_add_transactions_batch (ADR-034 — card-screenshot
 // batch ingestion). Focus: per-item category resolution (rule match by
-// vendor, then appCategoryName guess, then no-name fallback), scratch-out →
+// vendor, then appCategoryName guess, then vendor history, then no-name fallback), scratch-out →
 // included mapping, card-label shortlist degrade behavior, and the two
 // blocking cases (no items, no categories).
 
@@ -15,19 +15,26 @@ vi.mock("@/lib/queries/counterparty-rules", () => ({
 vi.mock("@/lib/queries/installments", () => ({
   getCardSummaries: vi.fn(),
 }));
+vi.mock("@/lib/queries/category-history", () => ({
+  getHistoricalCategoryId: vi.fn(),
+}));
 
 import { getCategories } from "@/lib/queries/expenses";
 import { matchCounterpartyRule } from "@/lib/queries/counterparty-rules";
 import { getCardSummaries } from "@/lib/queries/installments";
+import { getHistoricalCategoryId } from "@/lib/queries/category-history";
 import { resolveAddTransactionsBatch, computeBatchTotal, buildBatchDisplay } from "./transactions-batch";
 import type { BatchDescriptor } from "../types";
 
 const getCategoriesMock = getCategories as unknown as ReturnType<typeof vi.fn>;
 const matchCounterpartyRuleMock = matchCounterpartyRule as unknown as ReturnType<typeof vi.fn>;
 const getCardSummariesMock = getCardSummaries as unknown as ReturnType<typeof vi.fn>;
+const getHistoricalCategoryIdMock = getHistoricalCategoryId as unknown as ReturnType<typeof vi.fn>;
+
+const GOING_OUT_ID = "cat-going-out";
 
 const CATEGORIES = [
-  { id: "cat-going-out", name: "Going Out", budgetType: "VARIABLE" as const },
+  { id: GOING_OUT_ID, name: "Going Out", budgetType: "VARIABLE" as const },
   { id: "cat-groceries", name: "Groceries", budgetType: "VARIABLE" as const },
   { id: "cat-transport", name: "Transport", budgetType: "VARIABLE" as const },
 ];
@@ -47,6 +54,7 @@ beforeEach(() => {
   getCategoriesMock.mockResolvedValue(CATEGORIES);
   matchCounterpartyRuleMock.mockResolvedValue(null);
   getCardSummariesMock.mockResolvedValue([]);
+  getHistoricalCategoryIdMock.mockResolvedValue(undefined);
 });
 
 describe("resolveAddTransactionsBatch", () => {
@@ -65,7 +73,7 @@ describe("resolveAddTransactionsBatch", () => {
 
   it("uses a matching counterparty rule's category for an item", async () => {
     matchCounterpartyRuleMock.mockImplementation(async ({ merchant }: { merchant: string }) =>
-      merchant === "Rappi" ? { appCategoryId: "cat-going-out" } : null,
+      merchant === "Rappi" ? { appCategoryId: GOING_OUT_ID } : null,
     );
 
     const result = await resolveAddTransactionsBatch({
@@ -73,7 +81,7 @@ describe("resolveAddTransactionsBatch", () => {
     });
 
     const batch = result.params.batch as BatchDescriptor;
-    expect(batch.items[0].appCategoryId).toBe("cat-going-out");
+    expect(batch.items[0].appCategoryId).toBe(GOING_OUT_ID);
   });
 
   it("falls back to the no-name guess (first category) when no rule matches and no appCategoryName guess", async () => {
@@ -83,6 +91,18 @@ describe("resolveAddTransactionsBatch", () => {
 
     const batch = result.params.batch as BatchDescriptor;
     expect(batch.items[0].appCategoryId).toBe(CATEGORIES[0].id);
+  });
+
+  it("uses the vendor's category history when the guess names no category", async () => {
+    getHistoricalCategoryIdMock.mockResolvedValue(GOING_OUT_ID);
+
+    const result = await resolveAddTransactionsBatch({
+      items: [{ vendor: "UBER RIDES", amount: 12000, appCategoryName: "Rides" }],
+    });
+
+    const batch = result.params.batch as BatchDescriptor;
+    expect(getHistoricalCategoryIdMock).toHaveBeenCalledWith("UBER RIDES");
+    expect(batch.items[0].appCategoryId).toBe(GOING_OUT_ID);
   });
 
   it("uses the model's appCategoryName guess when no rule matches", async () => {

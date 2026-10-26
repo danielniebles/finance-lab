@@ -11,6 +11,7 @@
 
 import { getCategories, type CategoryOption } from "@/lib/queries/expenses";
 import { matchCounterpartyRule } from "@/lib/queries/counterparty-rules";
+import { getHistoricalCategoryId } from "@/lib/queries/category-history";
 import { getTagsByNames } from "@/lib/queries/tags";
 import { looksLikeRealAccountNumber } from "@/lib/normalize-match-value";
 import { formatCOP } from "@/lib/format";
@@ -26,24 +27,43 @@ const SHORTLIST_SIZE = 5; // resolved guess + up to 4 more, then __other__
  * Case-insensitive exact match first, then partial/contains match — same
  * order as proposals/loans.ts's resolveCreateLoan name resolution. Falls back
  * to the first category alphabetically when the name is missing or matches
- * nothing — never blocks, since category is editable on the card.
- *
- * Exported for reuse by proposals/transactions-batch.ts (ADR-034): a batch
- * item has no per-item category-name guess from the vision model (only
- * `{vendor, amount, date?, scratched?}`), so "best-guess category" there
- * means the identical no-name fallback this function already gives
- * `resolveCategoryGuess(categories, undefined)` — not a new heuristic.
+ * nothing — never blocks, since category is editable on the card. The
+ * resolvers use findCategoryByName + resolveFallbackCategory instead, which
+ * try the counterparty's history before that last resort.
  */
 export function resolveCategoryGuess(
   categories: CategoryOption[],
   appCategoryName: string | undefined,
 ): CategoryOption {
+  return findCategoryByName(categories, appCategoryName) ?? categories[0];
+}
+
+/** The model's category name resolved to a real category, or undefined when it names none. */
+export function findCategoryByName(
+  categories: CategoryOption[],
+  appCategoryName: string | undefined,
+): CategoryOption | undefined {
   const name = appCategoryName?.toLowerCase().trim();
-  if (name) {
-    const exact = categories.find((c) => c.name.toLowerCase() === name);
-    if (exact) return exact;
-    const partial = categories.find((c) => c.name.toLowerCase().includes(name));
-    if (partial) return partial;
+  if (!name) return undefined;
+  return (
+    categories.find((c) => c.name.toLowerCase() === name) ??
+    categories.find((c) => c.name.toLowerCase().includes(name))
+  );
+}
+
+/**
+ * Category for a transaction the model's guess couldn't place (ADR-061): the
+ * one the user most often gave this counterparty before, else the first
+ * category alphabetically as a last resort.
+ */
+export async function resolveFallbackCategory(
+  categories: CategoryOption[],
+  counterparty: string | undefined,
+): Promise<CategoryOption> {
+  if (counterparty?.trim()) {
+    const historicalId = await getHistoricalCategoryId(counterparty);
+    const historical = categories.find((c) => c.id === historicalId);
+    if (historical) return historical;
   }
   return categories[0];
 }
@@ -150,6 +170,13 @@ async function lookupRuleFromInput(input: Record<string, unknown>, amount: numbe
   });
 }
 
+/** Who the money went to or came from, for the history lookup: merchant > sender > note. */
+function historyCounterparty(input: Record<string, unknown>, note: string | undefined): string | undefined {
+  const merchant = (input.counterpartyMerchant as string | undefined)?.trim();
+  const sender = (input.counterpartySender as string | undefined)?.trim();
+  return merchant || sender || note;
+}
+
 type NormalCardArgs = {
   input: Record<string, unknown>;
   amount: number;
@@ -183,10 +210,12 @@ async function buildNormalTransactionCard(args: NormalCardArgs): Promise<Resolve
   // A matched tag's default category takes priority over the model's own
   // free-text guess (a real, user-configured mapping beats an LLM guess) —
   // but never over an explicit CounterpartyRule match, which short-circuits
-  // into auto-record before this function is ever called.
+  // into auto-record before this function is ever called. A guess that names
+  // no real category falls back to the counterparty's history.
   const guess =
     (categoryOverrideId && categories.find((c) => c.id === categoryOverrideId)) ||
-    resolveCategoryGuess(categories, appCategoryName);
+    findCategoryByName(categories, appCategoryName) ||
+    (await resolveFallbackCategory(categories, historyCounterparty(input, note)));
 
   const params: Record<string, unknown> = {
     amount,

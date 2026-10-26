@@ -577,3 +577,13 @@ Two supporting changes. `tool_choice: {type:"any"}` on the **first** model call 
 - `updateLoan` keeps the transaction's amount/date (and wallet, when the account changes) in step. `deleteLoan` has two intents: *a mistake* (default) deletes its transaction and unmarks the slots it paid; *forgiven* keeps both (the money did leave) and only drops the debt. Repayments received stay in the balance unless the user also deletes them. Deleting a repayment takes its share out of its transaction.
 
 **Why:** Lending didn't show on any ledger, "Pay all" created one loan per installment against one summary transaction, and deleting such a loan left the money gone with nothing to explain it. Counting loans as spending would inflate the month you lend and turn the month you're repaid negative, so they're transfers.
+
+---
+
+## ADR-061 — Loose merchant/sender rule matching and history-based category fallback
+
+**Decision:**
+- MERCHANT and SENDER rules match on a loose key (`counterpartyMatchKey`, `lib/normalize-match-value.ts`): uppercase, no accents, only letters and digits. A rule matches when its key equals the candidate's, or is a prefix of it (rule key ≥ 4 characters); an exact key wins, then the longest prefix. "UBER RIDES", "UBER*RIDES" and "UBERRIDES" are the same merchant, and a "UBERRIDES" rule also catches "UBER RIDES*DL". Stored `matchValue`s are unchanged (still trimmed + uppercased, readable in Settings), so no data migration. ACCOUNT stays an exact digits-only match.
+- When the model's category name names no real category, the transaction (single or batch row) takes the category the user most often gave past transactions whose note names the same counterparty (`lib/category-history.ts`, last 200 matching rows, transfers excluded, ties to the most recent). Only with no history does it fall back to the first category alphabetically. Priority: rule → tag default → model guess → history → alphabetical.
+
+**Why:** Two Uber charges arrived as "UBER RIDES" while the rules said "UBER*RIDES"/"UBERRIDES"; exact matching missed them and the model's guess named no category, so both landed in Bills & Utilities, the first alphabetically, though every past Uber ride was in Going Out.
