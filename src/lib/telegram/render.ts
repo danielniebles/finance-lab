@@ -143,7 +143,8 @@ const MAX_BATCH_ITEM_BUTTON_ROWS = 30;
 function batchItemLine(item: BatchDescriptor["items"][number], idx: number, categoryLabel: string): string {
   const marker = item.included ? "✓" : "✕ (crossed out)";
   const scratchNote = item.scratchDetected ? " ⚠︎" : "";
-  return `${idx + 1}. ${marker} ${escapeHtml(item.vendor)} ${escapeHtml(formatCOP(-Math.abs(item.amount)))} → ${escapeHtml(categoryLabel)}${scratchNote}`;
+  const pendingNote = item.pendingDetected ? " · pending" : "";
+  return `${idx + 1}. ${marker} ${escapeHtml(item.vendor)} ${escapeHtml(formatCOP(-Math.abs(item.amount)))} → ${escapeHtml(categoryLabel)}${scratchNote}${pendingNote}`;
 }
 
 /** Full batch review card: numbered list + per-item toggle/edit buttons + card-label + approve/dismiss. */

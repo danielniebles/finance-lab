@@ -20,6 +20,7 @@ import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { BatchDescriptor, ProposalDescriptor } from "@/lib/agent/types";
 import { TONE_CLASSES } from "@/lib/status";
+import { StatusChip } from "@/components/ds/status-chip";
 
 // ─── Batch proposal table (ADR-034 — web rendering of a card-screenshot batch) ─
 //
@@ -103,6 +104,11 @@ function BatchRow({ proposalId, item, idx, categoryOptions, disabled, onUpdated 
           <span className={cn("ml-1", TONE_CLASSES.caution.text)} title="Detected as scratched out">
             ⚠
           </span>
+        )}
+        {item.pendingDetected && (
+          <StatusChip tone="info" className="ml-1.5">
+            Pending
+          </StatusChip>
         )}
       </TableCell>
       <TableCell className="text-right font-mono text-sm tabular-nums">

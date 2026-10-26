@@ -32,6 +32,7 @@ type RawBatchItem = {
   date?: string;
   appCategoryName?: string;
   scratched?: boolean;
+  pending?: boolean;
 };
 
 /**
@@ -68,6 +69,9 @@ async function resolveBatchItem(
     appCategoryId,
     included: !raw.scratched,
     ...(raw.scratched ? { scratchDetected: true } : {}),
+    // Pending rows stay included: they will post as expenses, and the user
+    // decides on the card whether to add them now.
+    ...(raw.pending ? { pendingDetected: true } : {}),
   };
 }
 

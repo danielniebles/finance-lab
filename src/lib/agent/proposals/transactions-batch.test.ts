@@ -129,6 +129,17 @@ describe("resolveAddTransactionsBatch", () => {
     expect(batch.items[1].scratchDetected).toBeUndefined();
   });
 
+  it("keeps a pending row included and flags it", async () => {
+    const result = await resolveAddTransactionsBatch({
+      items: [rappiItem({ pending: true }), { vendor: "Uber", amount: 12000 }],
+    });
+
+    const batch = result.params.batch as BatchDescriptor;
+    expect(batch.items[0].included).toBe(true);
+    expect(batch.items[0].pendingDetected).toBe(true);
+    expect(batch.items[1].pendingDetected).toBeUndefined();
+  });
+
   it("defaults cardLabel to a generic label when omitted", async () => {
     const result = await resolveAddTransactionsBatch({
       items: [rappiItem()],

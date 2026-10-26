@@ -493,7 +493,7 @@ export const TOOLS: Anthropic.Tool[] = [
   {
     name: "propose_add_transactions_batch",
     description:
-      "Propose adding multiple expense transactions extracted from a credit-card statement screenshot. Extract every row visible in the image as { vendor, amount, date?, appCategoryName?, scratched? } — amount is always a positive magnitude (the resolver negates it, since card purchases are always expenses), scratched is your best-effort guess for whether the row is visibly crossed out (pre-excludes it; the user can re-include it on the card). For appCategoryName, guess the category from what you know about the vendor (e.g. \"Éxito\" → Supermarket, \"Rappi\" → Going Out) — same as you would for a single bank-notification transaction; omit it only if you have no idea. Optionally pass cardLabel (the card/wallet these purchases were made on) — defaults to a generic label if you can't tell. Categories and inclusion are resolved automatically (counterparty rules by vendor first, then your appCategoryName guess, else a generic default) and are editable per row on the resulting card; never ask per-row clarifying questions. Emits ONE batch action card — does NOT mutate data.",
+      "Propose adding multiple expense transactions extracted from a credit-card statement screenshot. Extract every row visible in the image as { vendor, amount, date?, appCategoryName?, scratched?, pending? } — amount is always a positive magnitude (the resolver negates it, since card purchases are always expenses), scratched is your best-effort guess for whether the row is visibly crossed out (pre-excludes it; the user can re-include it on the card). Rows marked as pending (\"Pendiente\", \"En proceso\") are purchases that will post later: ALWAYS include them in items with pending: true, never leave them out — the user decides on the card whether to add them. For appCategoryName, guess the category from what you know about the vendor (e.g. \"Éxito\" → Supermarket, \"Rappi\" → Going Out) — same as you would for a single bank-notification transaction; omit it only if you have no idea. Optionally pass cardLabel (the card/wallet these purchases were made on) — defaults to a generic label if you can't tell. Categories and inclusion are resolved automatically (counterparty rules by vendor first, then your appCategoryName guess, else a generic default) and are editable per row on the resulting card; never ask per-row clarifying questions. Emits ONE batch action card — does NOT mutate data.",
     input_schema: {
       type: "object",
       properties: {
@@ -508,6 +508,7 @@ export const TOOLS: Anthropic.Tool[] = [
               date: { type: "string", description: "ISO date (YYYY-MM-DD) if visible/inferable, optional" },
               appCategoryName: { type: "string", description: "Your best-guess category name for this vendor (e.g. \"Supermarket\", \"Gas\") — omit if you have no idea" },
               scratched: { type: "boolean", description: "Best-effort: true if this row appears crossed out/scratched in the image" },
+              pending: { type: "boolean", description: "True if the row is marked as pending/not yet posted (e.g. \"Pendiente\", \"En proceso\", \"Pending\"). Pending rows are still extracted, never skipped" },
             },
             required: ["vendor", "amount"],
           },

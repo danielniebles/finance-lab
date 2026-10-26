@@ -6,7 +6,12 @@
 // a realistic proposal id.
 
 import { describe, it, expect } from "vitest";
-import { toTelegramMessage, toTelegramEditOptionsMessage, toTelegramAutoRecordMessage } from "./render";
+import {
+  toTelegramMessage,
+  toTelegramEditOptionsMessage,
+  toTelegramAutoRecordMessage,
+  toTelegramBatchMessage,
+} from "./render";
 import type { ProposalDescriptor } from "@/lib/agent/types";
 
 // A realistic cuid (~25 chars) — proposalId length assumption stated in the
@@ -154,5 +159,29 @@ describe("callback_data byte budget", () => {
     const longId = "c".repeat(32);
     expect(byteLength(`${longId}:eopen:0`)).toBeLessThanOrEqual(64);
     expect(byteLength(`${longId}:e:0:0`)).toBeLessThanOrEqual(64);
+  });
+});
+
+describe("toTelegramBatchMessage", () => {
+  it("marks a pending row and keeps it included", () => {
+    const message = toTelegramBatchMessage(
+      makeProposal({
+        action: "propose_add_transactions_batch",
+        batch: {
+          cardLabel: "Visa",
+          categoryOptions: [{ id: "cat-1", label: "Going Out" }],
+          cardLabelOptions: [{ id: "Visa", label: "Visa" }],
+          items: [
+            { vendor: "Rappi", amount: 45_000, appCategoryId: "cat-1", included: true, pendingDetected: true },
+            { vendor: "Uber", amount: 12_000, appCategoryId: "cat-1", included: true },
+          ],
+        },
+      }),
+    );
+
+    const [rappi, uber] = message.text.split("\n").filter((line) => /^\d+\./.test(line));
+    expect(rappi).toContain("✓");
+    expect(rappi).toContain("pending");
+    expect(uber).not.toContain("pending");
   });
 });

@@ -32,6 +32,7 @@ export type BatchItem = {
   appCategoryId: string; // editable per item
   included: boolean; // toggle per item
   scratchDetected?: boolean; // true when the model pre-excluded this row as crossed-out
+  pendingDetected?: boolean; // true when the statement marked this row as pending (not yet posted)
 };
 
 /**
