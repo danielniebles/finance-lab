@@ -81,7 +81,7 @@ async function loadHistory(): Promise<{ role: ChatRole; content: string }[]> {
     }));
 }
 
-async function loadHistoryWithIncoming(
+export async function loadHistoryWithIncoming(
   text: string,
 ): Promise<{ role: ChatRole; content: MessageParam["content"] }[]> {
   const history = await loadHistory();

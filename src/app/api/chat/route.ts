@@ -1,9 +1,7 @@
 import { NextRequest } from "next/server";
-import { db } from "@/lib/db";
 import { saveMessage } from "@/lib/actions/chat";
 import { runAgentTurn } from "@/lib/agent/run-agent-turn";
-import { isReplayableEventContent, EVENT_ROLE, type ChatRole } from "@/lib/agent/events";
-import { saveAssistantTurn } from "@/lib/agent/deliver-to-telegram";
+import { loadHistoryWithIncoming, saveAssistantTurn } from "@/lib/agent/deliver-to-telegram";
 import type { ChatModuleContext } from "@/components/chat/chat-provider";
 
 export async function POST(req: NextRequest) {
@@ -13,25 +11,12 @@ export async function POST(req: NextRequest) {
   };
   const { content, context } = body;
 
-  // Persist user message and fetch history in parallel. Fetch the most
-  // RECENT 20 (desc + take), then reverse to chronological order — avoids
-  // loading the whole table just to slice the tail (ADR-029; mirrors
-  // deliver-to-telegram.ts's loadHistoryWithIncoming).
-  const [, historyRows] = await Promise.all([
-    saveMessage("user", content),
-    db.chatMessage.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
-  ]);
-
-  const history = historyRows
-    .reverse()
-    // Event rows are the system's record of what actually happened; they are
-    // replayed as observations, not as the model's own speech (agent/events.ts).
-    // `unbacked_claim` rows quote phantom prose and are never replayed.
-    .filter((m) => m.role !== EVENT_ROLE || isReplayableEventContent(m.content))
-    .map((m) => ({
-      role: m.role as ChatRole,
-      content: m.content,
-    }));
+  // Load history, then append the live message in memory — same path as
+  // Telegram. Saving and reading in parallel used to race: when the read won,
+  // the question was missing and the model answered the previous ⟦event⟧ line
+  // with a bare "Got it!" (production 2026-11-03).
+  const history = await loadHistoryWithIncoming(content);
+  await saveMessage("user", content);
 
   const encoder = new TextEncoder();
 
