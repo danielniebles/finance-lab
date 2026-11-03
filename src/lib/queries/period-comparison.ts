@@ -19,7 +19,8 @@ import { buildWalletBalances, loadWalletBalanceSources, type WalletBalanceSource
 const BASELINE_PERIODS = 3;
 const MAX_DAY = 31;
 
-export type PeriodToDateRequest = { month?: number; year?: number; day?: number; wallet?: string };
+/** `wallet` is a name (the Advisor's input); `walletId` an exact id (the UI's). */
+export type PeriodToDateRequest = { month?: number; year?: number; day?: number; wallet?: string; walletId?: string };
 
 type WindowSummary = { month: number; year: number; from: Date; until: Date; totals: WindowTotals };
 
@@ -66,7 +67,22 @@ function findWallet(sources: WalletBalanceSources, query: string): WalletRef | {
   return { error: `${matches.length ? "Ambiguous" : "Unknown"} wallet "${query}". Wallets: ${names}` };
 }
 
-async function loadFlows(from: Date, until: Date, walletId?: string): Promise<CategorizedFlow[]> {
+function findWalletById(sources: WalletBalanceSources, id: string): WalletRef | { error: string } {
+  for (const a of sources.accounts) {
+    const w = a.wallets.find((x) => x.id === id);
+    if (w) return { id: w.id, name: w.name, account: a.name };
+  }
+  return { error: `Unknown wallet id "${id}".` };
+}
+
+function resolveWallet(sources: WalletBalanceSources | null, req: PeriodToDateRequest) {
+  if (!sources) return null;
+  if (req.walletId) return findWalletById(sources, req.walletId);
+  return req.wallet ? findWallet(sources, req.wallet) : null;
+}
+
+/** Categorised, signed transaction flows in [from, until), optionally for one wallet. */
+export async function loadFlows(from: Date, until: Date, walletId?: string): Promise<CategorizedFlow[]> {
   const category = { select: { name: true, isTransfer: true } };
   const rows = await db.transaction.findMany({
     where: { date: { gte: from, lt: until }, ...(walletId ? { walletId } : {}) },
@@ -152,8 +168,8 @@ export async function comparePeriodToDate(
     return periodToDateWindow(p.month, p.year, day, startDay);
   });
 
-  const sources = req.wallet ? await loadWalletBalanceSources() : null;
-  const wallet = sources && req.wallet ? findWallet(sources, req.wallet) : null;
+  const sources = req.wallet || req.walletId ? await loadWalletBalanceSources() : null;
+  const wallet = resolveWallet(sources, req);
   if (wallet && "error" in wallet) return wallet;
 
   const flows = await loadFlows(windows[windows.length - 1].start, windows[0].end, wallet?.id);

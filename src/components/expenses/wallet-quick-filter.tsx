@@ -23,9 +23,12 @@ type Props = {
   wallets: WalletChipOption[];
   activity: Record<string, number>;
   selectedId: string | undefined;
-  month: number;
-  year: number;
+  /** Kept in the URL on /expenses; other pages (Trends) leave them out. */
+  month?: number;
+  year?: number;
   currentParams: ExpensesSearchParams;
+  /** Page the chips navigate on (default /expenses). */
+  basePath?: string;
   /** 36px chips for the phone's collapsed sticky bar; default is 44px / 40px from sm. */
   compact?: boolean;
   className?: string;
@@ -60,6 +63,7 @@ export function WalletQuickFilter({
   month,
   year,
   currentParams,
+  basePath,
   compact = false,
   className,
 }: Props) {
@@ -70,12 +74,16 @@ export function WalletQuickFilter({
 
   function select(walletId: string | undefined) {
     if (walletId === selectedId) return;
-    const url = buildExpensesUrl(currentParams, {
-      month: String(month),
-      year: String(year),
-      walletId: walletId ?? ALL_WALLETS,
-      groupBy: undefined,
-    });
+    const url = buildExpensesUrl(
+      currentParams,
+      {
+        month: month === undefined ? undefined : String(month),
+        year: year === undefined ? undefined : String(year),
+        walletId: walletId ?? ALL_WALLETS,
+        groupBy: undefined,
+      },
+      basePath,
+    );
     startTransition(() => router.push(url));
   }
 

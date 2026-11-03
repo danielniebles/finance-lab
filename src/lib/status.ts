@@ -145,6 +145,13 @@ export function toneForLiquidity(ratio: number): { tone: Tone; label: string } {
 }
 
 /** A bill paid for more than its budget drifts; less is fine; equal has no status. */
+/** Spending against the same days last period: more = caution, less = positive. */
+export function toneForSpendDelta(delta: number): Tone {
+  if (delta > 0) return "caution";
+  if (delta < 0) return "positive";
+  return "neutral";
+}
+
 export function toneForBillDifference(difference: number): Tone {
   if (difference > 0) return "caution";
   if (difference < 0) return "positive";

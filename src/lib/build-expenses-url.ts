@@ -10,11 +10,12 @@ export type ExpensesSearchParams = Record<string, string | undefined>;
 export function buildExpensesUrl(
   current: ExpensesSearchParams,
   overrides: ExpensesSearchParams,
+  path = "/expenses",
 ): string {
   const merged = { ...current, ...overrides };
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(merged)) {
     if (value) params.set(key, value);
   }
-  return `/expenses?${params.toString()}`;
+  return `${path}?${params.toString()}`;
 }

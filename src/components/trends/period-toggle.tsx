@@ -9,7 +9,7 @@ export function PeriodToggle({ current }: { current: number }) {
       {TREND_PERIODS.map((n) => (
         <Link
           key={n}
-          href={`?period=${n}`}
+          href={`?view=months&period=${n}`}
           aria-current={current === n ? "page" : undefined}
           className={cn(
             "rounded-md px-3 py-1 text-center text-xs font-medium transition-colors max-sm:flex-1 max-sm:py-1.5",
