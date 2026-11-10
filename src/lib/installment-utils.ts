@@ -57,6 +57,20 @@ export function computeInstallmentDue(
   return Math.round(capital + balance * (monthlyInterestRate / 100));
 }
 
+/**
+ * Capital still owed. 0 once every slot is paid: monthlyAmount is rounded, so
+ * total − paid × monthly can leave a few pesos of rounding residue.
+ */
+export function computeRemaining(
+  totalAmount: number,
+  numInstallments: number,
+  monthlyAmount: number,
+  installmentsPaid: number,
+): number {
+  if (installmentsPaid >= numInstallments) return 0;
+  return Math.max(0, totalAmount - installmentsPaid * monthlyAmount);
+}
+
 // ─── Month summary computation (pure, client-safe) ────────────────────────────
 
 /** Returns true if the nth payment (1-based) of an installment falls in the given month/year. */

@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { computeInstallmentDue, computeMonthSummary, isDueInMonth } from "@/lib/installment-utils";
+import { computeInstallmentDue, computeMonthSummary, computeRemaining, isDueInMonth } from "@/lib/installment-utils";
 
 export type InstallmentStatus = "Active" | "Finished";
 
@@ -65,7 +65,7 @@ export async function getAllInstallments(): Promise<InstallmentRow[]> {
   return rows
     .map((r) => {
       const installmentsPaid = r.payments.length;
-      const remaining = Math.max(0, r.totalAmount - installmentsPaid * r.monthlyAmount);
+      const remaining = computeRemaining(r.totalAmount, r.numInstallments, r.monthlyAmount, installmentsPaid);
       const status: InstallmentStatus = remaining <= 0 ? "Finished" : "Active";
 
       const endDate = new Date(r.startDate);

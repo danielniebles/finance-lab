@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { InstallmentRow } from "@/lib/queries/installments";
-import { overdueSlots } from "./installment-utils";
+import { computeRemaining, overdueSlots } from "./installment-utils";
+
+describe("computeRemaining", () => {
+  it("is 0 once every slot is paid, despite rounded monthly amounts", () => {
+    // 550.450 / 3 → 183.483 per month leaves 1 peso of residue.
+    expect(computeRemaining(550_450, 3, 183_483, 3)).toBe(0);
+    expect(computeRemaining(950_000, 6, 158_333, 6)).toBe(0);
+  });
+
+  it("is total minus paid capital while slots remain", () => {
+    expect(computeRemaining(1200, 12, 100, 4)).toBe(800);
+    expect(computeRemaining(1200, 12, 100, 0)).toBe(1200);
+  });
+});
 
 function inst(over: Partial<InstallmentRow>): InstallmentRow {
   return {
