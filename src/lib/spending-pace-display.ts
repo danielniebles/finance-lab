@@ -83,7 +83,12 @@ export type PaceCategoryRow = {
   isNew: boolean;
   /** An unpaid bill of this category explains (part of) the drop. */
   notPaidYet: boolean;
+  /** Stored icon/color override (null = derive from the name). */
+  icon: string | null;
+  color: string | null;
 };
+
+export type CategoryStyles = Record<string, { icon: string | null; color: string | null }>;
 
 export type CategoryChanges = {
   more: PaceCategoryRow[];
@@ -99,7 +104,11 @@ export type CategoryChanges = {
  * either window and no difference count as unchanged; ones seen only in the
  * baseline are left out.
  */
-export function splitCategoryChanges(categories: CategoryDelta[], unpaidBillCategories: string[] = []): CategoryChanges {
+export function splitCategoryChanges(
+  categories: CategoryDelta[],
+  unpaidBillCategories: string[] = [],
+  styles: CategoryStyles = {},
+): CategoryChanges {
   const unpaid = new Set(unpaidBillCategories);
   const changed = categories.filter((c) => Math.abs(c.delta) >= 1);
   const toRow = (c: CategoryDelta): PaceCategoryRow => ({
@@ -109,6 +118,8 @@ export function splitCategoryChanges(categories: CategoryDelta[], unpaidBillCate
     delta: c.delta,
     isNew: c.previous === 0,
     notPaidYet: c.delta < 0 && unpaid.has(c.category),
+    icon: styles[c.category]?.icon ?? null,
+    color: styles[c.category]?.color ?? null,
   });
   const bySize = (a: PaceCategoryRow, b: PaceCategoryRow) =>
     Math.abs(b.delta) - Math.abs(a.delta) || a.category.localeCompare(b.category);

@@ -96,6 +96,12 @@ describe("splitCategoryChanges", () => {
   it("counts unchanged categories with spend, not baseline-only ones", () => {
     expect(splitCategoryChanges(categories).unchanged).toBe(1);
   });
+
+  it("carries stored icon/color overrides, null when none", () => {
+    const r = splitCategoryChanges(categories, [], { Pets: { icon: "paw-print", color: "amber" } });
+    expect(r.more[1]).toMatchObject({ category: "Pets", icon: "paw-print", color: "amber" });
+    expect(r.more[0]).toMatchObject({ category: "Health", icon: null, color: null });
+  });
 });
 
 describe("walletChangeReasons", () => {

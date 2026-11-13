@@ -9,7 +9,7 @@ export async function PaceView({ walletId, walletName }: { walletId?: string; wa
   if ("error" in pace) {
     return <div className="rounded-2xl border border-dashed p-12 text-center text-sm text-muted-foreground">{pace.error}</div>;
   }
-  const changes = splitCategoryChanges(pace.categories, pace.unpaidBillCategories);
+  const changes = splitCategoryChanges(pace.categories, pace.unpaidBillCategories, pace.categoryStyles);
   const scope = { month: pace.current.month, year: pace.current.year, walletId };
   return (
     <div className="flex flex-col gap-6">

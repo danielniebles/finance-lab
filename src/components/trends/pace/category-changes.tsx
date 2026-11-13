@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { Money, SectionHeader, StatusChip } from "@/components/ds";
 import { buildExpensesUrl } from "@/lib/build-expenses-url";
-import { getCategoryStyle } from "@/lib/category-style";
+import { resolveEffectiveCategoryStyle } from "@/lib/category-style";
 import { ALL_WALLETS } from "@/lib/expenses-ledger-display";
 import { UNCATEGORIZED } from "@/lib/period-comparison-utils";
 import type { CategoryChanges, PaceCategoryRow } from "@/lib/spending-pace-display";
@@ -16,7 +16,7 @@ const GRID = "@lg:grid @lg:grid-cols-[minmax(0,1fr)_6rem_6rem_6.5rem] @lg:items-
 type LedgerScope = { month: number; year: number; walletId?: string };
 
 function RowBody({ row }: { row: PaceCategoryRow }) {
-  const style = getCategoryStyle(row.category === UNCATEGORIZED ? null : row.category);
+  const style = resolveEffectiveCategoryStyle(row.category === UNCATEGORIZED ? null : row.category, row.icon, row.color);
   const Icon = style.icon;
   const tone = toneForSpendDelta(row.delta);
   return (
