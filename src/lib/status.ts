@@ -75,6 +75,11 @@ export const TONE_CLASSES: Record<Tone, ToneClasses> = {
 
 // ─── Domain → Tone mappings ───────────────────────────────────────────────────
 
+/** Wallet role chips on /settings/wallets: what counts toward a balance reads as info, routing roles stay neutral. */
+export function toneForWalletRole(role: "savings" | "available" | "default" | "main"): Tone {
+  return role === "savings" || role === "available" ? "info" : "neutral";
+}
+
 export function toneForCategorySeverity(severity: CategorySeverity): Tone {
   switch (severity) {
     case "OK":

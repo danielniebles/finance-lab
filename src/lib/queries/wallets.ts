@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { computeWalletBalancesForAccount, groupByWalletId, walletExistedAt } from "@/lib/wallet-balance-utils";
+import type { WalletSettingsAccount } from "@/lib/wallet-settings-display";
 
 export type WalletBalance = {
   id: string;
@@ -105,6 +106,60 @@ export function buildWalletBalances(
  */
 export async function getWalletBalances(asOf?: Date): Promise<WalletBalancesResult> {
   return buildWalletBalances(await loadWalletBalanceSources(), asOf);
+}
+
+/**
+ * Every account with its wallets for the Wallets settings screen: balances,
+ * the editable fields (opening balance/date), which wallet is the account's
+ * main/default, and what still uses each wallet (for the delete guard).
+ */
+export async function getWalletSettings(): Promise<WalletSettingsAccount[]> {
+  const [{ accounts, transactionsByWallet }, usageRows] = await Promise.all([
+    loadWalletBalanceSources(),
+    db.wallet.findMany({
+      select: {
+        id: true,
+        _count: { select: { transactions: true, loans: true, vaultEntriesFunded: true, counterpartyRules: true } },
+      },
+    }),
+  ]);
+  const usage = new Map(
+    usageRows.map((w) => [
+      w.id,
+      {
+        transactions: w._count.transactions,
+        loans: w._count.loans,
+        vaultEntries: w._count.vaultEntriesFunded,
+        rules: w._count.counterpartyRules,
+      },
+    ]),
+  );
+
+  return accounts.map((acc) => {
+    const wallets = computeWalletBalancesForAccount(acc, transactionsByWallet).map((w) => ({
+      id: w.id,
+      name: w.name,
+      color: w.color,
+      sortOrder: w.sortOrder,
+      isSavings: w.isSavings,
+      includeInAvailable: w.includeInAvailable,
+      openingBalance: w.openingBalance,
+      openingDate: w.openingDate,
+      balance: w.balance,
+      isMain: w.id === acc.savingsWalletId,
+      isDefault: w.id === acc.defaultWalletId,
+      usage: usage.get(w.id) ?? { transactions: 0, loans: 0, vaultEntries: 0, rules: 0 },
+    }));
+    return {
+      id: acc.id,
+      name: acc.name,
+      accountType: acc.accountType as WalletSettingsAccount["accountType"],
+      color: acc.color,
+      includeInOverviewTotal: acc.includeInOverviewTotal ?? true,
+      balance: wallets.reduce((sum, w) => sum + w.balance, 0),
+      wallets,
+    };
+  });
 }
 
 /**

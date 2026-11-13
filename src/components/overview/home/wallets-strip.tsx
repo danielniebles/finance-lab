@@ -68,7 +68,7 @@ export function WalletsStrip({ accounts }: { accounts: AccountWithWallets[] }) {
   const tiles = walletTiles(accounts);
   return (
     <section className="flex flex-col gap-3">
-      <SectionHeader title="Wallets" href="/loans" linkLabel="Manage" />
+      <SectionHeader title="Wallets" href="/settings/wallets" linkLabel="Manage" />
       {tiles.length === 0 ? (
         <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
           No accounts configured yet.
