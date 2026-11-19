@@ -27,6 +27,26 @@ function revealFocusedField(sheet: HTMLElement | null) {
 }
 
 /**
+ * How far the keyboard reaches into the box `position: fixed` elements are
+ * laid out in: the part of that box below the visible area. `layoutHeight`
+ * is that box's measured height, not `window.innerHeight`: on iOS 26 home-
+ * screen apps the box already shrinks for the keyboard while `innerHeight`
+ * can still report the full screen, and using it lifted the sheet twice.
+ */
+export function keyboardInset(layoutHeight: number, visibleHeight: number, visibleTop: number) {
+  return Math.max(0, Math.round(layoutHeight - visibleHeight - visibleTop));
+}
+
+/** A hidden `fixed inset-0` box: its height is the real fixed-layout height. */
+function createLayoutProbe() {
+  const probe = document.createElement("div");
+  probe.setAttribute("aria-hidden", "true");
+  probe.style.cssText = "position:fixed;inset:0;visibility:hidden;pointer-events:none;z-index:-1";
+  document.body.appendChild(probe);
+  return probe;
+}
+
+/**
  * Keeps a bottom sheet above the on-screen keyboard. iOS Safari doesn't
  * resize the page when the keyboard opens: it lays the keyboard over it, so
  * a `bottom: 0` sheet ends up behind the keyboard and the page scrolls
@@ -44,6 +64,7 @@ function useKeyboardAwareSheet(open: boolean) {
   useEffect(() => {
     const vv = typeof window === "undefined" ? undefined : window.visualViewport;
     if (!open || !vv) return;
+    const probe = createLayoutProbe();
     let frame = 0;
     let reveal: ReturnType<typeof setTimeout> | undefined;
     const scheduleReveal = () => {
@@ -55,8 +76,8 @@ function useKeyboardAwareSheet(open: boolean) {
       frame = requestAnimationFrame(() => {
         const el = ref.current;
         if (!el) return;
-        const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-        el.style.setProperty("--kb-inset", `${Math.round(inset)}px`);
+        const inset = keyboardInset(probe.getBoundingClientRect().height, vv.height, vv.offsetTop);
+        el.style.setProperty("--kb-inset", `${inset}px`);
         el.style.setProperty("--vv-height", `${Math.round(vv.height)}px`);
       });
     };
@@ -74,6 +95,7 @@ function useKeyboardAwareSheet(open: boolean) {
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(reveal);
+      probe.remove();
       vv.removeEventListener("resize", onResize);
       vv.removeEventListener("scroll", update);
       document.removeEventListener("focusin", onFocusIn);
