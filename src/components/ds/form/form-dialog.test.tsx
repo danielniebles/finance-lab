@@ -1,18 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { keyboardInset, opensKeyboard } from "./form-dialog";
+import { opensKeyboard, revealDelta } from "./form-dialog";
 
-describe("keyboardInset", () => {
-  it("is the keyboard height when the fixed layout keeps the full screen (iOS Safari)", () => {
-    expect(keyboardInset(844, 508, 0)).toBe(336);
+describe("revealDelta", () => {
+  const view = { top: 100, bottom: 400 };
+  it("is 0 when the field is already inside the view", () => {
+    expect(revealDelta({ top: 150, bottom: 200 }, view)).toBe(0);
   });
-  it("accounts for the visible area being panned down", () => {
-    expect(keyboardInset(844, 508, 100)).toBe(236);
+  it("scrolls up for a field above the view", () => {
+    expect(revealDelta({ top: 50, bottom: 90 }, view)).toBe(-58);
   });
-  it("is 0 when the fixed layout already shrank for the keyboard (iOS 26 home-screen app, Android)", () => {
-    expect(keyboardInset(508, 508, 0)).toBe(0);
+  it("scrolls down for a field below the view", () => {
+    expect(revealDelta({ top: 420, bottom: 470 }, view)).toBe(78);
   });
-  it("never goes negative", () => {
-    expect(keyboardInset(500, 508.4, 0)).toBe(0);
+  it("aligns a field taller than the view to its top", () => {
+    expect(revealDelta({ top: 300, bottom: 800 }, view)).toBe(192);
   });
 });
 

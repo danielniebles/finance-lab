@@ -15,46 +15,50 @@ export function opensKeyboard(el: Element | null): el is HTMLElement {
 }
 
 /**
- * Scrolls the focused field (with its label) into the visible part of the
- * sheet. Runs after the sheet has finished resizing for the keyboard
- * (its max-height transition is 150ms).
+ * How far to scroll a container so `target` (top/bottom edges) sits inside
+ * `view` with `margin` to spare; 0 when it already does. A target taller
+ * than the view is aligned to its top.
+ */
+export function revealDelta(
+  target: { top: number; bottom: number },
+  view: { top: number; bottom: number },
+  margin = 8,
+) {
+  if (target.top < view.top + margin) return target.top - view.top - margin;
+  if (target.bottom > view.bottom - margin) {
+    return Math.min(target.bottom - view.bottom + margin, target.top - view.top - margin);
+  }
+  return 0;
+}
+
+/**
+ * Scrolls the focused field (with its label) into view inside the sheet's
+ * body only. `scrollIntoView` would also scroll every ancestor, the page
+ * included, and on iOS with the keyboard up that pans the whole screen and
+ * pushes the sheet out of sight. Runs after the sheet has finished moving
+ * for the keyboard (its transition is 150ms).
  */
 function revealFocusedField(sheet: HTMLElement | null) {
   const active = document.activeElement;
   if (!sheet || !opensKeyboard(active) || !sheet.contains(active)) return;
+  const body = active.closest<HTMLElement>("[data-form-body]");
+  if (!body) return;
   const target = active.closest("[data-slot=field]") ?? active;
-  target.scrollIntoView({ block: "nearest", behavior: "smooth" });
-}
-
-/**
- * How far the keyboard reaches into the box `position: fixed` elements are
- * laid out in: the part of that box below the visible area. `layoutHeight`
- * is that box's measured height, not `window.innerHeight`: on iOS 26 home-
- * screen apps the box already shrinks for the keyboard while `innerHeight`
- * can still report the full screen, and using it lifted the sheet twice.
- */
-export function keyboardInset(layoutHeight: number, visibleHeight: number, visibleTop: number) {
-  return Math.max(0, Math.round(layoutHeight - visibleHeight - visibleTop));
-}
-
-/** A hidden `fixed inset-0` box: its height is the real fixed-layout height. */
-function createLayoutProbe() {
-  const probe = document.createElement("div");
-  probe.setAttribute("aria-hidden", "true");
-  probe.style.cssText = "position:fixed;inset:0;visibility:hidden;pointer-events:none;z-index:-1";
-  document.body.appendChild(probe);
-  return probe;
+  const delta = revealDelta(target.getBoundingClientRect(), body.getBoundingClientRect());
+  if (delta !== 0) body.scrollBy({ top: delta, behavior: "smooth" });
 }
 
 /**
  * Keeps a bottom sheet above the on-screen keyboard. iOS Safari doesn't
  * resize the page when the keyboard opens: it lays the keyboard over it, so
- * a `bottom: 0` sheet ends up behind the keyboard and the page scrolls
- * underneath. The visual viewport tells us how much of the screen the
- * keyboard covers; the sheet is lifted by that much and capped to what's
- * visible, so its body scrolls and its buttons stay reachable. (Android
- * Chrome resizes the page itself thanks to `interactiveWidget` in the root
- * layout; the inset is then 0.)
+ * a `bottom: 0` sheet ends up behind the keyboard. The sheet is instead
+ * hung from the bottom edge of the visual viewport (its offset + height,
+ * in the same coordinates `position: fixed` uses) and capped to its height,
+ * so its body scrolls and its buttons stay reachable. This never reads the
+ * layout's height (`innerHeight`), which iOS 26 home-screen apps report
+ * inconsistently while the keyboard is up. (Android Chrome resizes the page
+ * itself thanks to `interactiveWidget`; the visible bottom is then the
+ * screen's bottom.)
  *
  * Once the keyboard is up, the focused field is scrolled into view: a field
  * near the bottom of the form would otherwise stay focused but hidden.
@@ -64,7 +68,6 @@ function useKeyboardAwareSheet(open: boolean) {
   useEffect(() => {
     const vv = typeof window === "undefined" ? undefined : window.visualViewport;
     if (!open || !vv) return;
-    const probe = createLayoutProbe();
     let frame = 0;
     let reveal: ReturnType<typeof setTimeout> | undefined;
     const scheduleReveal = () => {
@@ -76,8 +79,7 @@ function useKeyboardAwareSheet(open: boolean) {
       frame = requestAnimationFrame(() => {
         const el = ref.current;
         if (!el) return;
-        const inset = keyboardInset(probe.getBoundingClientRect().height, vv.height, vv.offsetTop);
-        el.style.setProperty("--kb-inset", `${inset}px`);
+        el.style.setProperty("--vv-bottom", `${Math.round(vv.offsetTop + vv.height)}px`);
         el.style.setProperty("--vv-height", `${Math.round(vv.height)}px`);
       });
     };
@@ -95,7 +97,6 @@ function useKeyboardAwareSheet(open: boolean) {
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(reveal);
-      probe.remove();
       vv.removeEventListener("resize", onResize);
       vv.removeEventListener("scroll", update);
       document.removeEventListener("focusin", onFocusIn);
@@ -137,7 +138,7 @@ export function FormDialog({
   const sheetRef = useKeyboardAwareSheet(open);
   const inner = (
     <>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-5 pt-1 pb-5">{children}</div>
+      <div data-form-body className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-5 pt-1 pb-5">{children}</div>
       {footer && (
         // Phones: extra room under the buttons so the screen's rounded
         // corners don't clip them (more on top of the home-indicator inset).
@@ -155,9 +156,9 @@ export function FormDialog({
         className={cn(
           "flex max-h-[min(92dvh,52rem)] flex-col gap-0 overflow-hidden rounded-2xl border border-border/60 bg-card p-0 ring-0",
           { md: "sm:max-w-md", lg: "sm:max-w-xl", xl: "sm:max-w-xl md:max-w-235" }[size],
-          // Phones: bottom sheet, lifted above the keyboard (useKeyboardAwareSheet).
-          "max-sm:top-auto max-sm:bottom-[var(--kb-inset,0px)] max-sm:left-0 max-sm:max-w-full max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0",
-          "max-sm:max-h-[calc(var(--vv-height,100dvh)-1rem)] max-sm:transition-[bottom,max-height] max-sm:duration-150",
+          // Phones: bottom sheet hung from the visible bottom, above the keyboard (useKeyboardAwareSheet).
+          "max-sm:top-[var(--vv-bottom,100dvh)] max-sm:bottom-auto max-sm:left-0 max-sm:max-w-full max-sm:translate-x-0 max-sm:-translate-y-full max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0",
+          "max-sm:max-h-[calc(var(--vv-height,100dvh)-1rem)] max-sm:transition-[top,max-height] max-sm:duration-150",
         )}
       >
         <div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 touch-none rounded-full bg-border sm:hidden" />
